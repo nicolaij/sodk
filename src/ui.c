@@ -19,7 +19,7 @@
 #define PIN_ENCODER_B 18
 #define PIN_ENCODER_BTN 21
 
-static const char *TAG = "ssd1306";
+static const char *TAG = "ui";
 
 void ui_task(void *arg)
 {
@@ -45,6 +45,10 @@ void ui_task(void *arg)
 
 	// Start encoder
 	ESP_ERROR_CHECK(encoder->start(encoder));
+
+	int encoder_min = 0;
+	int encoder_max = 100;
+	int encoder_cor = 0;
 
 	int enc_btn = 0;
 	gpio_pad_select_gpio(PIN_ENCODER_BTN);
@@ -121,7 +125,7 @@ void ui_task(void *arg)
 		{
 			if (cmd > 0)
 				update = true;
-				
+
 			enc_btn = 0;
 			cmd = 0;
 		}
@@ -129,13 +133,26 @@ void ui_task(void *arg)
 		if (encoder->get_counter_value(encoder) != val)
 		{
 			val = encoder->get_counter_value(encoder);
-			if (val / 4 <= 100)
+
+			int v = val / 4 + encoder_cor;
+
+			if (v <= encoder_max && v >= encoder_min)
 			{
-				pwm = val / 4;
+				pwm = v;
+			}
+			else if (v > encoder_max)
+			{
+				encoder_cor = (encoder_max - (val / 4));
+				pwm = encoder_max;
+			}
+			else if (v < encoder_min)
+			{
+				encoder_cor = (encoder_min - (val / 4));
+				pwm = encoder_min;
 			}
 
-			pwm = val / 4;
 			update = true;
+			//printf("encoder: %d, val: %d, corr: %d\n", pwm, val, encoder_cor);
 		}
 
 		if (pdTRUE == xQueueReceive(adc1_queue, &adc, (portTickType)0))
@@ -161,7 +178,8 @@ void ui_task(void *arg)
 
 				u8g2_DrawStr(&u8g2, 2, 31, "PWM: ");
 				//u8g2_DrawStr(&u8g2, 60, 31, u8x8_u16toa(pwm, 3));
-				u8g2_DrawStr(&u8g2, 60, 31, u8x8_u16toa(val / 4, 5));
+				sprintf(buf, "%3d", pwm);
+				u8g2_DrawStr(&u8g2, 60, 31, buf);
 
 				int v = adc[0] * 1000 / 5855;
 				int r = 0;

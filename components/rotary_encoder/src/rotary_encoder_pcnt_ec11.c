@@ -33,7 +33,7 @@ static const char *TAG = "rotary_encoder";
     } while (0)
 
 #define EC11_PCNT_DEFAULT_HIGH_LIMIT (100)
-#define EC11_PCNT_DEFAULT_LOW_LIMIT  (0)
+#define EC11_PCNT_DEFAULT_LOW_LIMIT  (-100)
 
 // A flag to identify if pcnt isr service has been installed.
 static bool is_pcnt_isr_service_installed = false;
