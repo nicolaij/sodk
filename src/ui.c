@@ -12,6 +12,8 @@
 
 #include "rotary_encoder.h"
 
+#include <U8g2.h>
+
 #define PIN_SDA 22
 #define PIN_SCL 23
 
@@ -20,6 +22,13 @@
 #define PIN_ENCODER_BTN 21
 
 static const char *TAG = "ui";
+
+int menu_values[3][10];
+uint8_t menu_current_selection = 0;
+const char *menu_string_list =
+	"Импульс\n"
+	"коэф. U\n"
+	"коэф. R\n";
 
 void ui_task(void *arg)
 {
@@ -111,12 +120,18 @@ void ui_task(void *arg)
 		if (s == 0) //down
 		{
 			enc_btn++;
-			if (enc_btn > 50) //long press
+			if (enc_btn == 50) //long press
 			{
 				cmd.cmd = 1;
-				enc_btn = 50;
 				update = true;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+			}
+
+			if (enc_btn == 150) //super long press
+			{
+				screen++;
+				if (screen == 2)
+					screen = 0;
 			}
 		}
 		else //up
@@ -131,20 +146,9 @@ void ui_task(void *arg)
 					}
 					else
 					{
-						if (click_time == 0)
+						if (cmd.cmd == 0) //OFF
 						{
-							click_time = esp_timer_get_time();
 							cmd.cmd = 2; //PULSE
-						}
-						else
-						{
-							if (esp_timer_get_time() - click_time < 400000)
-							{
-								click_time = 0;
-								screen++;
-								if (screen == 2)
-									screen = 0;
-							}
 						}
 					}
 
@@ -193,7 +197,7 @@ void ui_task(void *arg)
 			if (screen == 0)
 			{
 				u8g2_ClearBuffer(&u8g2);
-				u8g2_SetFont(&u8g2, u8g2_font_7x14_tf);
+				u8g2_SetFont(&u8g2, u8g2_font_7x13_t_cyrillic);
 
 				u8g2_DrawStr(&u8g2, 2, 15, "POWER: ");
 
@@ -209,12 +213,12 @@ void ui_task(void *arg)
 				sprintf(buf, "%3d", cmd.pwm);
 				u8g2_DrawStr(&u8g2, 60, 31, buf);
 
-				int v = volt(adc[0]);
-				int r = kOm(adc[0], adc[1]);
+				int v = volt(adc[1]);
+				int r = kOm(adc[1], adc[0]);
 
-				sprintf(buf, "U=%3d V (%d)", v, adc[0]);
+				sprintf(buf, "U=%3d V (%d)", v, adc[1]);
 				u8g2_DrawStr(&u8g2, 2, 47, buf);
-				sprintf(buf, "R=%d kOm (%d)", r, adc[1]);
+				sprintf(buf, "R=%d kOm (%d)", r, adc[0]);
 				u8g2_DrawStr(&u8g2, 2, 63, buf);
 
 				u8g2_SendBuffer(&u8g2);
@@ -222,11 +226,11 @@ void ui_task(void *arg)
 			if (screen == 1) //Меню настроек
 			{
 				u8g2_ClearBuffer(&u8g2);
-				u8g2_SetFont(&u8g2, u8g2_font_7x14_tf);
-
-				u8g2_DrawStr(&u8g2, 2, 15, "Pulse: ");
-				u8g2_DrawStr(&u8g2, 2, 31, "k U: ");
-				u8g2_DrawStr(&u8g2, 2, 47, "k R: ");
+				u8g2_SetFont(&u8g2, u8g2_font_7x13_t_cyrillic);
+				
+				u8g2_DrawUTF8(&u8g2, 2, 15, u8x8_GetStringLineStart(0, menu_string_list));
+				u8g2_DrawUTF8(&u8g2, 2, 31, u8x8_GetStringLineStart(1, menu_string_list));
+				u8g2_DrawUTF8(&u8g2, 2, 47, u8x8_GetStringLineStart(2, menu_string_list));
 				u8g2_SendBuffer(&u8g2);
 			}
 		}

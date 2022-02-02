@@ -440,7 +440,7 @@ void dual_adc(void *arg)
             for (int i = 0; i < len; i++)
             {
                 //printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
-                printf("%4d, %4d, %4d\n", i, volt(buffer1[i]), kOm(buffer1[i], buffer2[i]));
+                printf("%4d, %4d, %4d\n", i, volt(buffer2[i]), kOm(buffer2[i], buffer1[i]));
             }
         }
         else if (cmd.cmd == 1) //ON
@@ -470,12 +470,12 @@ void dual_adc(void *arg)
                 }
                 adc_read[0] = s1 / len;
                 adc_read[1] = s2 / len;
-                int v = volt(adc_read[0]);
-                int r = kOm(adc_read[0], adc_read[1]);
+                int v = volt(adc_read[1]);
+                int r = kOm(adc_read[1], adc_read[0]);
 
                 xQueueSend(adc1_queue, adc_read, (portTickType)0);
 
-                printf("ADC1: U = %d V (%4d), ADC2: R = %d kOm (%4d) buffer:%d\n", v, adc_read[0], r, adc_read[1], len);
+                printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%4d) buffer:%d\n", v, adc_read[1], r, adc_read[0], len);
 
                 if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, 800 / portTICK_PERIOD_MS))
                 {
@@ -503,12 +503,12 @@ esp_err_t app_main(void)
 
 int volt(int adc)
 {
-    return adc * 1000 / 5855;
+    return adc * 1000 / 5336;
 };
 
 int kOm(int adc1, int adc2)
 {
     if (adc2 == 0)
-        return 0;
+        return 99999;
     return adc1 * 90 / adc2;
 };
