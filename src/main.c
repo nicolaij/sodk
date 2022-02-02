@@ -23,7 +23,10 @@ void app_main()
     printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
-    xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
+    //xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
+    
+	uicmd_queue = xQueueCreate(1, sizeof(cmd_t));
+    adc1_queue = xQueueCreate(10, sizeof(int) * 2);
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
 

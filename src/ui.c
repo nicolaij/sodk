@@ -23,14 +23,15 @@ static const char *TAG = "ui";
 
 void ui_task(void *arg)
 {
-	int pwm = 0;
-	int cmd = 0;
-	int menu_level = 0;
+	int screen = 0;
 	int menu_pos = 0;
+	int menu_sel = 0;
 
 	char buf[64];
 
-	uicmd_queue = xQueueCreate(10, sizeof(uint32_t));
+	cmd_t cmd;
+	cmd.cmd = 0;
+	cmd.pwm = 0;
 
 	// Rotary encoder underlying device is represented by a PCNT unit in this example
 	uint32_t pcnt_unit = 0;
@@ -101,33 +102,58 @@ void ui_task(void *arg)
 	bool update = true;
 	int adc[2] = {0, 0};
 
+	int64_t click_time = 0;
+
 	// loop
 	while (1)
 	{
 		int s = gpio_get_level(PIN_ENCODER_BTN);
-		if (s == 0)
+		if (s == 0) //down
 		{
 			enc_btn++;
-			if (enc_btn == 1)
+			if (enc_btn > 50) //long press
 			{
-				cmd = 2;
-				update = true;
-			}
-
-			if (enc_btn > 50)
-			{
-				cmd = 1;
+				cmd.cmd = 1;
 				enc_btn = 50;
 				update = true;
+				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 			}
 		}
-		else
+		else //up
 		{
-			if (cmd > 0)
-				update = true;
+			if (enc_btn > 0)
+			{
+				if (enc_btn < 10) //short click
+				{
+					if (cmd.cmd == 1) //ON
+					{
+						cmd.cmd = 0; //OFF
+					}
+					else
+					{
+						if (click_time == 0)
+						{
+							click_time = esp_timer_get_time();
+							cmd.cmd = 2; //PULSE
+						}
+						else
+						{
+							if (esp_timer_get_time() - click_time < 400000)
+							{
+								click_time = 0;
+								screen++;
+								if (screen == 2)
+									screen = 0;
+							}
+						}
+					}
 
+					enc_btn = 0;
+					update = true;
+					xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+				}
+			}
 			enc_btn = 0;
-			cmd = 0;
 		}
 
 		if (encoder->get_counter_value(encoder) != val)
@@ -138,19 +164,19 @@ void ui_task(void *arg)
 
 			if (v <= encoder_max && v >= encoder_min)
 			{
-				pwm = v;
+				cmd.pwm = v;
 			}
 			else if (v > encoder_max)
 			{
 				encoder_cor = (encoder_max - (val / 4));
-				pwm = encoder_max;
+				cmd.pwm = encoder_max;
 			}
 			else if (v < encoder_min)
 			{
 				encoder_cor = (encoder_min - (val / 4));
-				pwm = encoder_min;
+				cmd.pwm = encoder_min;
 			}
-
+			xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 			update = true;
 			//printf("encoder: %d, val: %d, corr: %d\n", pwm, val, encoder_cor);
 		}
@@ -158,39 +184,49 @@ void ui_task(void *arg)
 		if (pdTRUE == xQueueReceive(adc1_queue, &adc, (portTickType)0))
 		{
 			update = true;
+			if (cmd.cmd == 2)
+				cmd.cmd = 0;
 		}
 
 		if (update)
 		{
-			if (menu_level == 0)
+			if (screen == 0)
 			{
 				u8g2_ClearBuffer(&u8g2);
 				u8g2_SetFont(&u8g2, u8g2_font_7x14_tf);
 
 				u8g2_DrawStr(&u8g2, 2, 15, "POWER: ");
 
-				if (cmd == 0)
+				if (cmd.cmd == 0)
 					u8g2_DrawStr(&u8g2, 60, 15, "  OFF");
-				if (cmd == 1)
+				if (cmd.cmd == 1)
 					u8g2_DrawStr(&u8g2, 60, 15, "   ON");
-				if (cmd == 2)
+				if (cmd.cmd == 2)
 					u8g2_DrawStr(&u8g2, 60, 15, "PULSE");
 
 				u8g2_DrawStr(&u8g2, 2, 31, "PWM: ");
 				//u8g2_DrawStr(&u8g2, 60, 31, u8x8_u16toa(pwm, 3));
-				sprintf(buf, "%3d", pwm);
+				sprintf(buf, "%3d", cmd.pwm);
 				u8g2_DrawStr(&u8g2, 60, 31, buf);
 
-				int v = adc[0] * 1000 / 5855;
-				int r = 0;
-				if (adc[1] > 0)
-					r = adc[0] * 90 / adc[1];
+				int v = volt(adc[0]);
+				int r = kOm(adc[0], adc[1]);
 
 				sprintf(buf, "U=%3d V (%d)", v, adc[0]);
 				u8g2_DrawStr(&u8g2, 2, 47, buf);
 				sprintf(buf, "R=%d kOm (%d)", r, adc[1]);
 				u8g2_DrawStr(&u8g2, 2, 63, buf);
 
+				u8g2_SendBuffer(&u8g2);
+			}
+			if (screen == 1) //Меню настроек
+			{
+				u8g2_ClearBuffer(&u8g2);
+				u8g2_SetFont(&u8g2, u8g2_font_7x14_tf);
+
+				u8g2_DrawStr(&u8g2, 2, 15, "Pulse: ");
+				u8g2_DrawStr(&u8g2, 2, 31, "k U: ");
+				u8g2_DrawStr(&u8g2, 2, 47, "k R: ");
 				u8g2_SendBuffer(&u8g2);
 			}
 		}

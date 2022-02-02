@@ -75,8 +75,6 @@ void btn_task(void *arg)
     gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
     gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
 
-#define POWER_PIN 32
-
     gpio_pad_select_gpio(POWER_PIN);
     gpio_set_direction(POWER_PIN, GPIO_MODE_OUTPUT);
     gpio_set_level(POWER_PIN, 1);
@@ -287,8 +285,6 @@ void i2s_adc(void *arg)
 void dual_adc(void *arg)
 {
 
-    adc1_queue = xQueueCreate(10, sizeof(int) * 2);
-
     check_efuse();
     /*
     esp_err_t status = adc_vref_to_gpio(ADC_UNIT_2, GPIO_NUM_25);
@@ -298,6 +294,29 @@ void dual_adc(void *arg)
         printf("failed to route v_ref\n");
     }
 */
+
+    gpio_pad_select_gpio(POWER_PIN);
+    gpio_set_direction(POWER_PIN, GPIO_MODE_OUTPUT);
+    gpio_set_level(POWER_PIN, 1);
+
+    ledc_timer_config_t ledc_timer = {
+        .duty_resolution = LEDC_TIMER_10_BIT, // resolution of PWM duty
+        .freq_hz = 10000,                     // frequency of PWM signal
+        .speed_mode = LEDC_HIGH_SPEED_MODE,   // timer mode
+        .timer_num = LEDC_TIMER_0,            // timer index
+        .clk_cfg = LEDC_AUTO_CLK,             // Auto select the source clock
+    };
+    ledc_timer_config(&ledc_timer);
+
+    ledc_channel_config_t ledc_channel = {
+        .channel = LEDC_CHANNEL_0,
+        .duty = 0,
+        .gpio_num = 25,
+        .speed_mode = LEDC_HIGH_SPEED_MODE,
+        .hpoint = 0,
+        .timer_sel = LEDC_TIMER_0};
+
+    ledc_channel_config(&ledc_channel);
 
     dac_output_enable(DAC_CHANNEL_2);
     dac_output_voltage(DAC_CHANNEL_2, 127);
@@ -358,52 +377,116 @@ void dual_adc(void *arg)
     //gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
     //gpio_set_level(LED_GPIO, 0);
 
-    int adc1_read, adc2_read;
+    int adc_read[2];
+
+    cmd_t cmd;
+    cmd.cmd = 0;
+    cmd.pwm = 0;
 
     while (1)
     {
-        int len = 0;
         //int64_t t1 = esp_timer_get_time();
         //int64_t timeout = 100000;
         //gpio_set_level(LED_GPIO, 1);
         //gpio_set_level(POWER_PIN, 0);
 
         //while (esp_timer_get_time() - t1 < timeout)
-        while (len < 100)
+        xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
+
+        ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, 1024 * cmd.pwm / 100);
+        ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+
+        int64_t t1 = esp_timer_get_time();
+        int64_t timeout = 100000;
+
+        int len = 0;
+        int pos_off = 0;
+
+        if (cmd.cmd == 2) //Pulse
         {
-            adc1_read = adc1_get_raw(ADC1_CHANNEL_5);
-            adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &adc2_read);
-            buffer1[len] = adc1_read;
-            buffer2[len] = adc2_read;
-            len++;
-            if (len >= sizeof(buffer1) / sizeof(buffer1[0]))
-                break;
-        };
-        //gpio_set_level(POWER_PIN, 1);
-        //gpio_set_level(LED_GPIO, 0);
+            gpio_set_level(POWER_PIN, 0);
+            while (esp_timer_get_time() - t1 < (timeout * 2))
+            {
+                if (esp_timer_get_time() - t1 > timeout)
+                {
+                    gpio_set_level(POWER_PIN, 1);
+                    if (pos_off == 0)
+                        pos_off = len;
+                }
 
-        int s1 = 0;
-        int s2 = 0;
+                adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
+                adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &adc_read[1]);
+                buffer1[len] = adc_read[0];
+                buffer2[len] = adc_read[1];
+                len++;
+                if (len >= sizeof(buffer1) / sizeof(buffer1[0]))
+                    break;
+            };
+            gpio_set_level(POWER_PIN, 1);
 
-        for (int i = 0; i < len; i++)
+            int s1 = 0;
+            int s2 = 0;
+            for (int i = 0; i < 10; i++)
+            {
+                s1 += buffer1[pos_off - 10 + i];
+                s2 += buffer2[pos_off - 10 + i];
+            }
+
+            adc_read[0] = s1 / 10;
+            adc_read[1] = s2 / 10;
+
+            xQueueSend(adc1_queue, adc_read, (portTickType)0);
+
+            for (int i = 0; i < len; i++)
+            {
+                //printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
+                printf("%4d, %4d, %4d\n", i, volt(buffer1[i]), kOm(buffer1[i], buffer2[i]));
+            }
+        }
+        else if (cmd.cmd == 1) //ON
         {
-            //uint32_t voltage1 = esp_adc_cal_raw_to_voltage(buffer1[i], adc1_chars);
-            //uint32_t voltage2 = esp_adc_cal_raw_to_voltage(buffer2[i], adc2_chars);
-            //printf("%4d: %4d (%4d mV), %4d (%4d mV)\n", i, buffer1[i], voltage1, buffer2[i], voltage2);
+            gpio_set_level(POWER_PIN, 0);
+            while (cmd.cmd == 1)
+            {
+                t1 = esp_timer_get_time();
+                len = 0;
+                while (esp_timer_get_time() - t1 < timeout * 2)
+                {
+                    adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
+                    adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &adc_read[1]);
+                    buffer1[len] = adc_read[0];
+                    buffer2[len] = adc_read[1];
+                    len++;
+                    if (len >= sizeof(buffer1) / sizeof(buffer1[0]))
+                        break;
+                };
 
-            s1 += buffer1[i];
-            s2 += buffer2[i];
+                int s1 = 0;
+                int s2 = 0;
+                for (int i = 0; i < len; i++)
+                {
+                    s1 += buffer1[i];
+                    s2 += buffer2[i];
+                }
+                adc_read[0] = s1 / len;
+                adc_read[1] = s2 / len;
+                int v = volt(adc_read[0]);
+                int r = kOm(adc_read[0], adc_read[1]);
+
+                xQueueSend(adc1_queue, adc_read, (portTickType)0);
+
+                printf("ADC1: U = %d V (%4d), ADC2: R = %d kOm (%4d) buffer:%d\n", v, adc_read[0], r, adc_read[1], len);
+
+                if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, 800 / portTICK_PERIOD_MS))
+                {
+                    ledc_set_duty(ledc_channel.speed_mode, ledc_channel.channel, 1024 * cmd.pwm / 100);
+                    ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
+                }
+            }
+            gpio_set_level(POWER_PIN, 1);
         }
 
-        int v = s1 / len * 1000 / 5855;
-
-        int r = 0;
-        if (s2 > 0)
-            r = s1 / len * 90 / s2 / len;
-
-        printf("ADC1: U = %d V (%4d), ADC2: R = %d kOm (%4d)\n", v, s1 / len, r, s2 / len);
-
-        vTaskDelay(1000 / portTICK_RATE_MS);
+        vTaskDelay(500 / portTICK_RATE_MS);
     }
 }
 
@@ -417,3 +500,15 @@ esp_err_t app_main(void)
     return ESP_OK;
 }
 */
+
+int volt(int adc)
+{
+    return adc * 1000 / 5855;
+};
+
+int kOm(int adc1, int adc2)
+{
+    if (adc2 == 0)
+        return 0;
+    return adc1 * 90 / adc2;
+};
