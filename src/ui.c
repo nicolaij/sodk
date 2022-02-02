@@ -14,27 +14,35 @@
 
 #include <U8g2.h>
 
-#define PIN_SDA 22
-#define PIN_SCL 23
-
-#define PIN_ENCODER_A 19
-#define PIN_ENCODER_B 18
-#define PIN_ENCODER_BTN 21
-
 static const char *TAG = "ui";
 
-int menu_values[3][10];
-uint8_t menu_current_selection = 0;
-const char *menu_string_list =
-	"Импульс\n"
-	"коэф. U\n"
-	"коэф. R\n";
+typedef struct
+{
+	char name[32];
+	int val;
+	int min;
+	int max;
+} menu_t;
+
+menu_t menu[] = {
+	{.name = "Импульс", .val = 100, .min = 1, .max = 1000},
+	{.name = "коэф. U", .val = 5336, .min = 1000, .max = 10000},
+	{.name = "коэф. R", .val = 10, .min = 90, .max = 1000},
+	{.name = "Выход  ", .val = 0, .min = 0, .max = 0},
+};
+
+#define MENU_LINES sizeof(menu) / sizeof(menu[0])
+#define DISPLAY_LINES 2
+
+int menu_current_selection = 0;
+int menu_current_position = 0;
+int menu_current_display = 0;
 
 void ui_task(void *arg)
 {
 	int screen = 0;
-	int menu_pos = 0;
-	int menu_sel = 0;
+	bool new_screen = true;
+	int menu_encoder_corr = 0;
 
 	char buf[64];
 
@@ -44,6 +52,11 @@ void ui_task(void *arg)
 
 	// Rotary encoder underlying device is represented by a PCNT unit in this example
 	uint32_t pcnt_unit = 0;
+
+	//only for test. Power encoder
+	gpio_pad_select_gpio(5);
+	gpio_set_direction(5, GPIO_MODE_OUTPUT);
+	gpio_set_level(5, 1);
 
 	// Create rotary encoder instance
 	rotary_encoder_config_t config = ROTARY_ENCODER_DEFAULT_CONFIG((rotary_encoder_dev_t)pcnt_unit, PIN_ENCODER_A, PIN_ENCODER_B);
@@ -73,7 +86,8 @@ void ui_task(void *arg)
 
 	// initialize the u8g2 library
 	u8g2_t u8g2;
-	u8g2_Setup_ssd1306_i2c_128x64_noname_f(
+	//u8g2_Setup_ssd1306_i2c_128x64_noname_f(
+	u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,
@@ -106,12 +120,14 @@ void ui_task(void *arg)
 	u8g2_SendBuffer(&u8g2);
 	vTaskDelay(500 / portTICK_RATE_MS);
 
-	int old_val = -1;
-	int val = 0;
+	int encoder_old_val = -1;
+	int encoder_val = 0;
 	bool update = true;
 	int adc[2] = {0, 0};
 
 	int64_t click_time = 0;
+
+	keys_events_t encoder_key = KEY_NONE;
 
 	// loop
 	while (1)
@@ -122,16 +138,12 @@ void ui_task(void *arg)
 			enc_btn++;
 			if (enc_btn == 50) //long press
 			{
-				cmd.cmd = 1;
-				update = true;
-				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+				encoder_key = KEY_LONG_PRESS;
 			}
 
-			if (enc_btn == 150) //super long press
+			if (enc_btn == 100) //super long press
 			{
-				screen++;
-				if (screen == 2)
-					screen = 0;
+				encoder_key = KEY_DOUBLELONG_PRESS;
 			}
 		}
 		else //up
@@ -140,50 +152,105 @@ void ui_task(void *arg)
 			{
 				if (enc_btn < 10) //short click
 				{
-					if (cmd.cmd == 1) //ON
-					{
-						cmd.cmd = 0; //OFF
-					}
-					else
-					{
-						if (cmd.cmd == 0) //OFF
-						{
-							cmd.cmd = 2; //PULSE
-						}
-					}
-
-					enc_btn = 0;
-					update = true;
-					xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+					encoder_key = KEY_CLICK;
 				}
 			}
 			enc_btn = 0;
 		}
 
-		if (encoder->get_counter_value(encoder) != val)
+		if (encoder->get_counter_value(encoder) != encoder_val)
 		{
-			val = encoder->get_counter_value(encoder);
+			encoder_val = encoder->get_counter_value(encoder);
 
-			int v = val / 4 + encoder_cor;
+			if (screen == 0)
+			{
+				int v = encoder_val / 4 + encoder_cor;
+				if (v <= encoder_max && v >= encoder_min)
+				{
+					cmd.pwm = v;
+				}
+				else if (v > encoder_max)
+				{
+					encoder_cor = (encoder_max - (encoder_val / 4));
+					cmd.pwm = encoder_max;
+				}
+				else if (v < encoder_min)
+				{
+					encoder_cor = (encoder_min - (encoder_val / 4));
+					cmd.pwm = encoder_min;
+				}
+				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+			}
 
-			if (v <= encoder_max && v >= encoder_min)
+			if (screen == 1)
 			{
-				cmd.pwm = v;
-			}
-			else if (v > encoder_max)
-			{
-				encoder_cor = (encoder_max - (val / 4));
-				cmd.pwm = encoder_max;
-			}
-			else if (v < encoder_min)
-			{
-				encoder_cor = (encoder_min - (val / 4));
-				cmd.pwm = encoder_min;
-			}
-			xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+				int v = encoder_val / 4 + menu_encoder_corr;
+				if (v < MENU_LINES && v >= 0)
+				{
+					menu_current_position = v;
+				}
+				else if (v < 0)
+				{
+					menu_encoder_corr = 0 - encoder_val / 4;
+				}
+				else if (v >= MENU_LINES)
+				{
+					menu_encoder_corr = MENU_LINES - 1 - encoder_val / 4;
+				}
+			};
 			update = true;
-			//printf("encoder: %d, val: %d, corr: %d\n", pwm, val, encoder_cor);
 		}
+
+		if (screen == 0)
+		{
+			switch (encoder_key)
+			{
+			case KEY_CLICK:
+				if (cmd.cmd == 1) //ON
+				{
+					cmd.cmd = 0; //OFF
+				}
+				else
+				{
+					if (cmd.cmd == 0) //OFF
+					{
+						cmd.cmd = 2; //PULSE
+					}
+				}
+				update = true;
+				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+				break;
+			case KEY_LONG_PRESS:
+				cmd.cmd = 1;
+				update = true;
+				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+				break;
+			case KEY_DOUBLELONG_PRESS:
+				screen++;
+				if (screen == 2)
+					screen = 0;
+				new_screen = true;
+				menu_encoder_corr = 0 - encoder_val / 4;
+				menu_current_position = 0;
+				break;
+
+			default:
+				break;
+			}
+		}
+		if (screen == 1) //Меню
+		{
+			switch (encoder_key)
+			{
+			case KEY_CLICK:
+
+				break;
+
+			default:
+				break;
+			}
+		}
+		encoder_key = 0;
 
 		if (pdTRUE == xQueueReceive(adc1_queue, &adc, (portTickType)0))
 		{
@@ -227,10 +294,24 @@ void ui_task(void *arg)
 			{
 				u8g2_ClearBuffer(&u8g2);
 				u8g2_SetFont(&u8g2, u8g2_font_7x13_t_cyrillic);
-				
-				u8g2_DrawUTF8(&u8g2, 2, 15, u8x8_GetStringLineStart(0, menu_string_list));
-				u8g2_DrawUTF8(&u8g2, 2, 31, u8x8_GetStringLineStart(1, menu_string_list));
-				u8g2_DrawUTF8(&u8g2, 2, 47, u8x8_GetStringLineStart(2, menu_string_list));
+
+				if (menu_current_position - menu_current_display > (DISPLAY_LINES - 1))
+					menu_current_display = menu_current_position - (DISPLAY_LINES - 1);
+
+				if (menu_current_position < menu_current_display)
+					menu_current_display = menu_current_position;
+
+				u8g2_DrawUTF8(&u8g2, 3, 12, menu[menu_current_display].name);
+				if (menu_current_position - menu_current_display == 0)
+				{
+					u8g2_DrawFrame(&u8g2, 0, 0, 127, 16);
+				}
+				u8g2_DrawUTF8(&u8g2, 3, 28, menu[menu_current_display + 1].name);
+				if (menu_current_position - menu_current_display == 1)
+				{
+					u8g2_DrawFrame(&u8g2, 0, 16, 127, 16);
+				}
+				//u8g2_DrawUTF8(&u8g2, 2, 47, u8x8_GetStringLineStart(2, menu_string_list));
 				u8g2_SendBuffer(&u8g2);
 			}
 		}
