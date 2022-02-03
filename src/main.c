@@ -25,8 +25,8 @@ void app_main()
 
     //xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
     
-	uicmd_queue = xQueueCreate(1, sizeof(cmd_t));
-    adc1_queue = xQueueCreate(10, sizeof(int) * 2);
+	uicmd_queue = xQueueCreate(2, sizeof(cmd_t));
+    adc1_queue = xQueueCreate(2, sizeof(result_t));
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
 

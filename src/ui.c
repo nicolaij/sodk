@@ -14,6 +14,9 @@
 
 #include <U8g2.h>
 
+#include "nvs_flash.h"
+#include "nvs.h"
+
 static const char *TAG = "ui";
 
 typedef struct
@@ -32,17 +35,25 @@ menu_t menu[] = {
 };
 
 #define MENU_LINES sizeof(menu) / sizeof(menu[0])
-#define DISPLAY_LINES 2
+#define DISPLAY_LINES 4
 
-int menu_current_selection = 0;
+int menu_current_selection = -1;
 int menu_current_position = 0;
 int menu_current_display = 0;
+
+int limits(int val, int min, int max)
+{
+	if (val < min)
+		return min;
+	if (val > max)
+		return max;
+	return val;
+}
 
 void ui_task(void *arg)
 {
 	int screen = 0;
-	bool new_screen = true;
-	int menu_encoder_corr = 0;
+	int encoder_cor = 0;
 
 	char buf[64];
 
@@ -69,10 +80,6 @@ void ui_task(void *arg)
 	// Start encoder
 	ESP_ERROR_CHECK(encoder->start(encoder));
 
-	int encoder_min = 0;
-	int encoder_max = 100;
-	int encoder_cor = 0;
-
 	int enc_btn = 0;
 	gpio_pad_select_gpio(PIN_ENCODER_BTN);
 	gpio_set_direction(PIN_ENCODER_BTN, GPIO_MODE_INPUT);
@@ -86,8 +93,8 @@ void ui_task(void *arg)
 
 	// initialize the u8g2 library
 	u8g2_t u8g2;
-	//u8g2_Setup_ssd1306_i2c_128x64_noname_f(
-	u8g2_Setup_ssd1306_i2c_128x32_univision_f(
+	u8g2_Setup_ssd1306_i2c_128x64_noname_f(
+		//u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,
@@ -120,12 +127,11 @@ void ui_task(void *arg)
 	u8g2_SendBuffer(&u8g2);
 	vTaskDelay(500 / portTICK_RATE_MS);
 
-	int encoder_old_val = -1;
 	int encoder_val = 0;
 	bool update = true;
-	int adc[2] = {0, 0};
 
-	int64_t click_time = 0;
+	//результат измерений
+	result_t result;
 
 	keys_events_t encoder_key = KEY_NONE;
 
@@ -162,40 +168,24 @@ void ui_task(void *arg)
 		{
 			encoder_val = encoder->get_counter_value(encoder);
 
+			int v = encoder_val / 4 + encoder_cor;
+
 			if (screen == 0)
 			{
-				int v = encoder_val / 4 + encoder_cor;
-				if (v <= encoder_max && v >= encoder_min)
-				{
-					cmd.pwm = v;
-				}
-				else if (v > encoder_max)
-				{
-					encoder_cor = (encoder_max - (encoder_val / 4));
-					cmd.pwm = encoder_max;
-				}
-				else if (v < encoder_min)
-				{
-					encoder_cor = (encoder_min - (encoder_val / 4));
-					cmd.pwm = encoder_min;
-				}
+				cmd.pwm = limits(v, PWM_MIN, PWM_MAX);
+				encoder_cor = cmd.pwm - encoder_val / 4;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 			}
-
-			if (screen == 1)
+			else if (screen == 1)
 			{
-				int v = encoder_val / 4 + menu_encoder_corr;
-				if (v < MENU_LINES && v >= 0)
+				if (menu_current_selection < 0) //навигация по меню
 				{
-					menu_current_position = v;
+					menu_current_position = limits(v, 0, MENU_LINES - 1);
+					encoder_cor = menu_current_position - encoder_val / 4;
 				}
-				else if (v < 0)
+				else //изменения значений
 				{
-					menu_encoder_corr = 0 - encoder_val / 4;
-				}
-				else if (v >= MENU_LINES)
-				{
-					menu_encoder_corr = MENU_LINES - 1 - encoder_val / 4;
+					menu[menu_current_selection].val = limits(v, menu[menu_current_selection].min, menu[menu_current_selection].max);
 				}
 			};
 			update = true;
@@ -226,24 +216,59 @@ void ui_task(void *arg)
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
 			case KEY_DOUBLELONG_PRESS:
+				//Вызываем меню
 				screen++;
 				if (screen == 2)
 					screen = 0;
-				new_screen = true;
-				menu_encoder_corr = 0 - encoder_val / 4;
-				menu_current_position = 0;
+
+				if (screen == 1)
+				{
+					menu_current_position = 0;
+					encoder_cor = menu_current_position - encoder_val / 4;
+					menu_current_selection = -1;
+				}
 				break;
 
 			default:
 				break;
 			}
 		}
-		if (screen == 1) //Меню
+		else if (screen == 1) //Меню
 		{
 			switch (encoder_key)
 			{
 			case KEY_CLICK:
+				if (menu_current_selection < 0)
+				{
+					if (menu_current_position == MENU_LINES - 1) //Последний пункт меню - Выход на главный экран
+					{
+						screen = 0;
+						encoder_cor = cmd.pwm - encoder_val / 4;
+					}
+					else
+					{
+						menu_current_selection = menu_current_position;
+						encoder_cor = menu[menu_current_selection].val - encoder_val / 4;
+					}
+				}
+				else
+				{
+					//Сохраняем введенное значение
 
+					// Initialize NVS
+					esp_err_t err = nvs_flash_init();
+					if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+					{
+						// NVS partition was truncated and needs to be erased
+						// Retry nvs_flash_init
+						ESP_ERROR_CHECK(nvs_flash_erase());
+						err = nvs_flash_init();
+					}
+					ESP_ERROR_CHECK(err);
+
+					menu_current_selection = -1;
+					encoder_cor = menu_current_position - encoder_val / 4;
+				}
 				break;
 
 			default:
@@ -252,7 +277,7 @@ void ui_task(void *arg)
 		}
 		encoder_key = 0;
 
-		if (pdTRUE == xQueueReceive(adc1_queue, &adc, (portTickType)0))
+		if (pdTRUE == xQueueReceive(adc1_queue, &result, (portTickType)0))
 		{
 			update = true;
 			if (cmd.cmd == 2)
@@ -264,7 +289,7 @@ void ui_task(void *arg)
 			if (screen == 0)
 			{
 				u8g2_ClearBuffer(&u8g2);
-				u8g2_SetFont(&u8g2, u8g2_font_7x13_t_cyrillic);
+				u8g2_SetFont(&u8g2, u8g2_font_unifont_t_cyrillic);
 
 				u8g2_DrawStr(&u8g2, 2, 15, "POWER: ");
 
@@ -280,12 +305,9 @@ void ui_task(void *arg)
 				sprintf(buf, "%3d", cmd.pwm);
 				u8g2_DrawStr(&u8g2, 60, 31, buf);
 
-				int v = volt(adc[1]);
-				int r = kOm(adc[1], adc[0]);
-
-				sprintf(buf, "U=%3d V (%d)", v, adc[1]);
+				sprintf(buf, "U=%3d V (%d)", result.U, result.adc2);
 				u8g2_DrawStr(&u8g2, 2, 47, buf);
-				sprintf(buf, "R=%d kOm (%d)", r, adc[0]);
+				sprintf(buf, "R=%d kOm (%d)", result.R, result.adc1);
 				u8g2_DrawStr(&u8g2, 2, 63, buf);
 
 				u8g2_SendBuffer(&u8g2);
@@ -293,7 +315,9 @@ void ui_task(void *arg)
 			if (screen == 1) //Меню настроек
 			{
 				u8g2_ClearBuffer(&u8g2);
-				u8g2_SetFont(&u8g2, u8g2_font_7x13_t_cyrillic);
+				u8g2_SetFont(&u8g2, u8g2_font_unifont_t_cyrillic);
+				//u8g2_SetDrawColor(&u8g2, 1);
+				u8g2_SetDrawColor(&u8g2, 1);
 
 				if (menu_current_position - menu_current_display > (DISPLAY_LINES - 1))
 					menu_current_display = menu_current_position - (DISPLAY_LINES - 1);
@@ -301,21 +325,39 @@ void ui_task(void *arg)
 				if (menu_current_position < menu_current_display)
 					menu_current_display = menu_current_position;
 
-				u8g2_DrawUTF8(&u8g2, 3, 12, menu[menu_current_display].name);
-				if (menu_current_position - menu_current_display == 0)
+				if (menu_current_selection < 0) //Навигация по меню
 				{
-					u8g2_DrawFrame(&u8g2, 0, 0, 127, 16);
+					u8g2_DrawBox(&u8g2, 0, 16 * (menu_current_position - menu_current_display), u8g2_GetDisplayWidth(&u8g2), 16);
 				}
-				u8g2_DrawUTF8(&u8g2, 3, 28, menu[menu_current_display + 1].name);
-				if (menu_current_position - menu_current_display == 1)
+
+				for (int l = 0; l < DISPLAY_LINES; l++)
 				{
-					u8g2_DrawFrame(&u8g2, 0, 16, 127, 16);
+					int p = menu_current_display + l;
+					if (p < MENU_LINES)
+					{
+						if (menu_current_position == p)
+						{
+							u8g2_SetDrawColor(&u8g2, 2);
+						}
+						else
+						{
+							u8g2_SetDrawColor(&u8g2, 1);
+						}
+
+						u8g2_DrawUTF8(&u8g2, 3, 16 * (l + 1) - 2, menu[p].name);
+						sprintf(buf, "%d", menu[p].val);
+						int w = u8g2_GetStrWidth(&u8g2, buf);
+						if (menu_current_selection == p)
+						{
+							u8g2_DrawBox(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w - 2, 16 * l, w + 2, 16);
+						}
+						u8g2_DrawUTF8(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w, 16 * (l + 1) - 2, buf);
+					}
 				}
-				//u8g2_DrawUTF8(&u8g2, 2, 47, u8x8_GetStringLineStart(2, menu_string_list));
+
 				u8g2_SendBuffer(&u8g2);
 			}
 		}
-
 		update = false;
 		vTaskDelay(40 / portTICK_RATE_MS);
 	}

@@ -18,6 +18,17 @@ typedef struct
     int pwm;
 } cmd_t;
 
+typedef struct
+{
+    int adc1;
+    int adc2;
+    int U;
+    int R;
+} result_t;
+
+#define PWM_MIN 0
+#define PWM_MAX 100
+
 typedef enum
 {
     KEY_NONE = 0,
@@ -34,4 +45,4 @@ void dual_adc(void *arg);
 void btn_task(void *arg);
 
 int volt(int adc);
-int kOm(int adc1, int adc2);
+int kOm(int adc_u, int adc_r, int channel_r);
