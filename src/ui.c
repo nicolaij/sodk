@@ -30,12 +30,13 @@ typedef struct
 menu_t menu[] = {
 	{.name = "Импульс", .val = 100, .min = 1, .max = 1000},
 	{.name = "коэф. U", .val = 5336, .min = 1000, .max = 10000},
-	{.name = "коэф. R", .val = 10, .min = 90, .max = 1000},
+	{.name = "коэф. R1", .val = 90, .min = 1, .max = 1000},
+	{.name = "коэф. R2", .val = 1750, .min = 100, .max = 5000},
 	{.name = "Выход  ", .val = 0, .min = 0, .max = 0},
 };
 
 #define MENU_LINES sizeof(menu) / sizeof(menu[0])
-#define DISPLAY_LINES 4
+#define DISPLAY_LINES 2
 
 int menu_current_selection = -1;
 int menu_current_position = 0;
@@ -93,8 +94,8 @@ void ui_task(void *arg)
 
 	// initialize the u8g2 library
 	u8g2_t u8g2;
-	u8g2_Setup_ssd1306_i2c_128x64_noname_f(
-		//u8g2_Setup_ssd1306_i2c_128x32_univision_f(
+	//u8g2_Setup_ssd1306_i2c_128x64_noname_f(
+	u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,
@@ -314,10 +315,12 @@ void ui_task(void *arg)
 			}
 			if (screen == 1) //Меню настроек
 			{
+
 				u8g2_ClearBuffer(&u8g2);
+				u8g2_SetFontMode(&u8g2, 1);
 				u8g2_SetFont(&u8g2, u8g2_font_unifont_t_cyrillic);
 				//u8g2_SetDrawColor(&u8g2, 1);
-				u8g2_SetDrawColor(&u8g2, 1);
+				u8g2_SetDrawColor(&u8g2, 2);
 
 				if (menu_current_position - menu_current_display > (DISPLAY_LINES - 1))
 					menu_current_display = menu_current_position - (DISPLAY_LINES - 1);
@@ -335,23 +338,14 @@ void ui_task(void *arg)
 					int p = menu_current_display + l;
 					if (p < MENU_LINES)
 					{
-						if (menu_current_position == p)
-						{
-							u8g2_SetDrawColor(&u8g2, 2);
-						}
-						else
-						{
-							u8g2_SetDrawColor(&u8g2, 1);
-						}
-
-						u8g2_DrawUTF8(&u8g2, 3, 16 * (l + 1) - 2, menu[p].name);
+						u8g2_DrawUTF8(&u8g2, 3, 16 * (l + 1) - 3, menu[p].name);
 						sprintf(buf, "%d", menu[p].val);
 						int w = u8g2_GetStrWidth(&u8g2, buf);
 						if (menu_current_selection == p)
 						{
 							u8g2_DrawBox(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w - 2, 16 * l, w + 2, 16);
 						}
-						u8g2_DrawUTF8(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w, 16 * (l + 1) - 2, buf);
+						u8g2_DrawUTF8(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w, 16 * (l + 1) - 3, buf);
 					}
 				}
 

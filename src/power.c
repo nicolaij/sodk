@@ -498,30 +498,38 @@ void dual_adc(void *arg)
                 while (esp_timer_get_time() - t1 < timeout * 2)
                 {
                     //adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
-                    adc_read[0] = adc1_get_raw(chan_r[chan].channel);
-                    adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &adc_read[1]);
-                    buffer1[len] = adc_read[0];
-                    buffer2[len] = adc_read[1];
+                    buffer1[len] = adc1_get_raw(chan_r[chan].channel);
+                    adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &buffer2[len]);
                     len++;
                     if (len >= sizeof(buffer1) / sizeof(buffer1[0]))
                         break;
+
+                    if (len == 5)
+                    {
+                        if ((buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5 < 200)
+                            chan = 1;
+                    }
                 };
 
                 int s1 = 0;
                 int s2 = 0;
-                for (int i = 0; i < len; i++)
+                int r = 0;
+                int avg_count = (len - 5);
+                for (int i = 0; i < avg_count; i++)
                 {
-                    s1 += buffer1[i];
-                    s2 += buffer2[i];
+                    s1 += buffer1[5 + i];
+                    s2 += buffer2[5 + i];
+                    r += kOm(buffer2[5 + i], buffer1[5 + i], chan);
                 }
-                adc_read[0] = s1 / len;
-                adc_read[1] = s2 / len;
-                int v = volt(adc_read[1]);
-                int r = kOm(adc_read[1], adc_read[0], chan);
 
-                xQueueSend(adc1_queue, adc_read, (portTickType)0);
+                result.adc1 = s1 / avg_count;
+                result.adc2 = s2 / avg_count;
+                result.U = volt(result.adc2);
+                result.R = r / avg_count;
 
-                printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%4d) buffer:%d\n", v, adc_read[1], r, adc_read[0], len);
+                xQueueSend(adc1_queue, (void *)&result, (portTickType)0);
+
+                printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%4d) buffer:%d\n", result.U, result.adc2, result.R, result.adc1, len);
 
                 if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, 800 / portTICK_PERIOD_MS))
                 {
