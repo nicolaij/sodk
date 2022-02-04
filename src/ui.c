@@ -86,7 +86,7 @@ void ui_task(void *arg)
 
 	// initialize the u8g2 library
 	u8g2_t u8g2;
-	u8g2_Setup_ssd1306_i2c_128x64_noname_f(
+	u8g2_Setup_sh1106_i2c_128x64_noname_f(
 		//u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
@@ -265,8 +265,13 @@ void ui_task(void *arg)
 				update = true;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
-			case KEY_DOUBLECLICK:
-				cmd.cmd = 1;
+			case KEY_DOUBLECLICK: //Включаем
+				if (cmd.cmd == 1) //ON
+				{
+					cmd.cmd = 0; //OFF
+				}
+				else
+					cmd.cmd = 1;
 				update = true;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
@@ -284,7 +289,6 @@ void ui_task(void *arg)
 				}
 				update = true;
 				break;
-
 			default:
 				break;
 			}
@@ -294,7 +298,7 @@ void ui_task(void *arg)
 			switch (encoder_key)
 			{
 			case KEY_CLICK:
-				if (menu_current_selection < 0)
+				if (menu_current_selection < 0) //Выбираем пункт меню
 				{
 					if (menu_current_position == MENU_LINES - 1) //Последний пункт меню - Выход на главный экран
 					{
@@ -307,9 +311,8 @@ void ui_task(void *arg)
 						encoder_cor = menu[menu_current_selection].val - encoder_val / 4;
 					}
 				}
-				else
+				else //Сохраняем введенное значение
 				{
-					//Сохраняем введенное значение
 					nvs_handle_t my_handle;
 					err = nvs_open("storage", NVS_READWRITE, &my_handle);
 					if (err != ESP_OK)
@@ -336,11 +339,14 @@ void ui_task(void *arg)
 
 					menu_current_selection = -1;
 					encoder_cor = menu_current_position - encoder_val / 4;
-
 				}
 				update = true;
 				break;
-
+			case KEY_LONG_PRESS: //Выход на главный экран
+				screen = 0;
+				encoder_cor = cmd.pwm - encoder_val / 4;
+				update = true;
+				break;
 			default:
 				break;
 			}
@@ -362,24 +368,29 @@ void ui_task(void *arg)
 				u8g2_ClearBuffer(&u8g2);
 				u8g2_SetFont(&u8g2, u8g2_font_unifont_t_cyrillic);
 
-				u8g2_DrawStr(&u8g2, 2, 15, "POWER: ");
+				u8g2_DrawStr(&u8g2, 2, 16 - 3, "POWER: ");
 
 				if (cmd.cmd == 0)
-					u8g2_DrawStr(&u8g2, 60, 15, "  OFF");
+					u8g2_DrawStr(&u8g2, 53, 16 - 3, "OFF");
 				if (cmd.cmd == 1)
-					u8g2_DrawStr(&u8g2, 60, 15, "   ON");
+					u8g2_DrawStr(&u8g2, 53, 16 - 3, "ON");
 				if (cmd.cmd == 2)
-					u8g2_DrawStr(&u8g2, 60, 15, "PULSE");
+					u8g2_DrawStr(&u8g2, 53, 16 - 3, "PULSE");
 
-				u8g2_DrawStr(&u8g2, 2, 31, "PWM: ");
+				//u8g2_DrawStr(&u8g2, 2, 31, "PWM: ");
 				//u8g2_DrawStr(&u8g2, 60, 31, u8x8_u16toa(pwm, 3));
-				sprintf(buf, "%3d", cmd.pwm);
-				u8g2_DrawStr(&u8g2, 60, 31, buf);
+				sprintf(buf, "%d", cmd.pwm);
+				int w = u8g2_GetStrWidth(&u8g2, buf);
+				u8g2_DrawStr(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w, 16 - 3, buf);
 
-				sprintf(buf, "U=%3d V (%d)", result.U, result.adc2);
-				u8g2_DrawStr(&u8g2, 2, 47, buf);
-				sprintf(buf, "R=%d kOm (%d)", result.R, result.adc1);
-				u8g2_DrawStr(&u8g2, 2, 63, buf);
+				sprintf(buf, "U = %d V", result.U);
+				u8g2_DrawStr(&u8g2, 2, 16 * 2 - 3, buf);
+				sprintf(buf, "R = %d kOm", result.R);
+				u8g2_DrawStr(&u8g2, 2, 16 * 3 - 3, buf);
+				
+				u8g2_SetFont(&u8g2, u8g2_font_6x13_t_cyrillic);
+				sprintf(buf, "1:%4d 2:%4d U:%4d", result.adc11, result.adc12, result.adc2);
+				u8g2_DrawStr(&u8g2, 2, 16 * 4 - 3, buf);
 
 				u8g2_SendBuffer(&u8g2);
 			}

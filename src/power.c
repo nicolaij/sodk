@@ -429,6 +429,7 @@ void dual_adc(void *arg)
         */
         if (cmd.cmd == 2) //Pulse
         {
+            int test_measure = 0;
             gpio_set_level(POWER_PIN, 0);
             while (esp_timer_get_time() - t1 < (timeout * 2))
             {
@@ -440,8 +441,11 @@ void dual_adc(void *arg)
                         pos_off = len;
                         //Переключаем каналы
                         if (len > 5)
-                            if ((buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5 < 200)
+                        {
+                            test_measure = (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5;
+                            if (test_measure < 200)
                                 chan = 1;
+                        }
                     }
                 }
 
@@ -466,7 +470,16 @@ void dual_adc(void *arg)
                 r += kOm(buffer2[pos_off + i], buffer1[pos_off + i], chan);
             }
 
-            result.adc1 = s1 / avg_count;
+            if (chan == 1) //переключили канал
+            {
+                result.adc11 = test_measure;
+                result.adc12 = s1 / avg_count;
+            }
+            else
+            {
+                result.adc11 = s1 / avg_count;
+                result.adc12 = 0;
+            }
             result.adc2 = s2 / avg_count;
             result.U = volt(result.adc2);
             result.R = r / avg_count;
@@ -498,6 +511,7 @@ void dual_adc(void *arg)
             {
                 len = 0;
                 chan = 0;
+                int test_measure = 0;
                 t1 = esp_timer_get_time();
                 while (esp_timer_get_time() - t1 < timeout * 2)
                 {
@@ -510,11 +524,9 @@ void dual_adc(void *arg)
 
                     if (len == 5)
                     {
-                        if ((buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5 < 200)
-                        {
+                        test_measure = (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5;
+                        if (test_measure < 200)
                             chan = 1;
-                            printf("Buf: %d\n", (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5);
-                        }
                     }
                 };
 
@@ -529,14 +541,23 @@ void dual_adc(void *arg)
                     r += kOm(buffer2[5 + i], buffer1[5 + i], chan);
                 }
 
-                result.adc1 = s1 / avg_count;
-                result.adc2 = s2 / avg_count;
+                if (chan == 1) //переключили канал
+                {
+                    result.adc11 = test_measure;
+                    result.adc12 = s1 / avg_count;
+                }
+                else
+                {
+                    result.adc11 = s1 / avg_count;
+                    result.adc12 = 0;
+                }
+
                 result.U = volt(result.adc2);
                 result.R = r / avg_count;
 
                 xQueueSend(adc1_queue, (void *)&result, (portTickType)0);
 
-                printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%4d) buffer:%d\n", result.U, result.adc2, result.R, result.adc1, len);
+                printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%d,%d) buffer:%d\n", result.U, result.adc2, result.R, result.adc11, result.adc12, len);
 
                 if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, 800 / portTICK_PERIOD_MS))
                 {

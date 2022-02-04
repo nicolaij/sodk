@@ -20,10 +20,11 @@ typedef struct
 
 typedef struct
 {
-    int adc1;
+    int adc11;
+    int adc12;
     int adc2;
-    int U;
     int R;
+    int U;
 } result_t;
 
 #define PWM_MIN 0
@@ -41,10 +42,10 @@ typedef enum
 
 typedef struct
 {
-	char name[32];
-	int val;
-	int min;
-	int max;
+    char name[32];
+    int val;
+    int min;
+    int max;
 } menu_t;
 
 xQueueHandle uicmd_queue;
