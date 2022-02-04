@@ -178,6 +178,8 @@ void ui_task(void *arg)
 
 	keys_events_t encoder_key = KEY_NONE;
 
+	int64_t t1 = 0; // Для определения Double Click
+
 	// loop
 	while (1)
 	{
@@ -187,12 +189,14 @@ void ui_task(void *arg)
 			enc_btn++;
 			if (enc_btn == 50) //long press
 			{
-				encoder_key = KEY_LONG_PRESS;
+				if (t1 == 0)
+					encoder_key = KEY_LONG_PRESS;
 			}
 
 			if (enc_btn == 100) //super long press
 			{
-				encoder_key = KEY_DOUBLELONG_PRESS;
+				if (t1 == 0)
+					encoder_key = KEY_DOUBLELONG_PRESS;
 			}
 		}
 		else //up
@@ -201,9 +205,25 @@ void ui_task(void *arg)
 			{
 				if (enc_btn < 10) //short click
 				{
-					encoder_key = KEY_CLICK;
+					if (t1 > 0)
+					{
+						//printf("Double t :%lld, c=%d\n", esp_timer_get_time() - t1, enc_btn);
+						encoder_key = KEY_DOUBLECLICK;
+						t1 = 0;
+					}
+					else
+						t1 = esp_timer_get_time();
 				}
+				else
+					t1 = 0;
 			}
+			else if (t1 > 0)
+				if (esp_timer_get_time() - t1 > 400000)
+				{
+					encoder_key = KEY_CLICK;
+					t1 = 0;
+				}
+
 			enc_btn = 0;
 		}
 
@@ -253,12 +273,12 @@ void ui_task(void *arg)
 				update = true;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
-			case KEY_LONG_PRESS:
+			case KEY_DOUBLECLICK:
 				cmd.cmd = 1;
 				update = true;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
-			case KEY_DOUBLELONG_PRESS:
+			case KEY_LONG_PRESS:
 				//Вызываем меню
 				screen++;
 				if (screen == 2)
@@ -270,6 +290,7 @@ void ui_task(void *arg)
 					encoder_cor = menu_current_position - encoder_val / 4;
 					menu_current_selection = -1;
 				}
+				update = true;
 				break;
 
 			default:
@@ -324,12 +345,14 @@ void ui_task(void *arg)
 					menu_current_selection = -1;
 					encoder_cor = menu_current_position - encoder_val / 4;
 				}
+				update = true;
 				break;
 
 			default:
 				break;
 			}
 		}
+
 		encoder_key = 0;
 
 		if (pdTRUE == xQueueReceive(adc1_queue, &result, (portTickType)0))

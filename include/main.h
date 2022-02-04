@@ -33,6 +33,8 @@ typedef enum
 {
     KEY_NONE = 0,
     KEY_CLICK,
+    PRE_KEY_CLICK,
+    KEY_DOUBLECLICK,
     KEY_LONG_PRESS,
     KEY_DOUBLELONG_PRESS
 } keys_events_t;
