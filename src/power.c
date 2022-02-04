@@ -39,6 +39,8 @@ measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_7, .k = 1750, .max = 20000},
 };
 
+extern menu_t menu[];
+
 int k_U = 5336;
 
 /**
@@ -414,7 +416,7 @@ void dual_adc(void *arg)
         ledc_update_duty(ledc_channel.speed_mode, ledc_channel.channel);
 
         int64_t t1 = esp_timer_get_time();
-        int64_t timeout = 100000;
+        int64_t timeout = menu[0].val * 1000;
 
         int len = 0;
         int pos_off = 0;
@@ -484,7 +486,9 @@ void dual_adc(void *arg)
                 }
 
                 printf("%4d, %4d, %4d, %4d\n", i, buffer2[i], buffer1[i], kOm(buffer2[i], buffer1[i], c));
-                taskYIELD();
+
+                if (i % 1000 == 0)
+                    vTaskDelay(1);
             }
         }
         else if (cmd.cmd == 1) //ON
@@ -560,14 +564,15 @@ esp_err_t app_main(void)
 
 int volt(int adc)
 {
-    return adc * 1000 / k_U;
+    return adc * 1000 / menu[1].val;
 };
 
 int kOm(int adc_u, int adc_r, int channel_r)
 {
+    int k = menu[2 + channel_r].val;
     if (adc_r == 0)
         return chan_r[channel_r].max;
-    int r = adc_u * chan_r[channel_r].k / adc_r;
+    int r = adc_u * k / adc_r;
     if (r > chan_r[channel_r].max)
         return chan_r[channel_r].max;
     return r;

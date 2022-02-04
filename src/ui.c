@@ -19,14 +19,6 @@
 
 static const char *TAG = "ui";
 
-typedef struct
-{
-	char name[32];
-	int val;
-	int min;
-	int max;
-} menu_t;
-
 menu_t menu[] = {
 	{.name = "Импульс", .val = 100, .min = 1, .max = 1000},
 	{.name = "коэф. U", .val = 5336, .min = 1000, .max = 10000},
@@ -146,7 +138,7 @@ void ui_task(void *arg)
 	printf("\n");
 	printf("Opening Non-Volatile Storage (NVS) handle... \n");
 	nvs_handle_t my_handle;
-	err = nvs_open("storage", NVS_READWRITE, &my_handle);
+	err = nvs_open("storage", NVS_READONLY, &my_handle);
 	if (err != ESP_OK)
 	{
 		printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
@@ -344,6 +336,7 @@ void ui_task(void *arg)
 
 					menu_current_selection = -1;
 					encoder_cor = menu_current_position - encoder_val / 4;
+
 				}
 				update = true;
 				break;

@@ -39,6 +39,14 @@ typedef enum
     KEY_DOUBLELONG_PRESS
 } keys_events_t;
 
+typedef struct
+{
+	char name[32];
+	int val;
+	int min;
+	int max;
+} menu_t;
+
 xQueueHandle uicmd_queue;
 xQueueHandle adc1_queue;
 
