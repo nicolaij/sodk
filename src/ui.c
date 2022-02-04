@@ -36,7 +36,7 @@ menu_t menu[] = {
 };
 
 #define MENU_LINES sizeof(menu) / sizeof(menu[0])
-#define DISPLAY_LINES 2
+#define DISPLAY_LINES 4
 
 int menu_current_selection = -1;
 int menu_current_position = 0;
@@ -94,8 +94,8 @@ void ui_task(void *arg)
 
 	// initialize the u8g2 library
 	u8g2_t u8g2;
-	//u8g2_Setup_ssd1306_i2c_128x64_noname_f(
-	u8g2_Setup_ssd1306_i2c_128x32_univision_f(
+	u8g2_Setup_ssd1306_i2c_128x64_noname_f(
+		//u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,
@@ -130,6 +130,48 @@ void ui_task(void *arg)
 
 	int encoder_val = 0;
 	bool update = true;
+
+	// Initialize NVS
+	esp_err_t err = nvs_flash_init();
+	if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+	{
+		// NVS partition was truncated and needs to be erased
+		// Retry nvs_flash_init
+		ESP_ERROR_CHECK(nvs_flash_erase());
+		err = nvs_flash_init();
+	}
+	ESP_ERROR_CHECK(err);
+
+	// Open
+	printf("\n");
+	printf("Opening Non-Volatile Storage (NVS) handle... \n");
+	nvs_handle_t my_handle;
+	err = nvs_open("storage", NVS_READWRITE, &my_handle);
+	if (err != ESP_OK)
+	{
+		printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+	}
+	else
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			err = nvs_get_i32(my_handle, menu[i].name, &menu[i].val);
+			switch (err)
+			{
+			case ESP_OK:
+				printf("Read \"%s\" = %d\n", menu[i].name, menu[i].val);
+				break;
+			case ESP_ERR_NVS_NOT_FOUND:
+				printf("The value  \"%s\" is not initialized yet!\n", menu[i].name);
+				break;
+			default:
+				printf("Error (%s) reading!\n", esp_err_to_name(err));
+			}
+		}
+
+		// Close
+		nvs_close(my_handle);
+	}
 
 	//результат измерений
 	result_t result;
@@ -255,17 +297,29 @@ void ui_task(void *arg)
 				else
 				{
 					//Сохраняем введенное значение
-
-					// Initialize NVS
-					esp_err_t err = nvs_flash_init();
-					if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+					nvs_handle_t my_handle;
+					err = nvs_open("storage", NVS_READWRITE, &my_handle);
+					if (err != ESP_OK)
 					{
-						// NVS partition was truncated and needs to be erased
-						// Retry nvs_flash_init
-						ESP_ERROR_CHECK(nvs_flash_erase());
-						err = nvs_flash_init();
+						printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
 					}
-					ESP_ERROR_CHECK(err);
+					else
+					{
+						// Write
+						err = nvs_set_i32(my_handle, menu[menu_current_selection].name, menu[menu_current_selection].val);
+						printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+						// Commit written value.
+						// After setting any values, nvs_commit() must be called to ensure changes are written
+						// to flash storage. Implementations may write to storage at other times,
+						// but this is not guaranteed.
+						printf("Committing updates in NVS ... ");
+						err = nvs_commit(my_handle);
+						printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+						// Close
+						nvs_close(my_handle);
+					}
 
 					menu_current_selection = -1;
 					encoder_cor = menu_current_position - encoder_val / 4;
@@ -315,7 +369,6 @@ void ui_task(void *arg)
 			}
 			if (screen == 1) //Меню настроек
 			{
-
 				u8g2_ClearBuffer(&u8g2);
 				u8g2_SetFontMode(&u8g2, 1);
 				u8g2_SetFont(&u8g2, u8g2_font_unifont_t_cyrillic);
@@ -348,7 +401,6 @@ void ui_task(void *arg)
 						u8g2_DrawUTF8(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w, 16 * (l + 1) - 3, buf);
 					}
 				}
-
 				u8g2_SendBuffer(&u8g2);
 			}
 		}

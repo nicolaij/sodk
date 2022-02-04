@@ -490,11 +490,11 @@ void dual_adc(void *arg)
         else if (cmd.cmd == 1) //ON
         {
             gpio_set_level(POWER_PIN, 0);
-            chan = 0;
             while (cmd.cmd == 1)
             {
-                t1 = esp_timer_get_time();
                 len = 0;
+                chan = 0;
+                t1 = esp_timer_get_time();
                 while (esp_timer_get_time() - t1 < timeout * 2)
                 {
                     //adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
@@ -507,7 +507,10 @@ void dual_adc(void *arg)
                     if (len == 5)
                     {
                         if ((buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5 < 200)
+                        {
                             chan = 1;
+                            printf("Buf: %d\n", (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5);
+                        }
                     }
                 };
 
