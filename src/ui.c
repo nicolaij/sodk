@@ -52,7 +52,7 @@ void ui_task(void *arg)
 
 	cmd_t cmd;
 	cmd.cmd = 0;
-	cmd.pwm = 0;
+	cmd.power = 0;
 
 	// Rotary encoder underlying device is represented by a PCNT unit in this example
 	uint32_t pcnt_unit = 0;
@@ -227,8 +227,8 @@ void ui_task(void *arg)
 
 			if (screen == 0)
 			{
-				cmd.pwm = limits(v, PWM_MIN, PWM_MAX);
-				encoder_cor = cmd.pwm - encoder_val / 4;
+				cmd.power = limits(v, PWM_MIN, PWM_MAX);
+				encoder_cor = cmd.power - encoder_val / 4;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 			}
 			else if (screen == 1)
@@ -303,7 +303,7 @@ void ui_task(void *arg)
 					if (menu_current_position == MENU_LINES - 1) //Последний пункт меню - Выход на главный экран
 					{
 						screen = 0;
-						encoder_cor = cmd.pwm - encoder_val / 4;
+						encoder_cor = cmd.power - encoder_val / 4;
 					}
 					else
 					{
@@ -344,7 +344,7 @@ void ui_task(void *arg)
 				break;
 			case KEY_LONG_PRESS: //Выход на главный экран
 				screen = 0;
-				encoder_cor = cmd.pwm - encoder_val / 4;
+				encoder_cor = cmd.power - encoder_val / 4;
 				update = true;
 				break;
 			default:
@@ -379,7 +379,7 @@ void ui_task(void *arg)
 
 				//u8g2_DrawStr(&u8g2, 2, 31, "PWM: ");
 				//u8g2_DrawStr(&u8g2, 60, 31, u8x8_u16toa(pwm, 3));
-				sprintf(buf, "%d", cmd.pwm);
+				sprintf(buf, "%d", cmd.power);
 				int w = u8g2_GetStrWidth(&u8g2, buf);
 				u8g2_DrawStr(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w, 16 - 3, buf);
 

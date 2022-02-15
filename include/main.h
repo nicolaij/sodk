@@ -15,7 +15,7 @@
 typedef struct
 {
     int cmd;
-    int pwm;
+    int power;
 } cmd_t;
 
 typedef struct
@@ -54,6 +54,9 @@ xQueueHandle adc1_queue;
 void ui_task(void *arg);
 void dual_adc(void *arg);
 void btn_task(void *arg);
+void clock_task(void *arg);
+void wifi_task(void *arg);
+void radio_task(void *arg);
 
 int volt(int adc);
 int kOm(int adc_u, int adc_r, int channel_r);

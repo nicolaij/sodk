@@ -28,9 +28,15 @@ void app_main()
 	uicmd_queue = xQueueCreate(2, sizeof(cmd_t));
     adc1_queue = xQueueCreate(2, sizeof(result_t));
 
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
+    //xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
 
-    xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, NULL);
+    //xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, NULL);
+
+    xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
+
+    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+
+    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, NULL);
 
     while (1)
     {

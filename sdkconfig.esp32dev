@@ -1130,6 +1130,16 @@ CONFIG_WPA_MBEDTLS_CRYPTO=y
 # CONFIG_WPA_WPS_STRICT is not set
 # CONFIG_WPA_11KV_SUPPORT is not set
 # end of Supplicant
+
+#
+# LoRa Configuration
+#
+CONFIG_CS_GPIO=15
+CONFIG_RST_GPIO=32
+CONFIG_MISO_GPIO=13
+CONFIG_MOSI_GPIO=12
+CONFIG_SCK_GPIO=14
+# end of LoRa Configuration
 # end of Component config
 
 #
