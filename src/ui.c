@@ -58,9 +58,9 @@ void ui_task(void *arg)
 	uint32_t pcnt_unit = 0;
 
 	//only for test. Power encoder
-	gpio_pad_select_gpio(5);
-	gpio_set_direction(5, GPIO_MODE_OUTPUT);
-	gpio_set_level(5, 1);
+	//gpio_pad_select_gpio(5);
+	//gpio_set_direction(5, GPIO_MODE_OUTPUT);
+	//gpio_set_level(5, 1);
 
 	// Create rotary encoder instance
 	rotary_encoder_config_t config = ROTARY_ENCODER_DEFAULT_CONFIG((rotary_encoder_dev_t)pcnt_unit, PIN_ENCODER_A, PIN_ENCODER_B);

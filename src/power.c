@@ -60,11 +60,11 @@ void i2s_init(void)
         .dma_buf_len = 1024,
         .use_apll = 1,
     };
-    //install and start i2s driver
+    // install and start i2s driver
     i2s_driver_install(i2s_num, &i2s_config, 0, NULL);
-    //init DAC pad
-    //i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);
-    //init ADC pad
+    // init DAC pad
+    // i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);
+    // init ADC pad
     i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_5);
 }
 
@@ -85,6 +85,7 @@ void disp_buf(uint8_t *buf, int length)
     printf("======\n");
 }
 
+/*
 void btn_task(void *arg)
 {
     int btn = 0;
@@ -134,15 +135,8 @@ void btn_task(void *arg)
         else
             vTaskDelay(50 / portTICK_RATE_MS);
     }
-    /*
-    uint32_t io_num;
-    for(;;) {
-        if(xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY)) {
-            printf("GPIO[%d] intr, val: %d\n", io_num, gpio_get_level(io_num));
-        }
-    }
-*/
 }
+*/
 
 /**
  * @brief I2S ADC/DAC example
@@ -238,7 +232,7 @@ void example_i2s_adc_dac(void *arg)
 static void check_efuse(void)
 {
 #if CONFIG_IDF_TARGET_ESP32
-    //Check if TP is burned into eFuse
+    // Check if TP is burned into eFuse
     if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK)
     {
         printf("eFuse Two Point: Supported\n");
@@ -247,7 +241,7 @@ static void check_efuse(void)
     {
         printf("eFuse Two Point: NOT supported\n");
     }
-    //Check Vref is burned into eFuse
+    // Check Vref is burned into eFuse
     if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK)
     {
         printf("eFuse Vref: Supported\n");
@@ -335,8 +329,8 @@ void dual_adc(void *arg)
 
     ledc_channel_config(&ledc_channel);
 */
-    //dac_output_enable(DAC_CHANNEL_2);
-    //dac_output_voltage(DAC_CHANNEL_2, 127);
+    // dac_output_enable(DAC_CHANNEL_2);
+    // dac_output_voltage(DAC_CHANNEL_2, 127);
 
     dac_output_enable(DAC_CHANNEL_1);
     dac_output_voltage(DAC_CHANNEL_1, 0);
@@ -350,7 +344,7 @@ void dual_adc(void *arg)
     esp_adc_cal_characteristics_t *adc1_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
     printf("ADC1: ");
     esp_adc_cal_value_t val_type1 = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc1_chars);
-    //Check type of calibration value used to characterize ADC
+    // Check type of calibration value used to characterize ADC
     if (val_type1 == ESP_ADC_CAL_VAL_EFUSE_VREF)
     {
         printf("eFuse Vref %d", adc1_chars->vref);
@@ -368,7 +362,7 @@ void dual_adc(void *arg)
     esp_adc_cal_characteristics_t *adc2_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
     printf("ADC2: ");
     esp_adc_cal_value_t val_type2 = esp_adc_cal_characterize(ADC_UNIT_2, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc2_chars);
-    //Check type of calibration value used to characterize ADC
+    // Check type of calibration value used to characterize ADC
     if (val_type2 == ESP_ADC_CAL_VAL_EFUSE_VREF)
     {
         printf("eFuse Vref %d", adc2_chars->vref);
@@ -394,9 +388,9 @@ void dual_adc(void *arg)
     */
     vTaskDelay(200 / portTICK_RATE_MS);
 
-    //gpio_pad_select_gpio(LED_GPIO);
-    //gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
-    //gpio_set_level(LED_GPIO, 0);
+    // gpio_pad_select_gpio(LED_GPIO);
+    // gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
+    // gpio_set_level(LED_GPIO, 0);
 
     //результат измерений
     result_t result;
@@ -407,12 +401,12 @@ void dual_adc(void *arg)
 
     while (1)
     {
-        //int64_t t1 = esp_timer_get_time();
-        //int64_t timeout = 100000;
-        //gpio_set_level(LED_GPIO, 1);
-        //gpio_set_level(POWER_PIN, 0);
+        // int64_t t1 = esp_timer_get_time();
+        // int64_t timeout = 100000;
+        // gpio_set_level(LED_GPIO, 1);
+        // gpio_set_level(POWER_PIN, 0);
 
-        //while (esp_timer_get_time() - t1 < timeout)
+        // while (esp_timer_get_time() - t1 < timeout)
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
         dac_output_voltage(DAC_CHANNEL_1, cmd.power * 255 / 100);
@@ -429,7 +423,7 @@ void dual_adc(void *arg)
         Сначала меряем на ADC1_CHANNEL_5, если показания < ~250 adc
         дальше меряем ADC1_CHANNEL_7 (x20)
         */
-        if (cmd.cmd == 2) //Pulse
+        if (cmd.cmd == 2) // Pulse
         {
             int test_measure = 0;
             gpio_set_level(POWER_PIN, 0);
@@ -444,15 +438,15 @@ void dual_adc(void *arg)
                         //Переключаем каналы
                         if (len > 5)
                         {
-                            //test_measure = (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5;
-                            //if (test_measure < 200)
-                            //    chan = 1;
+                            // test_measure = (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5;
+                            // if (test_measure < 200)
+                            //     chan = 1;
                         }
                     }
                 }
 
-                //adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
-                //adc_read[0] = adc1_get_raw(ADC1_CHANNEL_7);
+                // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
+                // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_7);
                 bufferR[len] = adc1_get_raw(chan_r[chan].channel);
                 adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
                 len++;
@@ -464,7 +458,7 @@ void dual_adc(void *arg)
             int s1 = 0;
             int s2 = 0;
             int r = 0;
-            int avg_count = (len - pos_off) / 10; //10% усредняем
+            int avg_count = (len - pos_off) / 10; // 10% усредняем
             for (int i = 0; i < avg_count; i++)
             {
                 s1 += bufferR[pos_off + i];
@@ -493,8 +487,8 @@ void dual_adc(void *arg)
             printf("N, U adc, R adc, R kOm\n");
             for (int i = 0; i < len; i++)
             {
-                //printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
-                //printf("%4d, %4d, %4d\n", i, volt(buffer2[i]), kOm(buffer2[i], buffer1[i]));
+                // printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
+                // printf("%4d, %4d, %4d\n", i, volt(buffer2[i]), kOm(buffer2[i], buffer1[i]));
                 if (chan == 1)
                 {
                     if (i >= pos_off)
@@ -507,7 +501,7 @@ void dual_adc(void *arg)
                     vTaskDelay(1);
             }
         }
-        else if (cmd.cmd == 1) //ON
+        else if (cmd.cmd == 1) // ON
         {
             gpio_set_level(POWER_PIN, 0);
             while (cmd.cmd == 1)
@@ -518,30 +512,31 @@ void dual_adc(void *arg)
                 t1 = esp_timer_get_time();
                 while (esp_timer_get_time() - t1 < timeout * 2)
                 {
-                    //adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
+                    // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
                     bufferR[len] = adc1_get_raw(chan_r[chan].channel);
                     adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
                     len++;
                     if (len >= sizeof(bufferR) / sizeof(bufferR[0]))
                         break;
 
-                    if (len == 5)
-                    {
-                        //test_measure = (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5;
-                        //if (test_measure < 200)
-                        //    chan = 1;
-                    }
+                    // if (len == 5)
+                    //{
+                    //  test_measure = (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5;
+                    //  if (test_measure < 200)
+                    //      chan = 1;
+                    //}
                 };
 
                 int s1 = 0;
                 int s2 = 0;
                 int r = 0;
-                int avg_count = (len - 5);
+                int offs = 0;
+                int avg_count = len - offs;
                 for (int i = 0; i < avg_count; i++)
                 {
-                    s1 += bufferR[5 + i];
-                    s2 += bufferU[5 + i];
-                    r += kOm(bufferU[5 + i], bufferR[5 + i], chan);
+                    s1 += bufferR[offs + i];
+                    s2 += bufferU[offs + i];
+                    r += kOm(bufferU[offs + i], bufferR[offs + i], chan);
                 }
 
                 if (chan == 1) //переключили канал
@@ -555,6 +550,7 @@ void dual_adc(void *arg)
                     result.adc12 = 0;
                 }
 
+                result.adc2 = s2 / avg_count;
                 result.U = volt(result.adc2);
                 result.R = r / avg_count;
 
@@ -562,7 +558,7 @@ void dual_adc(void *arg)
 
                 printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%d,%d) buffer:%d\n", result.U, result.adc2, result.R, result.adc11, result.adc12, len);
 
-                if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, 800 / portTICK_PERIOD_MS))
+                if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, (1000 - menu[0].val) / portTICK_PERIOD_MS))
                 {
                     dac_output_voltage(DAC_CHANNEL_1, cmd.power * 255 / 100);
                 }
