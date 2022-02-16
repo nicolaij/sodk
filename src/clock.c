@@ -21,17 +21,15 @@
 #include "esp_sntp.h"
 #include "driver/i2c.h"
 
+#include "main.h"
+
 static const char *TAG = "clock";
 
 static void obtain_time(void);
 static void initialize_sntp(void);
 
-#define DS3231_POWER_PIN 26
+//#define DS3231_POWER_PIN 26
 
-#define I2C_MASTER_SCL_IO 14        /*!< gpio number for I2C master clock */
-#define I2C_MASTER_SDA_IO 27        /*!< gpio number for I2C master data  */
-#define I2C_MASTER_NUM 0            /*!< I2C port number for master dev */
-#define I2C_MASTER_FREQ_HZ 400000   /*!< I2C master clock frequency */
 #define I2C_MASTER_TX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 
@@ -67,9 +65,9 @@ static esp_err_t i2c_master_init(void)
     int i2c_master_port = I2C_MASTER_NUM;
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
-        .sda_io_num = I2C_MASTER_SDA_IO,
+        .sda_io_num = PIN_SDA,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = I2C_MASTER_SCL_IO,
+        .scl_io_num = PIN_SCL,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
         .master.clk_speed = I2C_MASTER_FREQ_HZ,
         // .clk_flags = 0,          /*!< Optional, you can use I2C_SCLK_SRC_FLAG_* flags to choose i2c source clock here. */
@@ -167,6 +165,8 @@ void time_sync_notification_cb(struct timeval *tv)
                          bin2bcd(timeinfo.tm_mon),
                          bin2bcd(timeinfo.tm_year - 100)};
 
+    xSemaphoreTake(i2c_mux, portMAX_DELAY);
+
     if (i2c_master_clock_write(I2C_MASTER_NUM, buffer, 8) == ESP_OK)
     {
         ESP_LOGI("DS3231", "Clock set");
@@ -176,6 +176,8 @@ void time_sync_notification_cb(struct timeval *tv)
             ESP_ERROR_CHECK(i2c_master_clock_write_byte(I2C_MASTER_NUM, 0x0f, 0)); // Status Register (0Fh)
         }
     }
+
+    xSemaphoreGive(i2c_mux);
 
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
     ESP_LOGI(TAG, "The current date/time in Minks is: %s", strftime_buf);
@@ -198,17 +200,19 @@ void clock_task(void *arg)
     localtime_r(&now, &timeinfo);
 
     strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
-    ESP_LOGI(TAG, "Chip date/time: %s", (char *)buf);
+    ESP_LOGI(TAG, "ESP date/time: %s", (char *)buf);
 
     // init i2c DS3231
     // Power on DS3231
-    gpio_pad_select_gpio(DS3231_POWER_PIN);
-    gpio_set_direction(DS3231_POWER_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(DS3231_POWER_PIN, 1);
+    //gpio_pad_select_gpio(DS3231_POWER_PIN);
+    //gpio_set_direction(DS3231_POWER_PIN, GPIO_MODE_OUTPUT);
+    //gpio_set_level(DS3231_POWER_PIN, 1);
 
     vTaskDelay(500 / portTICK_PERIOD_MS);
 
-    ESP_ERROR_CHECK(i2c_master_init());
+    xSemaphoreTake(i2c_mux, portMAX_DELAY);
+
+    //ESP_ERROR_CHECK(i2c_master_init());
     if (ESP_OK == i2c_master_clock_read(I2C_MASTER_NUM, buf, 0x12))
     {
         ESP_LOGI("DS3231", "DS3231 read OK. Temperature %.2f°C", (float)((int16_t)(buf[DS3231_TEMPERATUREREG] << 8 | buf[DS3231_TEMPERATUREREG + 1]) / 64) * 0.25f);
@@ -236,6 +240,8 @@ void clock_task(void *arg)
     {
         ESP_LOGE("DS3231", "Not found");
     }
+
+    xSemaphoreGive(i2c_mux);
 
     initialize_sntp();
 
@@ -290,6 +296,8 @@ static void obtain_time(void)
                              bin2bcd(timeinfo.tm_mon),
                              bin2bcd(timeinfo.tm_year - 100)};
 
+        xSemaphoreTake(i2c_mux, portMAX_DELAY);
+
         if (i2c_master_clock_write(I2C_MASTER_NUM, buffer, 8) == ESP_OK)
         {
             ESP_LOGI("DS3231", "Clock set");
@@ -299,6 +307,8 @@ static void obtain_time(void)
                 ESP_ERROR_CHECK(i2c_master_clock_write_byte(I2C_MASTER_NUM, 0x0f, 0)); // Status Register (0Fh)
             }
         }
+
+        xSemaphoreGive(i2c_mux);
 
         strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
         ESP_LOGI(TAG, "The current date/time in Minks is: %s", strftime_buf);

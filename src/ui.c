@@ -3,6 +3,7 @@
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "freertos/semphr.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -57,10 +58,10 @@ void ui_task(void *arg)
 	// Rotary encoder underlying device is represented by a PCNT unit in this example
 	uint32_t pcnt_unit = 0;
 
-	//only for test. Power encoder
-	//gpio_pad_select_gpio(5);
-	//gpio_set_direction(5, GPIO_MODE_OUTPUT);
-	//gpio_set_level(5, 1);
+	// only for test. Power encoder
+	// gpio_pad_select_gpio(5);
+	// gpio_set_direction(5, GPIO_MODE_OUTPUT);
+	// gpio_set_level(5, 1);
 
 	// Create rotary encoder instance
 	rotary_encoder_config_t config = ROTARY_ENCODER_DEFAULT_CONFIG((rotary_encoder_dev_t)pcnt_unit, PIN_ENCODER_A, PIN_ENCODER_B);
@@ -78,6 +79,8 @@ void ui_task(void *arg)
 	gpio_set_direction(PIN_ENCODER_BTN, GPIO_MODE_INPUT);
 	gpio_set_pull_mode(PIN_ENCODER_BTN, GPIO_PULLUP_ONLY);
 
+	xSemaphoreTake(i2c_mux, portMAX_DELAY);
+
 	// initialize the u8g2 hal
 	u8g2_esp32_hal_t u8g2_esp32_hal = U8G2_ESP32_HAL_DEFAULT;
 	u8g2_esp32_hal.sda = PIN_SDA;
@@ -87,7 +90,7 @@ void ui_task(void *arg)
 	// initialize the u8g2 library
 	u8g2_t u8g2;
 	u8g2_Setup_sh1106_i2c_128x64_noname_f(
-		//u8g2_Setup_ssd1306_i2c_128x32_univision_f(
+		// u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,
@@ -118,6 +121,9 @@ void ui_task(void *arg)
 	u8g2_ClearBuffer(&u8g2);
 	u8g2_DrawXBM(&u8g2, 34, 2, 60, 60, hourglass_empty);
 	u8g2_SendBuffer(&u8g2);
+
+	xSemaphoreGive(i2c_mux);
+
 	vTaskDelay(500 / portTICK_RATE_MS);
 
 	int encoder_val = 0;
@@ -176,30 +182,30 @@ void ui_task(void *arg)
 	while (1)
 	{
 		int s = gpio_get_level(PIN_ENCODER_BTN);
-		if (s == 0) //down
+		if (s == 0) // down
 		{
 			enc_btn++;
-			if (enc_btn == 50) //long press
+			if (enc_btn == 50) // long press
 			{
 				if (t1 == 0)
 					encoder_key = KEY_LONG_PRESS;
 			}
 
-			if (enc_btn == 100) //super long press
+			if (enc_btn == 100) // super long press
 			{
 				if (t1 == 0)
 					encoder_key = KEY_DOUBLELONG_PRESS;
 			}
 		}
-		else //up
+		else // up
 		{
 			if (enc_btn > 0)
 			{
-				if (enc_btn < 10) //short click
+				if (enc_btn < 10) // short click
 				{
 					if (t1 > 0)
 					{
-						//printf("Double t :%lld, c=%d\n", esp_timer_get_time() - t1, enc_btn);
+						// printf("Double t :%lld, c=%d\n", esp_timer_get_time() - t1, enc_btn);
 						encoder_key = KEY_DOUBLECLICK;
 						t1 = 0;
 					}
@@ -251,24 +257,24 @@ void ui_task(void *arg)
 			switch (encoder_key)
 			{
 			case KEY_CLICK:
-				if (cmd.cmd == 1) //ON
+				if (cmd.cmd == 1) // ON
 				{
-					cmd.cmd = 0; //OFF
+					cmd.cmd = 0; // OFF
 				}
 				else
 				{
-					if (cmd.cmd == 0) //OFF
+					if (cmd.cmd == 0) // OFF
 					{
-						cmd.cmd = 2; //PULSE
+						cmd.cmd = 2; // PULSE
 					}
 				}
 				update = true;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
 			case KEY_DOUBLECLICK: //Включаем
-				if (cmd.cmd == 1) //ON
+				if (cmd.cmd == 1) // ON
 				{
-					cmd.cmd = 0; //OFF
+					cmd.cmd = 0; // OFF
 				}
 				else
 					cmd.cmd = 1;
@@ -363,6 +369,8 @@ void ui_task(void *arg)
 
 		if (update)
 		{
+			xSemaphoreTake(i2c_mux, portMAX_DELAY);
+
 			if (screen == 0)
 			{
 				u8g2_ClearBuffer(&u8g2);
@@ -377,8 +385,8 @@ void ui_task(void *arg)
 				if (cmd.cmd == 2)
 					u8g2_DrawStr(&u8g2, 53, 16 - 3, "PULSE");
 
-				//u8g2_DrawStr(&u8g2, 2, 31, "PWM: ");
-				//u8g2_DrawStr(&u8g2, 60, 31, u8x8_u16toa(pwm, 3));
+				// u8g2_DrawStr(&u8g2, 2, 31, "PWM: ");
+				// u8g2_DrawStr(&u8g2, 60, 31, u8x8_u16toa(pwm, 3));
 				sprintf(buf, "%d", cmd.power);
 				int w = u8g2_GetStrWidth(&u8g2, buf);
 				u8g2_DrawStr(&u8g2, u8g2_GetDisplayWidth(&u8g2) - w, 16 - 3, buf);
@@ -387,7 +395,7 @@ void ui_task(void *arg)
 				u8g2_DrawStr(&u8g2, 2, 16 * 2 - 3, buf);
 				sprintf(buf, "R = %d kOm", result.R);
 				u8g2_DrawStr(&u8g2, 2, 16 * 3 - 3, buf);
-				
+
 				u8g2_SetFont(&u8g2, u8g2_font_6x13_t_cyrillic);
 				sprintf(buf, "1:%4d 2:%4d U:%4d", result.adc11, result.adc12, result.adc2);
 				u8g2_DrawStr(&u8g2, 2, 16 * 4 - 3, buf);
@@ -399,7 +407,7 @@ void ui_task(void *arg)
 				u8g2_ClearBuffer(&u8g2);
 				u8g2_SetFontMode(&u8g2, 1);
 				u8g2_SetFont(&u8g2, u8g2_font_unifont_t_cyrillic);
-				//u8g2_SetDrawColor(&u8g2, 1);
+				// u8g2_SetDrawColor(&u8g2, 1);
 				u8g2_SetDrawColor(&u8g2, 2);
 
 				if (menu_current_position - menu_current_display > (DISPLAY_LINES - 1))
@@ -430,6 +438,7 @@ void ui_task(void *arg)
 				}
 				u8g2_SendBuffer(&u8g2);
 			}
+			xSemaphoreGive(i2c_mux);
 		}
 		update = false;
 		vTaskDelay(40 / portTICK_RATE_MS);

@@ -11,11 +11,11 @@
    pins
 */
 
-#define CONFIG_RST_GPIO 4
+#define CONFIG_RST_GPIO 2
 #define CONFIG_CS_GPIO 5
-#define CONFIG_MISO_GPIO 19
-#define CONFIG_MOSI_GPIO 23
-#define CONFIG_SCK_GPIO 18
+#define CONFIG_MISO_GPIO 17
+#define CONFIG_MOSI_GPIO 16
+#define CONFIG_SCK_GPIO 15
 
 /*
  * Register definitions

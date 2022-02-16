@@ -51,6 +51,9 @@ void radio_task(void *arg)
     lora_set_bandwidth(125E3);
     //
     lora_enable_crc();
+    
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+        
     lora_dump_registers();
     // xTaskCreate(&task_rx, "task_rx", 2048, NULL, 5, NULL);
 

@@ -5,6 +5,8 @@
 
 #define POWER_PIN 32
 
+#define I2C_MASTER_NUM 0           //  I2C port number for master dev
+#define I2C_MASTER_FREQ_HZ          400000  //  I2C master clock frequency
 #define PIN_SDA 22
 #define PIN_SCL 23
 
@@ -48,8 +50,10 @@ typedef struct
     int max;
 } menu_t;
 
-xQueueHandle uicmd_queue;
-xQueueHandle adc1_queue;
+QueueHandle_t uicmd_queue;
+QueueHandle_t adc1_queue;
+
+SemaphoreHandle_t i2c_mux;
 
 void ui_task(void *arg);
 void dual_adc(void *arg);
