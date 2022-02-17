@@ -23,8 +23,9 @@ static const char *TAG = "ui";
 menu_t menu[] = {
 	{.name = "Импульс", .val = 100, .min = 1, .max = 1000},
 	{.name = "коэф. U", .val = 5336, .min = 1000, .max = 10000},
-	{.name = "коэф. R1", .val = 90, .min = 1, .max = 1000},
-	{.name = "коэф. R2", .val = 1750, .min = 100, .max = 5000},
+	{.name = "коэф. R", .val = 90, .min = 1, .max = 1000},
+	{.name = "смещ. U", .val = 0, .min = -500, .max = 500},
+	{.name = "смещ. R", .val = 0, .min = -500, .max = 500},
 	{.name = "Выход  ", .val = 0, .min = 0, .max = 0},
 };
 
@@ -57,17 +58,6 @@ void ui_task(void *arg)
 
 	// Rotary encoder underlying device is represented by a PCNT unit in this example
 	uint32_t pcnt_unit = 0;
-
-	// Initialize NVS
-	esp_err_t err = nvs_flash_init();
-	if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
-	{
-		// NVS partition was truncated and needs to be erased
-		// Retry nvs_flash_init
-		ESP_ERROR_CHECK(nvs_flash_erase());
-		err = nvs_flash_init();
-	}
-	ESP_ERROR_CHECK(err);
 
 	// Create rotary encoder instance
 	rotary_encoder_config_t config = ROTARY_ENCODER_DEFAULT_CONFIG((rotary_encoder_dev_t)pcnt_unit, PIN_ENCODER_A, PIN_ENCODER_B);
@@ -136,17 +126,15 @@ void ui_task(void *arg)
 	bool update = true;
 
 	// Open
-	printf("\n");
-	printf("Opening Non-Volatile Storage (NVS) handle... \n");
 	nvs_handle_t my_handle;
-	err = nvs_open("storage", NVS_READONLY, &my_handle);
+	esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
 	if (err != ESP_OK)
 	{
-		printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+		ESP_LOGE("storage","Error (%s) opening NVS handle!\n", esp_err_to_name(err));
 	}
 	else
 	{
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < MENU_LINES; i++)
 		{
 			err = nvs_get_i32(my_handle, menu[i].name, &menu[i].val);
 			switch (err)
@@ -323,6 +311,7 @@ void ui_task(void *arg)
 					else
 					{
 						// Write
+						printf("Write: \"%s\" ", menu[menu_current_selection].name);
 						err = nvs_set_i32(my_handle, menu[menu_current_selection].name, menu[menu_current_selection].val);
 						printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
 

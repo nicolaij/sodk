@@ -21,12 +21,14 @@
 #include "esp_netif.h"
 #include <esp_http_server.h>
 
+#include "main.h"
+
 /* The examples use WiFi configuration that you can set via project configuration menu
 
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define CLIENT_WIFI_SSID "MiMikalai"
+#define CLIENT_WIFI_SSID "Test"
 #define CLIENT_WIFI_PASS "123123123"
 #define AP_WIFI_SSID "MegaOm"
 #define AP_WIFI_PASS "123123123"
@@ -241,15 +243,25 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 
     const char *lora_set_fr[] = {
         "<label for=\"fr\">Signal frequency:</label><input type=\"text\" name=\"fr\" id=\"fr\" size=\"10\" value=\"",
-        "\"/>  kHz<br>"};
+        "\" />  kHz<br>"};
+
+    const char *lora_set_sf[] = {
+        "<label for=\"sf\">Spreading Factor(6-12):</label><input type=\"text\" name=\"sf\" id=\"sf\" size=\"10\" value=\"",
+        "\" /><br>"};
+
+    const char *lora_set_op[] = {
+        "<label for=\"op\">Output Power(2-17):</label><input type=\"text\" name=\"op\" id=\"op\" size=\"10\" value=\"",
+        "\" /><br>"};
+
+    int fr = 867500; // frequency kHz
+    int bw = 7;      // Номер полосы
+    int sf = 7;      // SpreadingFactor
+    int op = 17;     // OutputPower
+    read_nvs_lora(&fr, &bw, &sf, &op);
 
     char *buf;
     size_t buf_len;
-    char bw_option[] = "7";
-    char ka[] = "\"";
-    char option[20] = "";
-    char fr[20] = "0";
-    char sf_param[] = "07";
+    char param[32];
 
     /* Read URL query string length and allocate memory for length + 1,
      * extra byte for null termination */
@@ -260,39 +272,40 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
         if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
         {
             ESP_LOGI(TAGH, "Found URL query => %s", buf);
-            char param[32];
             /* Get value of expected key from query string */
-            if (httpd_query_key_value(buf, "fr", param, sizeof(param)) == ESP_OK)
+            if (httpd_query_key_value(buf, "fr", param, 7) == ESP_OK)
             {
-                ESP_LOGI(TAGH, "Found URL query parameter => fr=%s", param);
-                strncpy(fr, param, sizeof(fr));
+                fr = atoi(param);
+                write_nvs_lora("fr", fr);
             }
 
-            if (httpd_query_key_value(buf, "op", param, sizeof(param)) == ESP_OK)
+            if (httpd_query_key_value(buf, "op", param, 3) == ESP_OK)
             {
-                ESP_LOGI(TAGH, "Found URL query parameter => op=%s", param);
+                op = atoi(param);
+                write_nvs_lora("op", op);
             }
 
-            if (httpd_query_key_value(buf, "bw", param, sizeof(param)) == ESP_OK)
+            if (httpd_query_key_value(buf, "bw", param, 2) == ESP_OK)
             {
-                ESP_LOGI(TAGH, "Found URL query parameter => bw=%s", param);
-                strncpy(bw_option, param, sizeof(bw_option));
+                bw = atoi(param);
+                write_nvs_lora("bw", bw);
             }
 
-            if (httpd_query_key_value(buf, "sf", param, sizeof(param)) == ESP_OK)
+            if (httpd_query_key_value(buf, "sf", param, 3) == ESP_OK)
             {
-                ESP_LOGI(TAGH, "Found URL query parameter => sf=%s", param);
-                strncpy(sf_param, param, sizeof(sf_param));
+                sf = atoi(param);
+                write_nvs_lora("sf", sf);
             }
         }
         free(buf);
     }
 
     httpd_resp_sendstr_chunk(req, head);
-    
+
     // Generate fr
     httpd_resp_sendstr_chunk(req, lora_set_fr[0]);
-    httpd_resp_sendstr_chunk(req, fr);
+    itoa(fr, param, 10);
+    httpd_resp_sendstr_chunk(req, param);
     httpd_resp_sendstr_chunk(req, lora_set_fr[1]);
 
     // Generate bw
@@ -300,24 +313,32 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     for (int i = 0; i < 10; i++)
     {
         httpd_resp_sendstr_chunk(req, lora_set_bw_options[i][0]);
-        int l = 0;
-        option[l] = ka[0];
-        l++;
-        option[l] = *lora_set_bw_options[i][1];
-        l++;
-        option[l] = ka[0];
-        l++;
-        option[l] = 0;
-        // l++;
-        if (strncmp(lora_set_bw_options[i][1], bw_option, sizeof(bw_option)) == 0)
+        param[0] = '"';
+        param[1] = *lora_set_bw_options[i][1];
+        param[2] = '"';
+        param[3] = 0;
+        int n = atoi(lora_set_bw_options[i][1]);
+        if (n == bw)
         {
-            strcpy(&option[l], " selected");
+            strcpy(&param[3], " selected");
         }
 
-        httpd_resp_sendstr_chunk(req, option);
+        httpd_resp_sendstr_chunk(req, param);
         httpd_resp_sendstr_chunk(req, lora_set_bw_options[i][2]);
     }
     httpd_resp_sendstr_chunk(req, lora_set_bw[1]);
+
+    // Generate sf
+    httpd_resp_sendstr_chunk(req, lora_set_sf[0]);
+    itoa(sf, param, 10);
+    httpd_resp_sendstr_chunk(req, param);
+    httpd_resp_sendstr_chunk(req, lora_set_sf[1]);
+
+    // Generate op
+    httpd_resp_sendstr_chunk(req, lora_set_op[0]);
+    itoa(op, param, 10);
+    httpd_resp_sendstr_chunk(req, param);
+    httpd_resp_sendstr_chunk(req, lora_set_op[1]);
 
     httpd_resp_sendstr_chunk(req, tail);
     /* Send empty chunk to signal HTTP response completion */

@@ -35,7 +35,7 @@ typedef struct
 } measure_t;
 
 measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_5, .k = 90, .max = 1000},
+    {.channel = ADC1_CHANNEL_5, .k = 90, .max = 25000},
     {.channel = ADC1_CHANNEL_7, .k = 1750, .max = 20000},
 };
 
@@ -447,7 +447,7 @@ void dual_adc(void *arg)
 
                 // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
                 // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_7);
-                bufferR[len] = adc1_get_raw(chan_r[chan].channel);
+                bufferR[len] = adc1_get_raw(chan_r[0].channel);
                 adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
                 len++;
                 if (len >= sizeof(bufferR) / sizeof(bufferR[0]))
@@ -463,7 +463,7 @@ void dual_adc(void *arg)
             {
                 s1 += bufferR[pos_off + i];
                 s2 += bufferU[pos_off + i];
-                r += kOm(bufferU[pos_off + i], bufferR[pos_off + i], chan);
+                r += kOm(bufferU[pos_off + i], bufferR[pos_off + i]);
             }
 
             if (chan == 1) //переключили канал
@@ -482,20 +482,13 @@ void dual_adc(void *arg)
 
             xQueueSend(adc1_queue, (void *)&result, (portTickType)0);
 
-            int c = 0;
-
             printf("N, U adc, R adc, R kOm\n");
             for (int i = 0; i < len; i++)
             {
                 // printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
                 // printf("%4d, %4d, %4d\n", i, volt(buffer2[i]), kOm(buffer2[i], buffer1[i]));
-                if (chan == 1)
-                {
-                    if (i >= pos_off)
-                        c = 1;
-                }
 
-                printf("%4d, %4d, %4d, %4d\n", i, bufferU[i], bufferR[i], kOm(bufferU[i], bufferR[i], 0));
+                printf("%4d, %4d, %4d, %4d\n", i, bufferU[i], bufferR[i], kOm(bufferU[i], bufferR[i]));
 
                 if (i % 1000 == 0)
                     vTaskDelay(1);
@@ -513,7 +506,7 @@ void dual_adc(void *arg)
                 while (esp_timer_get_time() - t1 < timeout * 2)
                 {
                     // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
-                    bufferR[len] = adc1_get_raw(chan_r[chan].channel);
+                    bufferR[len] = adc1_get_raw(chan_r[0].channel);
                     adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
                     len++;
                     if (len >= sizeof(bufferR) / sizeof(bufferR[0]))
@@ -536,7 +529,7 @@ void dual_adc(void *arg)
                 {
                     s1 += bufferR[offs + i];
                     s2 += bufferU[offs + i];
-                    r += kOm(bufferU[offs + i], bufferR[offs + i], chan);
+                    r += kOm(bufferU[offs + i], bufferR[offs + i]);
                 }
 
                 if (chan == 1) //переключили канал
@@ -583,16 +576,16 @@ esp_err_t app_main(void)
 
 int volt(int adc)
 {
-    return adc * 1000 / menu[1].val;
+    return adc * 1000 / menu[1].val + menu[3].val;
 };
 
-int kOm(int adc_u, int adc_r, int channel_r)
+int kOm(int adc_u, int adc_r)
 {
-    int k = menu[2 + channel_r].val;
+    int k = menu[2].val;
     if (adc_r == 0)
-        return chan_r[channel_r].max;
-    int r = adc_u * k / adc_r;
-    if (r > chan_r[channel_r].max)
-        return chan_r[channel_r].max;
+        return chan_r[0].max;
+    int r = adc_u * k / adc_r + menu[4].val;
+    if (r > chan_r[0].max)
+        return chan_r[0].max;
     return r;
 };

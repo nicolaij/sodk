@@ -8,14 +8,117 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
+#include <esp_log.h>
+
 #define BTN_GPIO 0
 
 uint8_t buf[256];
 
+/*
+params int32 - список параметров
+return кол-во элементов
+*/
+int read_nvs_lora(int *fr, int *bw, int *sf, int *op)
+{
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("lora", NVS_READONLY, &my_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE("lora", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    }
+    else
+    {
+        err = nvs_get_i32(my_handle, "fr", fr);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "fr", *fr);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "fr");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+
+        err = nvs_get_i32(my_handle, "bw", bw);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "bw", *bw);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "bw");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+
+        err = nvs_get_i32(my_handle, "sf", sf);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "sf", *sf);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "sf");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+
+        err = nvs_get_i32(my_handle, "op", op);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "op", *op);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "op");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+        // Close
+        nvs_close(my_handle);
+
+        return 1;
+    }
+    return 0;
+};
+
+int write_nvs_lora(const char *key, int value)
+{
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("lora", NVS_READWRITE, &my_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE("lora", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    }
+    else
+    {
+        // Write
+        printf("Write: \"%s\" ", key);
+        err = nvs_set_i32(my_handle, key, value);
+        printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+        // Commit written value.
+        // After setting any values, nvs_commit() must be called to ensure changes are written
+        // to flash storage. Implementations may write to storage at other times,
+        // but this is not guaranteed.
+        printf("Committing updates in NVS ... ");
+        err = nvs_commit(my_handle);
+        printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+        // Close
+        nvs_close(my_handle);
+    }
+    return 1;
+};
+
 void radio_task(void *arg)
 {
     int x;
-    char *str = "SSSSS";
 
     lora_init();
     // lora_dump_registers();
@@ -27,60 +130,14 @@ void radio_task(void *arg)
     int fr = 867500; // frequency kHz
     int bw = 7;      // Номер полосы
     int sf = 7;      // SpreadingFactor
+    int op = 17;     // OutputPower
 
-    nvs_handle_t my_handle;
-    esp_err_t err = nvs_open("lora", NVS_READONLY, &my_handle);
-    if (err != ESP_OK)
-    {
-        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
-    }
-    else
-    {
-        err = nvs_get_i32(my_handle, "fr", &fr);
-        switch (err)
-        {
-        case ESP_OK:
-            printf("Read \"%s\" = %d\n", "fr", fr);
-            break;
-        case ESP_ERR_NVS_NOT_FOUND:
-            printf("The value  \"%s\" is not initialized yet!\n", "fr");
-            break;
-        default:
-            printf("Error (%s) reading!\n", esp_err_to_name(err));
-        }
-
-        err = nvs_get_i32(my_handle, "bw", &bw);
-        switch (err)
-        {
-        case ESP_OK:
-            printf("Read \"%s\" = %d\n", "bw", bw);
-            break;
-        case ESP_ERR_NVS_NOT_FOUND:
-            printf("The value  \"%s\" is not initialized yet!\n", "bw");
-            break;
-        default:
-            printf("Error (%s) reading!\n", esp_err_to_name(err));
-        }
-
-        err = nvs_get_i32(my_handle, "sf", &sf);
-        switch (err)
-        {
-        case ESP_OK:
-            printf("Read \"%s\" = %d\n", "sf", sf);
-            break;
-        case ESP_ERR_NVS_NOT_FOUND:
-            printf("The value  \"%s\" is not initialized yet!\n", "sf");
-            break;
-        default:
-            printf("Error (%s) reading!\n", esp_err_to_name(err));
-        }
-        // Close
-        nvs_close(my_handle);
-    }
+    read_nvs_lora(&fr, &bw, &sf, &op);
 
     lora_set_frequency(fr * 1000);
     lora_set_bandwidth_n(bw);
     lora_set_spreading_factor(sf);
+    lora_set_tx_power(op);
 
     lora_enable_crc();
 
@@ -134,7 +191,7 @@ void radio_task(void *arg)
             lora_send_packet((uint8_t *)buf, l);
             vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-            printf("Send:\"%s\"\n", str);
+            printf("Send:\"%s\"\n", buf);
         }
 
         vTaskDelay(1);

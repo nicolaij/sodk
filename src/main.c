@@ -6,6 +6,8 @@
 #include "esp_spi_flash.h"
 
 #include "main.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 
 void app_main()
 {
@@ -26,12 +28,23 @@ void app_main()
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
 
+    // Initialize NVS
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        // NVS partition was truncated and needs to be erased
+        // Retry nvs_flash_init
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+
     uicmd_queue = xQueueCreate(2, sizeof(cmd_t));
     adc1_queue = xQueueCreate(2, sizeof(result_t));
 
     i2c_mux = xSemaphoreCreateMutex();
 
-    //set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
+    // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
 
@@ -39,7 +52,7 @@ void app_main()
 
     xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
 
-    //xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
 
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, NULL);
 
