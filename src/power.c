@@ -409,7 +409,7 @@ void dual_adc(void *arg)
         // while (esp_timer_get_time() - t1 < timeout)
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
-        dac_output_voltage(DAC_CHANNEL_1, cmd.power * 255 / 100);
+        dac_output_voltage(DAC_CHANNEL_1, cmd.power);
 
         int64_t t1 = esp_timer_get_time();
         int64_t timeout = menu[0].val * 1000;
@@ -560,7 +560,7 @@ void dual_adc(void *arg)
 
                 if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, (1000 - menu[0].val) / portTICK_PERIOD_MS))
                 {
-                    dac_output_voltage(DAC_CHANNEL_1, cmd.power * 255 / 100);
+                    dac_output_voltage(DAC_CHANNEL_1, cmd.power);
                 }
             }
             gpio_set_level(POWER_PIN, 1);

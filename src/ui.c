@@ -58,10 +58,16 @@ void ui_task(void *arg)
 	// Rotary encoder underlying device is represented by a PCNT unit in this example
 	uint32_t pcnt_unit = 0;
 
-	// only for test. Power encoder
-	// gpio_pad_select_gpio(5);
-	// gpio_set_direction(5, GPIO_MODE_OUTPUT);
-	// gpio_set_level(5, 1);
+	// Initialize NVS
+	esp_err_t err = nvs_flash_init();
+	if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+	{
+		// NVS partition was truncated and needs to be erased
+		// Retry nvs_flash_init
+		ESP_ERROR_CHECK(nvs_flash_erase());
+		err = nvs_flash_init();
+	}
+	ESP_ERROR_CHECK(err);
 
 	// Create rotary encoder instance
 	rotary_encoder_config_t config = ROTARY_ENCODER_DEFAULT_CONFIG((rotary_encoder_dev_t)pcnt_unit, PIN_ENCODER_A, PIN_ENCODER_B);
@@ -128,17 +134,6 @@ void ui_task(void *arg)
 
 	int encoder_val = 0;
 	bool update = true;
-
-	// Initialize NVS
-	esp_err_t err = nvs_flash_init();
-	if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
-	{
-		// NVS partition was truncated and needs to be erased
-		// Retry nvs_flash_init
-		ESP_ERROR_CHECK(nvs_flash_erase());
-		err = nvs_flash_init();
-	}
-	ESP_ERROR_CHECK(err);
 
 	// Open
 	printf("\n");

@@ -18,6 +18,8 @@
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
+#include "esp_netif.h"
+#include <esp_http_server.h>
 
 /* The examples use WiFi configuration that you can set via project configuration menu
 
@@ -43,6 +45,8 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_FAIL_BIT BIT1
 
 static const char *TAG = "wifi";
+
+static const char *TAGH = "httpd";
 
 static int s_retry_num = 0;
 
@@ -209,6 +213,146 @@ void wifi_init_sta(void)
     // vEventGroupDelete(s_wifi_event_group);
 }
 
+/* An HTTP GET handler */
+static esp_err_t lora_set_handler(httpd_req_t *req)
+{
+    const char *head = "<!DOCTYPE html><html><head>\
+        <meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">\
+        <meta name=\"viewport\" content=\"width=device-width\">\
+        <title>Lora setting</title></head><body><form>";
+
+    const char *tail = "<input type=\"submit\" value=\"Сохранить\" /></body></html>";
+
+    const char *lora_set_bw[] = {
+        "<label for='bw'>Signal bandwidth:</label><select name='bw' id='bw'>",
+        "</select><br>"};
+
+    const char *lora_set_bw_options[10][3] = {
+        {"<option value=", "0", ">7.8 kHz</option>"},
+        {"<option value=", "1", ">10.4 kHz</option>"},
+        {"<option value=", "2", ">15.6 kHz</option>"},
+        {"<option value=", "3", ">20.8 kHz</option>"},
+        {"<option value=", "4", ">31.25 kHz</option>"},
+        {"<option value=", "5", ">41.7 kHz</option>"},
+        {"<option value=", "6", ">62.5 kHz</option>"},
+        {"<option value=", "7", ">125 kHz</option>"},
+        {"<option value=", "8", ">250 kHz</option>"},
+        {"<option value=", "9", ">500 kHz</option>"}};
+
+    const char *lora_set_fr[] = {
+        "<label for=\"fr\">Signal frequency:</label><input type=\"text\" name=\"fr\" id=\"fr\" size=\"10\" value=\"",
+        "\"/>  kHz<br>"};
+
+    char *buf;
+    size_t buf_len;
+    char bw_option[] = "7";
+    char ka[] = "\"";
+    char option[20] = "";
+    char fr[20] = "0";
+    char sf_param[] = "07";
+
+    /* Read URL query string length and allocate memory for length + 1,
+     * extra byte for null termination */
+    buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1)
+    {
+        buf = malloc(buf_len);
+        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
+        {
+            ESP_LOGI(TAGH, "Found URL query => %s", buf);
+            char param[32];
+            /* Get value of expected key from query string */
+            if (httpd_query_key_value(buf, "fr", param, sizeof(param)) == ESP_OK)
+            {
+                ESP_LOGI(TAGH, "Found URL query parameter => fr=%s", param);
+                strncpy(fr, param, sizeof(fr));
+            }
+
+            if (httpd_query_key_value(buf, "op", param, sizeof(param)) == ESP_OK)
+            {
+                ESP_LOGI(TAGH, "Found URL query parameter => op=%s", param);
+            }
+
+            if (httpd_query_key_value(buf, "bw", param, sizeof(param)) == ESP_OK)
+            {
+                ESP_LOGI(TAGH, "Found URL query parameter => bw=%s", param);
+                strncpy(bw_option, param, sizeof(bw_option));
+            }
+
+            if (httpd_query_key_value(buf, "sf", param, sizeof(param)) == ESP_OK)
+            {
+                ESP_LOGI(TAGH, "Found URL query parameter => sf=%s", param);
+                strncpy(sf_param, param, sizeof(sf_param));
+            }
+        }
+        free(buf);
+    }
+
+    httpd_resp_sendstr_chunk(req, head);
+    
+    // Generate fr
+    httpd_resp_sendstr_chunk(req, lora_set_fr[0]);
+    httpd_resp_sendstr_chunk(req, fr);
+    httpd_resp_sendstr_chunk(req, lora_set_fr[1]);
+
+    // Generate bw
+    httpd_resp_sendstr_chunk(req, lora_set_bw[0]);
+    for (int i = 0; i < 10; i++)
+    {
+        httpd_resp_sendstr_chunk(req, lora_set_bw_options[i][0]);
+        int l = 0;
+        option[l] = ka[0];
+        l++;
+        option[l] = *lora_set_bw_options[i][1];
+        l++;
+        option[l] = ka[0];
+        l++;
+        option[l] = 0;
+        // l++;
+        if (strncmp(lora_set_bw_options[i][1], bw_option, sizeof(bw_option)) == 0)
+        {
+            strcpy(&option[l], " selected");
+        }
+
+        httpd_resp_sendstr_chunk(req, option);
+        httpd_resp_sendstr_chunk(req, lora_set_bw_options[i][2]);
+    }
+    httpd_resp_sendstr_chunk(req, lora_set_bw[1]);
+
+    httpd_resp_sendstr_chunk(req, tail);
+    /* Send empty chunk to signal HTTP response completion */
+    httpd_resp_sendstr_chunk(req, NULL);
+    return ESP_OK;
+}
+
+static const httpd_uri_t lora_set = {
+    .uri = "/",
+    .method = HTTP_GET,
+    .handler = lora_set_handler,
+    /* Let's pass response string in user
+     * context to demonstrate it's usage */
+    .user_ctx = "Hello World!"};
+
+static httpd_handle_t start_webserver(void)
+{
+    httpd_handle_t server = NULL;
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.lru_purge_enable = true;
+
+    // Start the httpd server
+    ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
+    if (httpd_start(&server, &config) == ESP_OK)
+    {
+        // Set URI handlers
+        ESP_LOGI(TAG, "Registering URI handlers");
+        httpd_register_uri_handler(server, &lora_set);
+        return server;
+    }
+
+    ESP_LOGI(TAG, "Error starting server!");
+    return NULL;
+}
+
 void wifi_task(void *arg)
 {
     // Initialize NVS
@@ -221,6 +365,9 @@ void wifi_task(void *arg)
     ESP_ERROR_CHECK(ret);
 
     wifi_init_sta();
+
+    /* Start the server for the first time */
+    start_webserver();
 
     while (1)
     {

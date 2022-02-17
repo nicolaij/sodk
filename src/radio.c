@@ -5,38 +5,12 @@
 #include "driver/gpio.h"
 #include <sys/time.h>
 
+#include "nvs_flash.h"
+#include "nvs.h"
+
 #define BTN_GPIO 0
 
 uint8_t buf[256];
-
-void task_rx(void *p)
-{
-    int x;
-
-    char *str = "SSSSS";
-
-    for (;;)
-    {
-        lora_receive(); // put into receive mode
-        while (lora_received())
-        {
-            x = lora_receive_packet(buf, sizeof(buf));
-            buf[x] = 0;
-            printf("Received: \"%s\"\n", buf);
-            lora_receive();
-            // lora_send_packet((uint8_t *)"Reply.", 5);
-        }
-
-        vTaskDelay(1);
-
-        if (gpio_get_level(BTN_GPIO) == 0)
-        {
-            printf("Send:\"%s\"\n", str);
-            lora_send_packet((uint8_t *)str, 5);
-            vTaskDelay(2000 / portTICK_PERIOD_MS);
-        }
-    }
-}
 
 void radio_task(void *arg)
 {
@@ -44,16 +18,74 @@ void radio_task(void *arg)
     char *str = "SSSSS";
 
     lora_init();
-    //lora_dump_registers();
-    //lora_set_frequency(915e6);
-    //4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
-    lora_set_frequency(867.5E6);
-    lora_set_bandwidth(125E3);
+    // lora_dump_registers();
+    // lora_set_frequency(915e6);
+    // 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
+    // lora_set_frequency(867.5E6);
+    // lora_set_bandwidth(125E3);
     //
+    int fr = 867500; // frequency kHz
+    int bw = 7;      // Номер полосы
+    int sf = 7;      // SpreadingFactor
+
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("lora", NVS_READONLY, &my_handle);
+    if (err != ESP_OK)
+    {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    }
+    else
+    {
+        err = nvs_get_i32(my_handle, "fr", &fr);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "fr", fr);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "fr");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+
+        err = nvs_get_i32(my_handle, "bw", &bw);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "bw", bw);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "bw");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+
+        err = nvs_get_i32(my_handle, "sf", &sf);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "sf", sf);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "sf");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+        // Close
+        nvs_close(my_handle);
+    }
+
+    lora_set_frequency(fr * 1000);
+    lora_set_bandwidth_n(bw);
+    lora_set_spreading_factor(sf);
+
     lora_enable_crc();
-    
+
     vTaskDelay(100 / portTICK_PERIOD_MS);
-        
+
     lora_dump_registers();
     // xTaskCreate(&task_rx, "task_rx", 2048, NULL, 5, NULL);
 

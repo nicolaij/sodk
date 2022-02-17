@@ -5,8 +5,8 @@
 
 #define POWER_PIN 32
 
-#define I2C_MASTER_NUM 0           //  I2C port number for master dev
-#define I2C_MASTER_FREQ_HZ          400000  //  I2C master clock frequency
+#define I2C_MASTER_NUM 0          //  I2C port number for master dev
+#define I2C_MASTER_FREQ_HZ 400000 //  I2C master clock frequency
 #define PIN_SDA 22
 #define PIN_SCL 23
 
@@ -30,7 +30,7 @@ typedef struct
 } result_t;
 
 #define PWM_MIN 0
-#define PWM_MAX 100
+#define PWM_MAX 255
 
 typedef enum
 {
@@ -52,6 +52,7 @@ typedef struct
 
 QueueHandle_t uicmd_queue;
 QueueHandle_t adc1_queue;
+QueueHandle_t set_lora_queue;
 
 SemaphoreHandle_t i2c_mux;
 

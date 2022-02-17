@@ -268,6 +268,12 @@ void lora_set_bandwidth(long sbw)
    lora_write_reg(REG_MODEM_CONFIG_1, (lora_read_reg(REG_MODEM_CONFIG_1) & 0x0f) | (bw << 4));
 }
 
+void lora_set_bandwidth_n(long bw)
+{
+   lora_write_reg(REG_MODEM_CONFIG_1, (lora_read_reg(REG_MODEM_CONFIG_1) & 0x0f) | (bw << 4));
+}
+
+
 /**
  * Set coding rate
  * @param denominator 5-8, Denominator for the coding rate 4/x
