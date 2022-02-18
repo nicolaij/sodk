@@ -22,10 +22,10 @@ static const char *TAG = "ui";
 
 menu_t menu[] = {
 	{.name = "Импульс", .val = 100, .min = 1, .max = 1000},
-	{.name = "коэф. U", .val = 5336, .min = 1000, .max = 10000},
-	{.name = "коэф. R", .val = 90, .min = 1, .max = 1000},
-	{.name = "смещ. U", .val = 0, .min = -500, .max = 500},
-	{.name = "смещ. R", .val = 0, .min = -500, .max = 500},
+	{.name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
+	{.name = "коэф. R", .val = 575, .min = 1, .max = 1000},
+	{.name = "смещ. U", .val = 22, .min = -500, .max = 500},
+	{.name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
 	{.name = "Выход  ", .val = 0, .min = 0, .max = 0},
 };
 

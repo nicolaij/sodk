@@ -140,6 +140,7 @@ void radio_task(void *arg)
     lora_set_tx_power(op);
 
     lora_enable_crc();
+    //lora_disable_crc();
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
 

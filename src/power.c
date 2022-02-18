@@ -35,7 +35,7 @@ typedef struct
 } measure_t;
 
 measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_5, .k = 90, .max = 25000},
+    {.channel = ADC1_CHANNEL_5, .k = 90, .max = 5000},
     {.channel = ADC1_CHANNEL_7, .k = 1750, .max = 20000},
 };
 
@@ -426,22 +426,20 @@ void dual_adc(void *arg)
         if (cmd.cmd == 2) // Pulse
         {
             int test_measure = 0;
+            int u = 0;
+            int r = 0;
+            int pre_u = 0;
+            int sum_u = 0;
+            int sum_count = 0;
             gpio_set_level(POWER_PIN, 0);
             while (esp_timer_get_time() - t1 < (timeout * 2))
             {
-                if (esp_timer_get_time() - t1 > timeout)
+                if (esp_timer_get_time() - t1 > timeout || u > 4090 || r > 4090)
                 {
                     gpio_set_level(POWER_PIN, 1);
                     if (pos_off == 0)
                     {
                         pos_off = len;
-                        //Переключаем каналы
-                        if (len > 5)
-                        {
-                            // test_measure = (buffer1[len - 5] + buffer1[len - 4] + buffer1[len - 3] + buffer1[len - 2] + buffer1[len - 1]) / 5;
-                            // if (test_measure < 200)
-                            //     chan = 1;
-                        }
                     }
                 }
 
@@ -449,39 +447,105 @@ void dual_adc(void *arg)
                 // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_7);
                 bufferR[len] = adc1_get_raw(chan_r[0].channel);
                 adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
+
+                const int adc_avg_count = 10;
+
+                if (len > 0)
+                {
+                    r = (bufferR[len - 1] + bufferR[len]) / 2;
+                    //запоминаем предыдущее среднее
+                    if (len % adc_avg_count == 0)
+                    {
+                        //считаем скорость роста (<1%)
+                        if (u < (pre_u + (pre_u / 100)))
+                        {
+                            gpio_set_level(POWER_PIN, 1);
+                            if (pos_off == 0)
+                            {
+                                pos_off = len;
+                            }
+                        };
+                        pre_u = u;
+                    }
+
+                    sum_u += bufferU[len];
+                    sum_count++;
+
+                    if (sum_count > adc_avg_count)
+                    {
+                        sum_u -= bufferU[len - adc_avg_count];
+                        sum_count--;
+                        u = sum_u / adc_avg_count;
+                    }
+                    else
+                    {
+                        u = sum_u / sum_count;
+                    }
+                }
+
                 len++;
                 if (len >= sizeof(bufferR) / sizeof(bufferR[0]))
                     break;
+
+                //если низкие напряжения - то выходим
+                if (pos_off > 0)
+                {
+                    if (r < 10 || u < 10)
+                        break;
+                }
             };
             gpio_set_level(POWER_PIN, 1);
 
-            int s1 = 0;
-            int s2 = 0;
-            int r = 0;
-            int avg_count = (len - pos_off) / 10; // 10% усредняем
-            for (int i = 0; i < avg_count; i++)
+            int sum_r = 0;
+            int sum_res = 0;
+            sum_u = 0;
+            const int res_avg_count = 10;
+            int avg_count = res_avg_count;
+            int pos = pos_off;
+            sum_count = 0;
+            while (avg_count > 0)
             {
-                s1 += bufferR[pos_off + i];
-                s2 += bufferU[pos_off + i];
-                r += kOm(bufferU[pos_off + i], bufferR[pos_off + i]);
+                sum_r += bufferR[pos];
+                sum_u += bufferU[pos];
+                sum_res += kOm(bufferU[pos], bufferR[pos]);
+                sum_count++;
+
+                avg_count--;
+
+                if (bufferR[pos] > 4090)
+                {
+                    avg_count = res_avg_count;
+                    sum_r = 0;
+                    sum_res = 0;
+                    sum_u = 0;
+                    sum_count = 0;
+                }
+
+                pos++;
+                if (pos >= len)
+                    break;
             }
 
-            if (chan == 1) //переключили канал
+            if (sum_count > 0)
             {
-                result.adc11 = test_measure;
-                result.adc12 = s1 / avg_count;
+                result.adc11 = sum_r / sum_count;
+                result.adc12 = 0;
+
+                result.adc2 = sum_u / sum_count;
+                result.U = volt(result.adc2);
+                result.R = sum_res / sum_count;
             }
             else
             {
-                result.adc11 = s1 / avg_count;
-                result.adc12 = 0;
+                result.adc11 = 0;
+                result.adc2 = 0;
+                result.U = 0;
+                result.R = 0;
             }
-            result.adc2 = s2 / avg_count;
-            result.U = volt(result.adc2);
-            result.R = r / avg_count;
 
             xQueueSend(adc1_queue, (void *)&result, (portTickType)0);
 
+            printf("pos_off: %d; last u:%d\n", pos_off, u);
             printf("N, U adc, R adc, R kOm\n");
             for (int i = 0; i < len; i++)
             {
@@ -576,15 +640,20 @@ esp_err_t app_main(void)
 
 int volt(int adc)
 {
+    if (adc < 2)
+        return 0;
     return adc * 1000 / menu[1].val + menu[3].val;
 };
 
 int kOm(int adc_u, int adc_r)
 {
+    int u = volt(adc_u);
     int k = menu[2].val;
-    if (adc_r == 0)
+    if (adc_r < 2)
         return chan_r[0].max;
-    int r = adc_u * k / adc_r + menu[4].val;
+    if (adc_u < 2)
+        return 0;
+    int r = u * k / (adc_r + menu[4].val);
     if (r > chan_r[0].max)
         return chan_r[0].max;
     return r;
