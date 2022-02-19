@@ -73,6 +73,8 @@ void app_main()
     uicmd_queue = xQueueCreate(2, sizeof(cmd_t));
     adc1_queue = xQueueCreate(2, sizeof(result_t));
 
+    send_queue = xQueueCreate(2, sizeof(result_t));
+
     i2c_mux = xSemaphoreCreateMutex();
 
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));

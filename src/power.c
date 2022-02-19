@@ -41,8 +41,6 @@ measure_t chan_r[] = {
 
 extern menu_t menu[];
 
-int k_U = 5336;
-
 /**
  * @brief I2S ADC/DAC mode init.
  */
@@ -543,6 +541,7 @@ void dual_adc(void *arg)
             }
 
             xQueueSend(adc1_queue, (void *)&result, (portTickType)0);
+            xQueueSend(send_queue, (void *)&result, (portTickType)0);
 
             printf("pos_off: %d; last u:%d\n", pos_off, u);
             printf("N, U adc, R adc, R kOm\n");

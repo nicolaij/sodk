@@ -52,9 +52,12 @@ typedef struct
 
 QueueHandle_t uicmd_queue;
 QueueHandle_t adc1_queue;
+QueueHandle_t send_queue;
 QueueHandle_t set_lora_queue;
 
 SemaphoreHandle_t i2c_mux;
+
+extern RTC_DATA_ATTR int bootCount;
 
 void ui_task(void *arg);
 void dual_adc(void *arg);

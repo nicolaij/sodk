@@ -10,7 +10,11 @@
 
 #include <esp_log.h>
 
+#include <main.h>
+
 #define BTN_GPIO 0
+
+extern menu_t menu[];
 
 uint8_t buf[256];
 
@@ -140,7 +144,7 @@ void radio_task(void *arg)
     lora_set_tx_power(op);
 
     lora_enable_crc();
-    //lora_disable_crc();
+    // lora_disable_crc();
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
@@ -150,6 +154,9 @@ void radio_task(void *arg)
     gpio_pad_select_gpio(BTN_GPIO);
     gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
     gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
+
+    //результат измерений
+    result_t result;
 
     while (1)
     {
@@ -161,6 +168,13 @@ void radio_task(void *arg)
             printf("Received: \"%s\" Len: %d, RSSI: %d\n", buf, x, lora_packet_rssi());
             lora_receive();
             // lora_send_packet((uint8_t *)"Reply.", 5);
+        }
+
+        if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)1))
+        {
+            lora_set_tx_power(17);
+            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", menu[5].val, bootCount, result.U, result.R);
+            lora_send_packet((uint8_t *)buf, l);
         }
 
         if (gpio_get_level(BTN_GPIO) == 0)
