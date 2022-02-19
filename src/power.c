@@ -309,6 +309,7 @@ void dual_adc(void *arg)
     gpio_pad_select_gpio(POWER_PIN);
     gpio_set_direction(POWER_PIN, GPIO_MODE_OUTPUT);
     gpio_set_level(POWER_PIN, 1);
+
     /*
     ledc_timer_config_t ledc_timer = {
         .duty_resolution = LEDC_TIMER_10_BIT, // resolution of PWM duty
@@ -340,7 +341,7 @@ void dual_adc(void *arg)
     adc1_config_channel_atten(chan_r[1].channel, ADC_ATTEN_11db);
 
     adc2_config_channel_atten(ADC2_CHANNEL_7, ADC_ATTEN_11db);
-
+/*
     esp_adc_cal_characteristics_t *adc1_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
     printf("ADC1: ");
     esp_adc_cal_value_t val_type1 = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc1_chars);
@@ -377,7 +378,6 @@ void dual_adc(void *arg)
     }
     printf("\n");
 
-    /*
     esp_adc_cal_characteristics_t characteristics;
     esp_adc_cal_value_t r = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, &characteristics);
     ESP_LOGI(TAG, "esp_adc_cal_value_t %d ", r);
@@ -386,7 +386,6 @@ void dual_adc(void *arg)
     esp_adc_cal_get_voltage(ADC1_CHANNEL_5, &characteristics, &voltage);
     ESP_LOGI(TAG, "%d mV", voltage);
     */
-    vTaskDelay(200 / portTICK_RATE_MS);
 
     // gpio_pad_select_gpio(LED_GPIO);
     // gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
@@ -423,7 +422,7 @@ void dual_adc(void *arg)
         Сначала меряем на ADC1_CHANNEL_5, если показания < ~250 adc
         дальше меряем ADC1_CHANNEL_7 (x20)
         */
-        if (cmd.cmd == 2) // Pulse
+        if (cmd.cmd >= 2) // Pulse
         {
             int test_measure = 0;
             int u = 0;

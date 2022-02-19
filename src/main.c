@@ -2,16 +2,47 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
 #include "esp_system.h"
 #include "esp_spi_flash.h"
+
+#include "esp_sleep.h"
 
 #include "main.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
+RTC_DATA_ATTR int bootCount = 0;
+
 void app_main()
 {
-    // printf("Hello world!\n");
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+    switch (wakeup_reason)
+    {
+    case ESP_SLEEP_WAKEUP_EXT0:
+        printf("Wakeup caused by external signal using RTC_IO\n");
+        break;
+    case ESP_SLEEP_WAKEUP_EXT1:
+        printf("Wakeup caused by external signal using RTC_CNTL\n");
+        break;
+    case ESP_SLEEP_WAKEUP_TIMER:
+        printf("Wakeup caused by timer\n");
+        break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+        printf("Wakeup caused by touchpad\n");
+        break;
+    case ESP_SLEEP_WAKEUP_ULP:
+        printf("Wakeup caused by ULP program\n");
+        break;
+    default:
+        printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
+        break;
+    }
+
+    ++bootCount;
+    //  "Количество загрузок: "
+    printf("Boot number: %d\n", bootCount);
 
     /* Print chip information */
     esp_chip_info_t chip_info;
@@ -46,27 +77,36 @@ void app_main()
 
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
+    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, NULL);
+    
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
 
-    xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, NULL);
+    if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
+    {
+        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, NULL);
 
-    xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
+        xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
 
-    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+    }
+    else
+    {
+        cmd_t cmd;
+        cmd.cmd = 3;
+        cmd.power = 255;
+        xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+        
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, NULL);
+        //засыпаем...
+        fflush(stdout);
+        esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
+        esp_sleep_enable_timer_wakeup(60 * 1000000);
+        esp_deep_sleep_start();
+    }
 
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
-
-    for (int i = 10; i >= 0; i--)
-    {
-        printf("Restarting in %d seconds...\n", i);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-    printf("Restarting now.\n");
-    fflush(stdout);
-    esp_restart();
 }

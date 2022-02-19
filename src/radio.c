@@ -165,7 +165,6 @@ void radio_task(void *arg)
 
         if (gpio_get_level(BTN_GPIO) == 0)
         {
-
             time_t now;
             struct tm timeinfo;
             uint8_t buf[64];
