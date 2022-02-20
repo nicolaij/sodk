@@ -6,9 +6,9 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
+#include "main.h"
+
 #include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
@@ -21,7 +21,6 @@
 #include "esp_netif.h"
 #include <esp_http_server.h>
 
-#include "main.h"
 
 /* The examples use WiFi configuration that you can set via project configuration menu
 
@@ -45,6 +44,8 @@ static EventGroupHandle_t s_wifi_event_group;
  * - we failed to connect after the maximum amount of retries */
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
+
+#define PAGE_LORA_SET "/"
 
 static const char *TAG = "wifi";
 
@@ -218,16 +219,17 @@ void wifi_init_sta(void)
 /* An HTTP GET handler */
 static esp_err_t lora_set_handler(httpd_req_t *req)
 {
+
     const char *head = "<!DOCTYPE html><html><head>\
         <meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">\
         <meta name=\"viewport\" content=\"width=device-width\">\
-        <title>Lora setting</title></head><body><form>";
+        <title>Lora setting</title></head><body><form><table>";
 
-    const char *tail = "<input type=\"submit\" value=\"Сохранить\" /></body></html>";
+    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" /></body></html>";
 
     const char *lora_set_bw[] = {
-        "<label for='bw'>Signal bandwidth:</label><select name='bw' id='bw'>",
-        "</select><br>"};
+        "<tr><td><label for='bw'>Signal bandwidth:</label></td><td><select name='bw' id='bw'>",
+        "</select></td></tr>"};
 
     const char *lora_set_bw_options[10][3] = {
         {"<option value=", "0", ">7.8 kHz</option>"},
@@ -242,16 +244,16 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
         {"<option value=", "9", ">500 kHz</option>"}};
 
     const char *lora_set_fr[] = {
-        "<label for=\"fr\">Signal frequency:</label><input type=\"text\" name=\"fr\" id=\"fr\" size=\"10\" value=\"",
-        "\" />  kHz<br>"};
+        "<tr><td><label for=\"fr\">Signal frequency:</label></td><td><input type=\"text\" name=\"fr\" id=\"fr\" size=\"7\" value=\"",
+        "\" />  kHz</td></tr>"};
 
     const char *lora_set_sf[] = {
-        "<label for=\"sf\">Spreading Factor(6-12):</label><input type=\"text\" name=\"sf\" id=\"sf\" size=\"10\" value=\"",
-        "\" /><br>"};
+        "<tr><td><label for=\"sf\">Spreading Factor(6-12):</label></td><td><input type=\"text\" name=\"sf\" id=\"sf\" size=\"7\" value=\"",
+        "\" /></td></tr>"};
 
     const char *lora_set_op[] = {
-        "<label for=\"op\">Output Power(2-17):</label><input type=\"text\" name=\"op\" id=\"op\" size=\"10\" value=\"",
-        "\" /><br>"};
+        "<tr><td><label for=\"op\">Output Power(2-17):</label></td><td><input type=\"text\" name=\"op\" id=\"op\" size=\"7\" value=\"",
+        "\" /></td></tr>"};
 
     int fr = 867500; // frequency kHz
     int bw = 7;      // Номер полосы
@@ -259,60 +261,89 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     int op = 17;     // OutputPower
     read_nvs_lora(&fr, &bw, &sf, &op);
 
-    char *buf;
+    char buf[512];
     size_t buf_len;
     char param[32];
 
     /* Read URL query string length and allocate memory for length + 1,
      * extra byte for null termination */
     buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (buf_len > 1)
+    if (buf_len > 1 && buf_len < sizeof(buf))
     {
-        buf = malloc(buf_len);
+        // buf = malloc(buf_len);
         if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
         {
+            bool param_change = false;
             ESP_LOGI(TAGH, "Found URL query => %s", buf);
             /* Get value of expected key from query string */
             if (httpd_query_key_value(buf, "fr", param, 7) == ESP_OK)
             {
-                fr = atoi(param);
-                write_nvs_lora("fr", fr);
+                int p = atoi(param);
+                if (fr != p && p > 800000 && p < 1000000)
+                {
+                    param_change = true;
+                    fr = p;
+                    write_nvs_lora("fr", fr);
+                }
             }
 
             if (httpd_query_key_value(buf, "op", param, 3) == ESP_OK)
             {
-                op = atoi(param);
-                write_nvs_lora("op", op);
+                int p = atoi(param);
+                if (op != p && p >= 2 && p <= 17)
+                {
+                    param_change = true;
+                    op = p;
+                    write_nvs_lora("op", op);
+                }
             }
 
             if (httpd_query_key_value(buf, "bw", param, 2) == ESP_OK)
             {
-                bw = atoi(param);
-                write_nvs_lora("bw", bw);
+                int p = atoi(param);
+                if (bw != p && p >= 0 && p <= 9)
+                {
+                    param_change = true;
+                    bw = p;
+                    write_nvs_lora("bw", bw);
+                }
             }
 
             if (httpd_query_key_value(buf, "sf", param, 3) == ESP_OK)
             {
-                sf = atoi(param);
-                write_nvs_lora("sf", sf);
+                int p = atoi(param);
+                if (sf != p && p >= 6 && p <= 12)
+                {
+                    param_change = true;
+                    sf = p;
+                    write_nvs_lora("sf", sf);
+                }
+            }
+
+            if (param_change)
+            {
+                httpd_resp_set_status(req, "307 Temporary Redirect");
+                httpd_resp_set_hdr(req, "Location", PAGE_LORA_SET);
+                httpd_resp_send(req, NULL, 0); // Response body can be empty
+                return ESP_OK;
             }
         }
-        free(buf);
     }
 
     httpd_resp_sendstr_chunk(req, head);
 
     // Generate fr
-    httpd_resp_sendstr_chunk(req, lora_set_fr[0]);
+    strlcpy(buf, lora_set_fr[0], sizeof(buf));
     itoa(fr, param, 10);
-    httpd_resp_sendstr_chunk(req, param);
-    httpd_resp_sendstr_chunk(req, lora_set_fr[1]);
+    strlcat(buf, param, sizeof(buf));
+    strlcat(buf, lora_set_fr[1], sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
 
     // Generate bw
-    httpd_resp_sendstr_chunk(req, lora_set_bw[0]);
+    strlcpy(buf, lora_set_bw[0], sizeof(buf));
     for (int i = 0; i < 10; i++)
     {
-        httpd_resp_sendstr_chunk(req, lora_set_bw_options[i][0]);
+        strlcat(buf, lora_set_bw_options[i][0], sizeof(buf));
         param[0] = '"';
         param[1] = *lora_set_bw_options[i][1];
         param[2] = '"';
@@ -323,31 +354,36 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
             strcpy(&param[3], " selected");
         }
 
-        httpd_resp_sendstr_chunk(req, param);
-        httpd_resp_sendstr_chunk(req, lora_set_bw_options[i][2]);
+        strlcat(buf, param, sizeof(buf));
+        strlcat(buf, lora_set_bw_options[i][2], sizeof(buf));
     }
-    httpd_resp_sendstr_chunk(req, lora_set_bw[1]);
+    strlcat(buf, lora_set_bw[1], sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
 
     // Generate sf
-    httpd_resp_sendstr_chunk(req, lora_set_sf[0]);
+    strlcpy(buf, lora_set_sf[0], sizeof(buf));
     itoa(sf, param, 10);
-    httpd_resp_sendstr_chunk(req, param);
-    httpd_resp_sendstr_chunk(req, lora_set_sf[1]);
+    strlcat(buf, param, sizeof(buf));
+    strlcat(buf, lora_set_sf[1], sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
+
 
     // Generate op
-    httpd_resp_sendstr_chunk(req, lora_set_op[0]);
+    strlcpy(buf, lora_set_op[0], sizeof(buf));
     itoa(op, param, 10);
-    httpd_resp_sendstr_chunk(req, param);
-    httpd_resp_sendstr_chunk(req, lora_set_op[1]);
+    strlcat(buf, param, sizeof(buf));
+    strlcat(buf, lora_set_op[1], sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
 
     httpd_resp_sendstr_chunk(req, tail);
     /* Send empty chunk to signal HTTP response completion */
     httpd_resp_sendstr_chunk(req, NULL);
+
     return ESP_OK;
 }
 
 static const httpd_uri_t lora_set = {
-    .uri = "/",
+    .uri = PAGE_LORA_SET,
     .method = HTTP_GET,
     .handler = lora_set_handler,
     /* Let's pass response string in user
