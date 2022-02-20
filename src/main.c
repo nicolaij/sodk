@@ -76,7 +76,7 @@ void app_main()
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, NULL);
-    
+
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
@@ -93,14 +93,11 @@ void app_main()
         cmd.cmd = 3;
         cmd.power = 255;
         xQueueSend(uicmd_queue, &cmd, (portTickType)0);
-        
+
         vTaskDelay(1000 / portTICK_PERIOD_MS);
 
         //засыпаем...
-        fflush(stdout);
-        esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
-        esp_sleep_enable_timer_wakeup(60 * 1000000);
-        esp_deep_sleep_start();
+        sleep();
     }
 
     while (1)

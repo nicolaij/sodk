@@ -170,7 +170,6 @@ void radio_task(void *arg)
 
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)1))
         {
-            lora_set_tx_power(17);
             int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", menu[5].val, bootCount, result.U, result.R);
             lora_send_packet((uint8_t *)buf, l);
         }
@@ -182,28 +181,13 @@ void radio_task(void *arg)
             uint8_t buf[64];
             int l;
 
-            lora_set_tx_power(2);
             time(&now);
             localtime_r(&now, &timeinfo);
             l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
             lora_send_packet((uint8_t *)buf, l);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-            lora_set_tx_power(10);
-            time(&now);
-            localtime_r(&now, &timeinfo);
-            l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
-            lora_send_packet((uint8_t *)buf, l);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-            lora_set_tx_power(17);
-            time(&now);
-            localtime_r(&now, &timeinfo);
-            l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
-            lora_send_packet((uint8_t *)buf, l);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-
             printf("Send:\"%s\"\n", buf);
+
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
 
         vTaskDelay(1);

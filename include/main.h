@@ -73,3 +73,5 @@ int kOm(int adc_u, int adc_r);
 
 int read_nvs_lora(int *fr, int *bw, int *sf, int *op);
 int write_nvs_lora(const char *key, int value);
+
+void sleep(void);

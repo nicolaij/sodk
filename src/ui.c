@@ -15,6 +15,8 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
+#include "esp_sleep.h"
+
 static const char *TAG = "ui";
 
 menu_t menu[] = {
@@ -33,6 +35,14 @@ menu_t menu[] = {
 int menu_current_selection = -1;
 int menu_current_position = 0;
 int menu_current_display = 0;
+
+void sleep(void)
+{
+	fflush(stdout);
+	esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
+	esp_sleep_enable_timer_wakeup(60 * 1000000);
+	esp_deep_sleep_start();
+}
 
 int limits(int val, int min, int max)
 {
@@ -128,7 +138,7 @@ void ui_task(void *arg)
 	esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
 	if (err != ESP_OK)
 	{
-		ESP_LOGE("storage","Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+		ESP_LOGE("storage", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
 	}
 	else
 	{
@@ -158,6 +168,9 @@ void ui_task(void *arg)
 	keys_events_t encoder_key = KEY_NONE;
 
 	int64_t t1 = 0; // Для определения Double Click
+
+#define TIMEOUT (60000 / 40)
+	int timeout_counter = 0;
 
 	// loop
 	while (1)
@@ -231,6 +244,7 @@ void ui_task(void *arg)
 				}
 			};
 			update = true;
+			timeout_counter = 0;
 		}
 
 		if (screen == 0)
@@ -250,6 +264,7 @@ void ui_task(void *arg)
 					}
 				}
 				update = true;
+				timeout_counter = 0;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
 			case KEY_DOUBLECLICK: //Включаем
@@ -260,6 +275,7 @@ void ui_task(void *arg)
 				else
 					cmd.cmd = 1;
 				update = true;
+				timeout_counter = 0;
 				xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 				break;
 			case KEY_LONG_PRESS:
@@ -275,6 +291,7 @@ void ui_task(void *arg)
 					menu_current_selection = -1;
 				}
 				update = true;
+				timeout_counter = 0;
 				break;
 			default:
 				break;
@@ -329,11 +346,13 @@ void ui_task(void *arg)
 					encoder_cor = menu_current_position - encoder_val / 4;
 				}
 				update = true;
+				timeout_counter = 0;
 				break;
 			case KEY_LONG_PRESS: //Выход на главный экран
 				screen = 0;
 				encoder_cor = cmd.power - encoder_val / 4;
 				update = true;
+				timeout_counter = 0;
 				break;
 			default:
 				break;
@@ -349,6 +368,7 @@ void ui_task(void *arg)
 				cmd.cmd = 0;
 		}
 
+		//Обновляем экран
 		if (update)
 		{
 			xSemaphoreTake(i2c_mux, portMAX_DELAY);
@@ -424,5 +444,11 @@ void ui_task(void *arg)
 		}
 		update = false;
 		vTaskDelay(40 / portTICK_RATE_MS);
+
+		if (++timeout_counter > TIMEOUT)
+		{
+			//засыпаем...
+			sleep();
+		}
 	}
 }
