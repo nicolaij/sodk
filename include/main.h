@@ -18,6 +18,9 @@
 #define PIN_ENCODER_B 18
 #define PIN_ENCODER_BTN 21
 
+#define RESET_BIT 0x1
+#define SLEEP_BIT 0x2
+
 typedef struct
 {
     int cmd;

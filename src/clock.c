@@ -111,7 +111,6 @@ static esp_err_t i2c_master_clock_read(i2c_port_t i2c_num, uint8_t *data, uint8_
 
 static esp_err_t i2c_master_clock_write(i2c_port_t i2c_num, uint8_t *data, uint8_t len)
 {
-    int ret;
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, DS3231_ADDRESS << 1 | WRITE_BIT, ACK_CHECK_EN);
@@ -123,7 +122,6 @@ static esp_err_t i2c_master_clock_write(i2c_port_t i2c_num, uint8_t *data, uint8
 
 static esp_err_t i2c_master_clock_write_byte(i2c_port_t i2c_num, uint8_t addr, uint8_t data)
 {
-    int ret;
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, DS3231_ADDRESS << 1 | WRITE_BIT, ACK_CHECK_EN);
@@ -259,59 +257,6 @@ void clock_task(void *arg)
     while (1)
     {
         vTaskDelay(2000 / portTICK_PERIOD_MS);
-    }
-}
-
-static void obtain_time(void)
-{
-    char strftime_buf[64];
-    // ESP_ERROR_CHECK(nvs_flash_init());
-    // ESP_ERROR_CHECK(esp_netif_init());
-    // ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-    initialize_sntp();
-
-    // wait for time to be set
-    time_t now = 0;
-    struct tm timeinfo = {0};
-    int retry = 0;
-    const int retry_count = 10;
-    while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count)
-    {
-        ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-    }
-
-    if (retry < retry_count)
-    {
-        time(&now);
-        localtime_r(&now, &timeinfo);
-
-        // sync to DS3231
-        uint8_t buffer[8] = {bin2bcd(timeinfo.tm_sec),
-                             bin2bcd(timeinfo.tm_min),
-                             bin2bcd(timeinfo.tm_hour),
-                             0,
-                             bin2bcd(timeinfo.tm_mday),
-                             bin2bcd(timeinfo.tm_mon),
-                             bin2bcd(timeinfo.tm_year - 100)};
-
-        xSemaphoreTake(i2c_mux, portMAX_DELAY);
-
-        if (i2c_master_clock_write(I2C_MASTER_NUM, buffer, 8) == ESP_OK)
-        {
-            ESP_LOGI("DS3231", "Clock set");
-            if (osf) //часы сброшены
-            {
-                ESP_ERROR_CHECK(i2c_master_clock_write_byte(I2C_MASTER_NUM, 0x0e, 0)); // Control Register (0Eh)
-                ESP_ERROR_CHECK(i2c_master_clock_write_byte(I2C_MASTER_NUM, 0x0f, 0)); // Status Register (0Fh)
-            }
-        }
-
-        xSemaphoreGive(i2c_mux);
-
-        strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-        ESP_LOGI(TAG, "The current date/time in Minks is: %s", strftime_buf);
     }
 }
 

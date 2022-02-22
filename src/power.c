@@ -22,11 +22,6 @@ int bufferR[10000];
 int bufferU[10000];
 int buffer3[10000];
 
-static const char *TAG = "ad/da";
-#define V_REF 1090
-
-#define BTN_GPIO 0
-
 typedef struct
 {
     adc1_channel_t channel;
@@ -422,7 +417,6 @@ void dual_adc(void *arg)
         */
         if (cmd.cmd >= 2) // Pulse
         {
-            int test_measure = 0;
             int u = 0;
             int r = 0;
             int pre_u = 0;

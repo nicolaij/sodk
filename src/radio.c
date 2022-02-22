@@ -118,17 +118,10 @@ int write_nvs_lora(const char *key, int value)
     return 1;
 };
 
-void radio_task(void *arg)
+void reset_lora()
 {
-    int x;
-
     lora_init();
-    // lora_dump_registers();
-    // lora_set_frequency(915e6);
     // 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
-    // lora_set_frequency(867.5E6);
-    // lora_set_bandwidth(125E3);
-    //
     int fr = 867500; // frequency kHz
     int bw = 7;      // Номер полосы
     int sf = 7;      // SpreadingFactor
@@ -143,11 +136,14 @@ void radio_task(void *arg)
 
     lora_enable_crc();
     // lora_disable_crc();
-
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-
     lora_dump_registers();
-    // xTaskCreate(&task_rx, "task_rx", 2048, NULL, 5, NULL);
+}
+
+void radio_task(void *arg)
+{
+    int x;
+
+    //reset_lora();
 
     gpio_pad_select_gpio(BTN_GPIO);
     gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
@@ -155,9 +151,30 @@ void radio_task(void *arg)
 
     //результат измерений
     result_t result;
+    BaseType_t xResult;
+    uint32_t ulNotifiedValue;
 
     while (1)
     {
+        /* Ожидание оповещения от прерываний. */
+        xResult = xTaskNotifyWait(pdFALSE,          /* Не очищать биты на входе. */
+                                  ULONG_MAX,        /* На выходе очищаются все биты. */
+                                  &ulNotifiedValue, /* Здесь хранится значение оповещения. */
+                                  0);               /* Время таймаута на блокировке. */
+        if (xResult == pdPASS)
+        {
+            /* Было получено оповещение. Проверка, какие биты установлены. */
+            if ((ulNotifiedValue & RESET_BIT) != 0)
+            {
+                reset_lora();
+            }
+            
+            if ((ulNotifiedValue & SLEEP_BIT) != 0)
+            {
+                lora_sleep();
+            }
+        }
+
         lora_receive(); // put into receive mode
         while (lora_received())
         {
@@ -165,16 +182,16 @@ void radio_task(void *arg)
             buf[x] = 0;
             int rssi = lora_packet_rssi();
             printf("Received: \"%s\" Len: %d, RSSI: %d\n", buf, x, rssi);
-            if (strlen((char*)buf) < 200)
+            if (strlen((char *)buf) < 200)
             {
-                sprintf((char*)&buf[x], " - RSSI: %d", rssi);
+                sprintf((char *)&buf[x], " - RSSI: %d", rssi);
             }
-            xQueueSend(ws_send_queue, (char*)buf, (portTickType)0);
+            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             lora_receive();
-            //lora_idle();
-            //vTaskDelay(100 / portTICK_PERIOD_MS);
-            //lora_send_packet((uint8_t *)buf, strlen((char*)buf));
-            //vTaskDelay(1000 / portTICK_PERIOD_MS);
+            // lora_idle();
+            // vTaskDelay(100 / portTICK_PERIOD_MS);
+            // lora_send_packet((uint8_t *)buf, strlen((char*)buf));
+            // vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
 
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)1))
@@ -197,7 +214,7 @@ void radio_task(void *arg)
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-            //xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
+            // xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
         }
 
         vTaskDelay(1);

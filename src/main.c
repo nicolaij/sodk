@@ -10,6 +10,8 @@
 
 RTC_DATA_ATTR int bootCount = 0;
 
+TaskHandle_t xHandleLora = NULL;
+
 void app_main()
 {
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -77,17 +79,18 @@ void app_main()
 
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
-    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, NULL);
+    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, tskIDLE_PRIORITY, &xHandleLora);
+    xTaskNotify(xHandleLora, RESET_BIT, eSetValueWithOverwrite);
 
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 5, NULL);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, tskIDLE_PRIORITY, NULL);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
-        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, NULL);
+        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, tskIDLE_PRIORITY, NULL);
 
-        xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
+        xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, tskIDLE_PRIORITY, NULL);
 
-        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, tskIDLE_PRIORITY, NULL);
     }
     else
     {
@@ -97,7 +100,8 @@ void app_main()
         xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
-
+        xTaskNotify(xHandleLora, SLEEP_BIT, eSetValueWithOverwrite);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
         //засыпаем...
         go_sleep();
     }
