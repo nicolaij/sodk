@@ -36,8 +36,9 @@ int menu_current_selection = -1;
 int menu_current_position = 0;
 int menu_current_display = 0;
 
-void sleep(void)
+void go_sleep(void)
 {
+
 	fflush(stdout);
 	esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
 	esp_sleep_enable_timer_wakeup(60 * 1000000);
@@ -169,7 +170,7 @@ void ui_task(void *arg)
 
 	int64_t t1 = 0; // Для определения Double Click
 
-#define TIMEOUT (60000 / 40)
+#define TIMEOUT (600 * 1000 / 40)
 	int timeout_counter = 0;
 
 	// loop
@@ -448,7 +449,7 @@ void ui_task(void *arg)
 		if (++timeout_counter > TIMEOUT)
 		{
 			//засыпаем...
-			sleep();
+			go_sleep();
 		}
 	}
 }

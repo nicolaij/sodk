@@ -8,7 +8,6 @@
 */
 #include "main.h"
 
-#include <string.h>
 #include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
@@ -21,13 +20,14 @@
 #include "esp_netif.h"
 #include <esp_http_server.h>
 
+extern menu_t menu[];
 
 /* The examples use WiFi configuration that you can set via project configuration menu
 
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define CLIENT_WIFI_SSID "Test"
+#define CLIENT_WIFI_SSID "MiMikalai"
 #define CLIENT_WIFI_PASS "123123123"
 #define AP_WIFI_SSID "MegaOm"
 #define AP_WIFI_PASS "123123123"
@@ -94,8 +94,8 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
 void wifi_init_softap(void)
 {
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    // ESP_ERROR_CHECK(esp_netif_init());
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -106,7 +106,6 @@ void wifi_init_softap(void)
                                                         &event_handler,
                                                         NULL,
                                                         NULL));
-
     wifi_config_t wifi_config = {
         .ap = {
             .ssid = AP_WIFI_SSID,
@@ -116,10 +115,18 @@ void wifi_init_softap(void)
             .max_connection = EXAMPLE_MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK},
     };
+
     if (strlen(AP_WIFI_PASS) == 0)
     {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
+
+    static char wifi_name[32] = AP_WIFI_SSID;
+    int l = strlen(wifi_name);
+    itoa(menu[5].val, &wifi_name[l], 10);
+
+    strlcpy((char *)wifi_config.ap.ssid, wifi_name, sizeof(wifi_config.ap.ssid));
+    wifi_config.ap.ssid_len = strlen(wifi_name);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
@@ -128,7 +135,7 @@ void wifi_init_softap(void)
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d", AP_WIFI_SSID, AP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
-void wifi_init_sta(void)
+int wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
 
@@ -164,10 +171,8 @@ void wifi_init_sta(void)
             .pmf_cfg = {
                 .capable = true,
                 .required = false},
-        },
-        .ap = {.ssid = AP_WIFI_SSID, .ssid_len = strlen(AP_WIFI_SSID), .channel = EXAMPLE_ESP_WIFI_CHANNEL, .password = AP_WIFI_PASS, .max_connection = EXAMPLE_MAX_STA_CONN, .authmode = WIFI_AUTH_WPA_WPA2_PSK},
+        }};
 
-    };
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -187,7 +192,7 @@ void wifi_init_sta(void)
     if (bits & WIFI_CONNECTED_BIT)
     {
         ESP_LOGI(TAG, "connected to ap SSID:%s password:%s", CLIENT_WIFI_SSID, CLIENT_WIFI_PASS);
-        return;
+        return 1;
     }
     else if (bits & WIFI_FAIL_BIT)
     {
@@ -198,22 +203,7 @@ void wifi_init_sta(void)
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
 
-    esp_netif_create_default_wifi_ap();
-
-    if (strlen(AP_WIFI_PASS) == 0)
-    {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d", AP_WIFI_SSID, AP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
-    /* The event will not be processed after unregister */
-    // ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip));
-    // ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id));
-    // vEventGroupDelete(s_wifi_event_group);
+    return 0;
 }
 
 /* An HTTP GET handler */
@@ -225,7 +215,13 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
         <meta name=\"viewport\" content=\"width=device-width\">\
         <title>Lora setting</title></head><body><form><table>";
 
-    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" /></body></html>";
+    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" />\
+    <p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n\
+    <script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n\
+    socket.onopen = function(){socket.send(\"open ws\");};\n\
+    socket.onmessage = function(e){document.getElementById(\"text\").value += e.data + \"\\n\";}\
+	</script>\
+    </body></html>";
 
     const char *lora_set_bw[] = {
         "<tr><td><label for='bw'>Signal bandwidth:</label></td><td><select name='bw' id='bw'>",
@@ -367,7 +363,6 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     strlcat(buf, lora_set_sf[1], sizeof(buf));
     httpd_resp_sendstr_chunk(req, buf);
 
-
     // Generate op
     strlcpy(buf, lora_set_op[0], sizeof(buf));
     itoa(op, param, 10);
@@ -382,6 +377,58 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+httpd_handle_t ws_hd;
+int ws_fd = 0;
+
+/*
+ * async send function, which we put into the httpd work queue
+ */
+static void ws_async_send(char *msg)
+{
+    if (ws_fd == 0)
+        return;
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.payload = (uint8_t *)msg;
+    ws_pkt.len = strlen(msg);
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+
+    httpd_ws_send_frame_async(ws_hd, ws_fd, &ws_pkt);
+}
+
+static esp_err_t ws_handler(httpd_req_t *req)
+{
+    uint8_t buf[128] = {0};
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+    ws_pkt.payload = buf;
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 128);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE(TAGH, "httpd_ws_recv_frame failed with %d", ret);
+        return ret;
+    }
+    ESP_LOGI(TAGH, "Got packet with message: %s", ws_pkt.payload);
+    ESP_LOGI(TAGH, "Packet type: %d", ws_pkt.type);
+
+    ws_hd = req->handle;
+    ESP_LOGI(TAGH, "ws_hd: %d", *(int*)ws_hd);
+    ws_fd = httpd_req_to_sockfd(req);
+    ESP_LOGI(TAGH, "ws_fd: %d", ws_fd);
+
+    /*
+        strlcpy((char*)buf, "Test!!!", sizeof(buf));
+
+        ret = httpd_ws_send_frame(req, &ws_pkt);
+        if (ret != ESP_OK)
+        {
+            ESP_LOGE(TAGH, "httpd_ws_send_frame failed with %d", ret);
+        }
+        */
+    return ret;
+}
+
 static const httpd_uri_t lora_set = {
     .uri = PAGE_LORA_SET,
     .method = HTTP_GET,
@@ -389,6 +436,13 @@ static const httpd_uri_t lora_set = {
     /* Let's pass response string in user
      * context to demonstrate it's usage */
     .user_ctx = "Hello World!"};
+
+static const httpd_uri_t ws = {
+    .uri = "/ws",
+    .method = HTTP_GET,
+    .handler = ws_handler,
+    .user_ctx = NULL,
+    .is_websocket = true};
 
 static httpd_handle_t start_webserver(void)
 {
@@ -403,6 +457,10 @@ static httpd_handle_t start_webserver(void)
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
         httpd_register_uri_handler(server, &lora_set);
+        httpd_register_uri_handler(server, &ws);
+
+        ws_fd = 0;
+
         return server;
     }
 
@@ -412,6 +470,7 @@ static httpd_handle_t start_webserver(void)
 
 void wifi_task(void *arg)
 {
+    char msg[256];
     // Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -421,13 +480,17 @@ void wifi_task(void *arg)
     }
     ESP_ERROR_CHECK(ret);
 
-    wifi_init_sta();
+    if (wifi_init_sta() == 0)
+        wifi_init_softap();
 
     /* Start the server for the first time */
     start_webserver();
 
     while (1)
     {
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        if (pdTRUE == xQueueReceive(ws_send_queue, msg, (portTickType)portMAX_DELAY))
+        {
+            if (ws_fd > 0) httpd_queue_work(ws_hd, ws_async_send, msg);
+        }
     }
 }

@@ -71,6 +71,8 @@ void app_main()
 
     send_queue = xQueueCreate(2, sizeof(result_t));
 
+    ws_send_queue = xQueueCreate(2, 256);
+
     i2c_mux = xSemaphoreCreateMutex();
 
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
@@ -97,7 +99,7 @@ void app_main()
         vTaskDelay(1000 / portTICK_PERIOD_MS);
 
         //засыпаем...
-        sleep();
+        go_sleep();
     }
 
     while (1)

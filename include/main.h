@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -57,6 +59,8 @@ QueueHandle_t adc1_queue;
 QueueHandle_t send_queue;
 QueueHandle_t set_lora_queue;
 
+QueueHandle_t ws_send_queue;
+
 SemaphoreHandle_t i2c_mux;
 
 extern RTC_DATA_ATTR int bootCount;
@@ -74,4 +78,4 @@ int kOm(int adc_u, int adc_r);
 int read_nvs_lora(int *fr, int *bw, int *sf, int *op);
 int write_nvs_lora(const char *key, int value);
 
-void sleep(void);
+void go_sleep(void);

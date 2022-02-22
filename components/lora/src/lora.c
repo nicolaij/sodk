@@ -351,7 +351,7 @@ int lora_init(void)
    assert(ret == ESP_OK);
 
    spi_device_interface_config_t dev = {
-       .clock_speed_hz = SPI_MASTER_FREQ_10M,
+       .clock_speed_hz = (APB_CLK_FREQ/20),
        .mode = 0,
        .spics_io_num = -1,
        .queue_size = 1,

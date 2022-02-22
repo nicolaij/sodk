@@ -163,9 +163,18 @@ void radio_task(void *arg)
         {
             x = lora_receive_packet(buf, sizeof(buf));
             buf[x] = 0;
-            printf("Received: \"%s\" Len: %d, RSSI: %d\n", buf, x, lora_packet_rssi());
+            int rssi = lora_packet_rssi();
+            printf("Received: \"%s\" Len: %d, RSSI: %d\n", buf, x, rssi);
+            if (strlen((char*)buf) < 200)
+            {
+                sprintf((char*)&buf[x], " - RSSI: %d", rssi);
+            }
+            xQueueSend(ws_send_queue, (char*)buf, (portTickType)0);
             lora_receive();
-            // lora_send_packet((uint8_t *)"Reply.", 5);
+            //lora_idle();
+            //vTaskDelay(100 / portTICK_PERIOD_MS);
+            //lora_send_packet((uint8_t *)buf, strlen((char*)buf));
+            //vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
 
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)1))
@@ -178,7 +187,6 @@ void radio_task(void *arg)
         {
             time_t now;
             struct tm timeinfo;
-            uint8_t buf[64];
             int l;
 
             time(&now);
@@ -188,6 +196,8 @@ void radio_task(void *arg)
             printf("Send:\"%s\"\n", buf);
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+            //xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
         }
 
         vTaskDelay(1);
