@@ -11,6 +11,23 @@
 RTC_DATA_ATTR int bootCount = 0;
 
 TaskHandle_t xHandleLora = NULL;
+TaskHandle_t xHandleUI = NULL;
+
+void go_sleep(void)
+{
+    if (xHandleLora)
+        xTaskNotify(xHandleLora, SLEEP_BIT, eSetValueWithOverwrite);
+    if (xHandleUI)
+        xTaskNotify(xHandleUI, SLEEP_BIT, eSetValueWithOverwrite);
+
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+    printf("Go sleep...");
+    fflush(stdout);
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
+    esp_sleep_enable_timer_wakeup(60 * 1000000);
+    esp_deep_sleep_start();
+}
 
 void app_main()
 {
@@ -86,7 +103,7 @@ void app_main()
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
-        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, tskIDLE_PRIORITY, NULL);
+        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, tskIDLE_PRIORITY, &xHandleUI);
 
         xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, tskIDLE_PRIORITY, NULL);
 
@@ -100,8 +117,6 @@ void app_main()
         xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 
         vTaskDelay(1000 / portTICK_PERIOD_MS);
-        xTaskNotify(xHandleLora, SLEEP_BIT, eSetValueWithOverwrite);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
         //засыпаем...
         go_sleep();
     }

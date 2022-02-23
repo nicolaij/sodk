@@ -36,14 +36,7 @@ int menu_current_selection = -1;
 int menu_current_position = 0;
 int menu_current_display = 0;
 
-void go_sleep(void)
-{
-
-	fflush(stdout);
-	esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
-	esp_sleep_enable_timer_wakeup(60 * 1000000);
-	esp_deep_sleep_start();
-}
+u8g2_t u8g2;
 
 int limits(int val, int min, int max)
 {
@@ -93,7 +86,6 @@ void ui_task(void *arg)
 	u8g2_esp32_hal_init(u8g2_esp32_hal);
 
 	// initialize the u8g2 library
-	u8g2_t u8g2;
 	u8g2_Setup_sh1106_i2c_128x64_noname_f(
 		// u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
@@ -109,7 +101,6 @@ void ui_task(void *arg)
 	u8g2_InitDisplay(&u8g2);
 
 	// wake up the display
-	ESP_LOGI(TAG, "u8g2_SetPowerSave");
 	u8g2_SetPowerSave(&u8g2, 0);
 
 	// draw the hourglass animation, full-half-empty
@@ -170,12 +161,37 @@ void ui_task(void *arg)
 
 	int64_t t1 = 0; // Для определения Double Click
 
-#define TIMEOUT (600 * 1000 / 40)
+#define TIMEOUT (60 * 1000 / 40)
+
 	int timeout_counter = 0;
 
+	BaseType_t xResult;
+	uint32_t ulNotifiedValue;
 	// loop
 	while (1)
 	{
+		/* Ожидание оповещения от прерываний. */
+		xResult = xTaskNotifyWait(pdFALSE,			/* Не очищать биты на входе. */
+								  ULONG_MAX,		/* На выходе очищаются все биты. */
+								  &ulNotifiedValue, /* Здесь хранится значение оповещения. */
+								  0);				/* Время таймаута на блокировке. */
+		if (xResult == pdPASS)
+		{
+			/* Было получено оповещение. Проверка, какие биты установлены. */
+			if ((ulNotifiedValue & RESET_BIT) != 0)
+			{
+				u8g2_ClearBuffer(&u8g2);
+				u8g2_SendBuffer(&u8g2);
+			}
+
+			if ((ulNotifiedValue & SLEEP_BIT) != 0)
+			{
+				ESP_LOGI(TAG, "u8g2_SetPowerSave");
+				u8g2_SetPowerSave(&u8g2, true);
+				vTaskDelay(10000 / portTICK_PERIOD_MS);
+			}
+		}
+
 		int s = gpio_get_level(PIN_ENCODER_BTN);
 		if (s == 0) // down
 		{
@@ -448,6 +464,7 @@ void ui_task(void *arg)
 
 		if (++timeout_counter > TIMEOUT)
 		{
+			u8g2_SetPowerSave(&u8g2, true);
 			//засыпаем...
 			go_sleep();
 		}

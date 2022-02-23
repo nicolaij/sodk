@@ -16,6 +16,8 @@ extern menu_t menu[];
 
 uint8_t buf[256];
 
+static const char *TAG = "radio";
+
 /*
 params int32 - список параметров
 return кол-во элементов
@@ -171,7 +173,10 @@ void radio_task(void *arg)
             
             if ((ulNotifiedValue & SLEEP_BIT) != 0)
             {
+                ESP_LOGI(TAG, "lora_sleep");
+                lora_idle();
                 lora_sleep();
+                vTaskDelay(10000 / portTICK_PERIOD_MS);
             }
         }
 
