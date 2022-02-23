@@ -223,6 +223,10 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 	</script>\
     </body></html>";
 
+    const char *lora_set_id[] = {
+        "<tr><td><label for='id'>ID transceiver:</label></td><td><select name='id' id='id'>",
+        "</select></td></tr>"};
+
     const char *lora_set_bw[] = {
         "<tr><td><label for='bw'>Signal bandwidth:</label></td><td><select name='bw' id='bw'>",
         "</select></td></tr>"};
@@ -255,7 +259,8 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     int bw = 7;      // Номер полосы
     int sf = 7;      // SpreadingFactor
     int op = 17;     // OutputPower
-    read_nvs_lora(&fr, &bw, &sf, &op);
+    int id = 1;     // id
+    read_nvs_lora(&id, &fr, &bw, &sf, &op);
 
     char buf[512];
     size_t buf_len;
@@ -269,9 +274,20 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
         // buf = malloc(buf_len);
         if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
         {
-            bool param_change = false;
             ESP_LOGI(TAGH, "Found URL query => %s", buf);
-            /* Get value of expected key from query string */
+
+            bool param_change = false;
+            if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
+            {
+                int p = atoi(param);
+                if (id != p && p > 0 && p < 1000000)
+                {
+                    param_change = true;
+                    id = p;
+                    write_nvs_lora("id", id);
+                }
+            }
+
             if (httpd_query_key_value(buf, "fr", param, 7) == ESP_OK)
             {
                 int p = atoi(param);
@@ -327,6 +343,13 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     }
 
     httpd_resp_sendstr_chunk(req, head);
+
+    // Generate id
+    strlcpy(buf, lora_set_id[0], sizeof(buf));
+    itoa(id, param, 10);
+    strlcat(buf, param, sizeof(buf));
+    strlcat(buf, lora_set_id[1], sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
 
     // Generate fr
     strlcpy(buf, lora_set_fr[0], sizeof(buf));

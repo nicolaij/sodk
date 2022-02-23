@@ -16,13 +16,15 @@ extern menu_t menu[];
 
 uint8_t buf[256];
 
+int id = 1; // ID передатчика
+
 static const char *TAG = "radio";
 
 /*
 params int32 - список параметров
 return кол-во элементов
 */
-int read_nvs_lora(int *fr, int *bw, int *sf, int *op)
+int read_nvs_lora(int *id, int *fr, int *bw, int *sf, int *op)
 {
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open("lora", NVS_READONLY, &my_handle);
@@ -32,6 +34,19 @@ int read_nvs_lora(int *fr, int *bw, int *sf, int *op)
     }
     else
     {
+        err = nvs_get_i32(my_handle, "id", id);
+        switch (err)
+        {
+        case ESP_OK:
+            printf("Read \"%s\" = %d\n", "id", *id);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            printf("The value  \"%s\" is not initialized yet!\n", "id");
+            break;
+        default:
+            printf("Error (%s) reading!\n", esp_err_to_name(err));
+        }
+
         err = nvs_get_i32(my_handle, "fr", fr);
         switch (err)
         {
@@ -129,7 +144,7 @@ void reset_lora()
     int sf = 7;      // SpreadingFactor
     int op = 17;     // OutputPower
 
-    read_nvs_lora(&fr, &bw, &sf, &op);
+    read_nvs_lora(&id, &fr, &bw, &sf, &op);
 
     lora_set_frequency(fr * 1000);
     lora_set_bandwidth_n(bw);
@@ -145,7 +160,7 @@ void radio_task(void *arg)
 {
     int x;
 
-    //reset_lora();
+    reset_lora();
 
     gpio_pad_select_gpio(BTN_GPIO);
     gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
@@ -170,7 +185,7 @@ void radio_task(void *arg)
             {
                 reset_lora();
             }
-            
+
             if ((ulNotifiedValue & SLEEP_BIT) != 0)
             {
                 ESP_LOGI(TAG, "lora_sleep");
@@ -199,9 +214,9 @@ void radio_task(void *arg)
             // vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
 
-        if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)1))
+        if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)50))
         {
-            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", menu[5].val, bootCount, result.U, result.R);
+            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", id, bootCount, result.U, result.R);
             lora_send_packet((uint8_t *)buf, l);
         }
 
