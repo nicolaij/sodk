@@ -25,7 +25,6 @@ menu_t menu[] = {
 	{.name = "коэф. R", .val = 575, .min = 1, .max = 1000},
 	{.name = "смещ. U", .val = 22, .min = -500, .max = 500},
 	{.name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
-	{.name = "id", .val = 1, .min = 1, .max = 500},
 	{.name = "Выход  ", .val = 0, .min = 0, .max = 0},
 };
 

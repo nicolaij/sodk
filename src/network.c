@@ -53,6 +53,12 @@ static const char *TAGH = "httpd";
 
 static int s_retry_num = 0;
 
+extern int fr;
+extern int bw;
+extern int sf;
+extern int op;
+extern int id;
+
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -123,7 +129,7 @@ void wifi_init_softap(void)
 
     static char wifi_name[32] = AP_WIFI_SSID;
     int l = strlen(wifi_name);
-    itoa(menu[5].val, &wifi_name[l], 10);
+    itoa(id, &wifi_name[l], 10);
 
     strlcpy((char *)wifi_config.ap.ssid, wifi_name, sizeof(wifi_config.ap.ssid));
     wifi_config.ap.ssid_len = strlen(wifi_name);
@@ -209,7 +215,6 @@ int wifi_init_sta(void)
 /* An HTTP GET handler */
 static esp_err_t lora_set_handler(httpd_req_t *req)
 {
-
     const char *head = "<!DOCTYPE html><html><head>\
         <meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">\
         <meta name=\"viewport\" content=\"width=device-width\">\
@@ -224,8 +229,8 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     </body></html>";
 
     const char *lora_set_id[] = {
-        "<tr><td><label for='id'>ID transceiver:</label></td><td><select name='id' id='id'>",
-        "</select></td></tr>"};
+        "<tr><td><label for=\"id\">ID transceiver:</label></td><td><input type=\"text\" name=\"id\" id=\"id\" size=\"7\" value=\"",
+        "\" /></td></tr>"};
 
     const char *lora_set_bw[] = {
         "<tr><td><label for='bw'>Signal bandwidth:</label></td><td><select name='bw' id='bw'>",
@@ -254,13 +259,6 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     const char *lora_set_op[] = {
         "<tr><td><label for=\"op\">Output Power(2-17):</label></td><td><input type=\"text\" name=\"op\" id=\"op\" size=\"7\" value=\"",
         "\" /></td></tr>"};
-
-    int fr = 867500; // frequency kHz
-    int bw = 7;      // Номер полосы
-    int sf = 7;      // SpreadingFactor
-    int op = 17;     // OutputPower
-    int id = 1;     // id
-    read_nvs_lora(&id, &fr, &bw, &sf, &op);
 
     char buf[512];
     size_t buf_len;
@@ -436,7 +434,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     ESP_LOGI(TAGH, "Packet type: %d", ws_pkt.type);
 
     ws_hd = req->handle;
-    ESP_LOGI(TAGH, "ws_hd: %d", *(int*)ws_hd);
+    ESP_LOGI(TAGH, "ws_hd: %d", *(int *)ws_hd);
     ws_fd = httpd_req_to_sockfd(req);
     ESP_LOGI(TAGH, "ws_fd: %d", ws_fd);
 
@@ -494,14 +492,6 @@ static httpd_handle_t start_webserver(void)
 void wifi_task(void *arg)
 {
     char msg[256];
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
 
     if (wifi_init_sta() == 0)
         wifi_init_softap();
@@ -513,7 +503,8 @@ void wifi_task(void *arg)
     {
         if (pdTRUE == xQueueReceive(ws_send_queue, msg, (portTickType)portMAX_DELAY))
         {
-            if (ws_fd > 0) httpd_queue_work(ws_hd, ws_async_send, msg);
+            if (ws_fd > 0)
+                httpd_queue_work(ws_hd, ws_async_send, msg);
         }
     }
 }

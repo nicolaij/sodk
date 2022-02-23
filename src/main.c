@@ -22,6 +22,7 @@ void go_sleep(void)
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
+    fflush(stdout);
     printf("Go sleep...");
     fflush(stdout);
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
@@ -94,12 +95,13 @@ void app_main()
 
     i2c_mux = xSemaphoreCreateMutex();
 
+    ready_event_group = xEventGroupCreate();
+
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, tskIDLE_PRIORITY, &xHandleLora);
-    xTaskNotify(xHandleLora, RESET_BIT, eSetValueWithOverwrite);
 
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, tskIDLE_PRIORITY, NULL);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, tskIDLE_PRIORITY + 1, NULL);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
@@ -116,7 +118,13 @@ void app_main()
         cmd.power = 255;
         xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        xEventGroupWaitBits(
+            ready_event_group, /* The event group being tested. */
+            BIT0 | BIT1,       /* The bits within the event group to wait for. */
+            pdTRUE,            /* BIT_0 & BIT_4 should be cleared before returning. */
+            pdTRUE,
+            3000 / portTICK_PERIOD_MS);
+
         //засыпаем...
         go_sleep();
     }

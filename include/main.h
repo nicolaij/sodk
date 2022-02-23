@@ -6,6 +6,7 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
+#include "freertos/event_groups.h"
 
 #define POWER_PIN 32
 
@@ -65,6 +66,8 @@ QueueHandle_t set_lora_queue;
 QueueHandle_t ws_send_queue;
 
 SemaphoreHandle_t i2c_mux;
+
+EventGroupHandle_t ready_event_group;
 
 extern RTC_DATA_ATTR int bootCount;
 

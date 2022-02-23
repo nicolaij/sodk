@@ -16,7 +16,12 @@ extern menu_t menu[];
 
 uint8_t buf[256];
 
-int id = 1; // ID передатчика
+// 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
+int fr = 867500; // frequency kHz
+int bw = 7;      // Номер полосы
+int sf = 7;      // SpreadingFactor
+int op = 17;     // OutputPower
+int id = 1;      // ID передатчика
 
 static const char *TAG = "radio";
 
@@ -135,16 +140,13 @@ int write_nvs_lora(const char *key, int value)
     return 1;
 };
 
-void reset_lora()
+void radio_task(void *arg)
 {
-    lora_init();
-    // 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
-    int fr = 867500; // frequency kHz
-    int bw = 7;      // Номер полосы
-    int sf = 7;      // SpreadingFactor
-    int op = 17;     // OutputPower
+    int x;
 
     read_nvs_lora(&id, &fr, &bw, &sf, &op);
+
+    lora_init();
 
     lora_set_frequency(fr * 1000);
     lora_set_bandwidth_n(bw);
@@ -153,14 +155,7 @@ void reset_lora()
 
     lora_enable_crc();
     // lora_disable_crc();
-    lora_dump_registers();
-}
-
-void radio_task(void *arg)
-{
-    int x;
-
-    reset_lora();
+    //lora_dump_registers();
 
     gpio_pad_select_gpio(BTN_GPIO);
     gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
@@ -183,13 +178,15 @@ void radio_task(void *arg)
             /* Было получено оповещение. Проверка, какие биты установлены. */
             if ((ulNotifiedValue & RESET_BIT) != 0)
             {
-                reset_lora();
+                lora_set_frequency(fr * 1000);
+                lora_set_bandwidth_n(bw);
+                lora_set_spreading_factor(sf);
+                lora_set_tx_power(op);
             }
 
             if ((ulNotifiedValue & SLEEP_BIT) != 0)
             {
                 ESP_LOGI(TAG, "lora_sleep");
-                lora_idle();
                 lora_sleep();
                 vTaskDelay(10000 / portTICK_PERIOD_MS);
             }
@@ -214,10 +211,11 @@ void radio_task(void *arg)
             // vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
 
-        if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)50))
+        if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)1))
         {
             int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", id, bootCount, result.U, result.R);
             lora_send_packet((uint8_t *)buf, l);
+            xEventGroupSetBits(ready_event_group, BIT1);
         }
 
         if (gpio_get_level(BTN_GPIO) == 0)
@@ -232,7 +230,7 @@ void radio_task(void *arg)
             lora_send_packet((uint8_t *)buf, l);
             printf("Send:\"%s\"\n", buf);
 
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            vTaskDelay(1000 / portTICK_PERIOD_MS); 
 
             // xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
         }

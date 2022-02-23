@@ -334,51 +334,51 @@ void dual_adc(void *arg)
     adc1_config_channel_atten(chan_r[1].channel, ADC_ATTEN_11db);
 
     adc2_config_channel_atten(ADC2_CHANNEL_7, ADC_ATTEN_11db);
-/*
-    esp_adc_cal_characteristics_t *adc1_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    printf("ADC1: ");
-    esp_adc_cal_value_t val_type1 = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc1_chars);
-    // Check type of calibration value used to characterize ADC
-    if (val_type1 == ESP_ADC_CAL_VAL_EFUSE_VREF)
-    {
-        printf("eFuse Vref %d", adc1_chars->vref);
-    }
-    else if (val_type1 == ESP_ADC_CAL_VAL_EFUSE_TP)
-    {
-        printf("Two Point");
-    }
-    else
-    {
-        printf("Default");
-    }
-    printf("\n");
+    /*
+        esp_adc_cal_characteristics_t *adc1_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
+        printf("ADC1: ");
+        esp_adc_cal_value_t val_type1 = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc1_chars);
+        // Check type of calibration value used to characterize ADC
+        if (val_type1 == ESP_ADC_CAL_VAL_EFUSE_VREF)
+        {
+            printf("eFuse Vref %d", adc1_chars->vref);
+        }
+        else if (val_type1 == ESP_ADC_CAL_VAL_EFUSE_TP)
+        {
+            printf("Two Point");
+        }
+        else
+        {
+            printf("Default");
+        }
+        printf("\n");
 
-    esp_adc_cal_characteristics_t *adc2_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    printf("ADC2: ");
-    esp_adc_cal_value_t val_type2 = esp_adc_cal_characterize(ADC_UNIT_2, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc2_chars);
-    // Check type of calibration value used to characterize ADC
-    if (val_type2 == ESP_ADC_CAL_VAL_EFUSE_VREF)
-    {
-        printf("eFuse Vref %d", adc2_chars->vref);
-    }
-    else if (val_type2 == ESP_ADC_CAL_VAL_EFUSE_TP)
-    {
-        printf("Two Point");
-    }
-    else
-    {
-        printf("Default");
-    }
-    printf("\n");
+        esp_adc_cal_characteristics_t *adc2_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
+        printf("ADC2: ");
+        esp_adc_cal_value_t val_type2 = esp_adc_cal_characterize(ADC_UNIT_2, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, adc2_chars);
+        // Check type of calibration value used to characterize ADC
+        if (val_type2 == ESP_ADC_CAL_VAL_EFUSE_VREF)
+        {
+            printf("eFuse Vref %d", adc2_chars->vref);
+        }
+        else if (val_type2 == ESP_ADC_CAL_VAL_EFUSE_TP)
+        {
+            printf("Two Point");
+        }
+        else
+        {
+            printf("Default");
+        }
+        printf("\n");
 
-    esp_adc_cal_characteristics_t characteristics;
-    esp_adc_cal_value_t r = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, &characteristics);
-    ESP_LOGI(TAG, "esp_adc_cal_value_t %d ", r);
+        esp_adc_cal_characteristics_t characteristics;
+        esp_adc_cal_value_t r = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, V_REF, &characteristics);
+        ESP_LOGI(TAG, "esp_adc_cal_value_t %d ", r);
 
-    uint32_t voltage;
-    esp_adc_cal_get_voltage(ADC1_CHANNEL_5, &characteristics, &voltage);
-    ESP_LOGI(TAG, "%d mV", voltage);
-    */
+        uint32_t voltage;
+        esp_adc_cal_get_voltage(ADC1_CHANNEL_5, &characteristics, &voltage);
+        ESP_LOGI(TAG, "%d mV", voltage);
+        */
 
     // gpio_pad_select_gpio(LED_GPIO);
     // gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
@@ -444,6 +444,7 @@ void dual_adc(void *arg)
                 if (len > 0)
                 {
                     r = (bufferR[len - 1] + bufferR[len]) / 2;
+                    /*
                     //запоминаем предыдущее среднее
                     if (len % adc_avg_count == 0)
                     {
@@ -458,7 +459,7 @@ void dual_adc(void *arg)
                         };
                         pre_u = u;
                     }
-
+                    */
                     sum_u += bufferU[len];
                     sum_count++;
 
@@ -539,6 +540,8 @@ void dual_adc(void *arg)
 
             printf("pos_off: %d; last u:%d\n", pos_off, u);
             printf("N, U adc, R adc, R kOm\n");
+            vTaskDelay(5);
+            // if (cmd.cmd == 2)
             for (int i = 0; i < len; i++)
             {
                 // printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
@@ -549,6 +552,7 @@ void dual_adc(void *arg)
                 if (i % 1000 == 0)
                     vTaskDelay(1);
             }
+            xEventGroupSetBits(ready_event_group, BIT0);
         }
         else if (cmd.cmd == 1) // ON
         {
