@@ -86,6 +86,8 @@ void app_main()
     }
     ESP_ERROR_CHECK(err);
 
+	read_nvs_menu();
+
     uicmd_queue = xQueueCreate(2, sizeof(cmd_t));
     adc1_queue = xQueueCreate(2, sizeof(result_t));
 
@@ -99,17 +101,17 @@ void app_main()
 
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
-    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, tskIDLE_PRIORITY, &xHandleLora);
+    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
 
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, tskIDLE_PRIORITY + 1, NULL);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 6, NULL);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
-        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, tskIDLE_PRIORITY, &xHandleUI);
+        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
 
-        xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, tskIDLE_PRIORITY, NULL);
+        xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
 
-        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, tskIDLE_PRIORITY, NULL);
+        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
     }
     else
     {

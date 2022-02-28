@@ -85,3 +85,7 @@ int read_nvs_lora(int *id, int *fr, int *bw, int *sf, int *op);
 int write_nvs_lora(const char *key, int value);
 
 void go_sleep(void);
+
+int read_nvs_menu(void);
+
+void reset_sleep_timeout(void);

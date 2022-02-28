@@ -85,6 +85,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        reset_sleep_timeout();
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
     {
@@ -218,9 +219,10 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     const char *head = "<!DOCTYPE html><html><head>\
         <meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">\
         <meta name=\"viewport\" content=\"width=device-width\">\
-        <title>Lora setting</title></head><body><form><table>";
+        <title>Lora setting</title></head><body><form><fieldset>\
+        <legend>LoRa</legend><table>";
 
-    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" />\
+    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>\
     <p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n\
     <script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n\
     socket.onopen = function(){socket.send(\"open ws\");};\n\
@@ -395,6 +397,8 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     /* Send empty chunk to signal HTTP response completion */
     httpd_resp_sendstr_chunk(req, NULL);
 
+    reset_sleep_timeout();
+
     return ESP_OK;
 }
 
@@ -493,15 +497,30 @@ void wifi_task(void *arg)
 {
     char msg[256];
 
+    int wifi_on = 1;
+
     if (wifi_init_sta() == 0)
         wifi_init_softap();
 
     /* Start the server for the first time */
     start_webserver();
 
+    menu[5].val = 0;
+
     while (1)
     {
-        if (pdTRUE == xQueueReceive(ws_send_queue, msg, (portTickType)portMAX_DELAY))
+        if (menu[5].val == 0 && wifi_on == 1)
+        {
+            ESP_ERROR_CHECK(esp_wifi_stop());
+            wifi_on = 0;
+        }
+        else if (menu[5].val == 1 && wifi_on == 0)
+        {
+            ESP_ERROR_CHECK(esp_wifi_start());
+            wifi_on = 1;
+        }
+
+        if (pdTRUE == xQueueReceive(ws_send_queue, msg, (portTickType)1000 / portTICK_PERIOD_MS))
         {
             if (ws_fd > 0)
                 httpd_queue_work(ws_hd, ws_async_send, msg);

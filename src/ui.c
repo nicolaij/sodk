@@ -25,17 +25,54 @@ menu_t menu[] = {
 	{.name = "коэф. R", .val = 575, .min = 1, .max = 1000},
 	{.name = "смещ. U", .val = 22, .min = -500, .max = 500},
 	{.name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
+	{.name = "WiFi", .val = 0, .min = 0, .max = 1},
 	{.name = "Выход  ", .val = 0, .min = 0, .max = 0},
 };
 
 #define MENU_LINES sizeof(menu) / sizeof(menu[0])
-#define DISPLAY_LINES 4
 
 int menu_current_selection = -1;
 int menu_current_position = 0;
 int menu_current_display = 0;
 
 u8g2_t u8g2;
+
+#define TIMEOUT (60 * 1000 / 40)
+
+int timeout_counter = 0;
+
+int read_nvs_menu()
+{
+	// Open
+	nvs_handle_t my_handle;
+	esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE("storage", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+	}
+	else
+	{
+		for (int i = 0; i < MENU_LINES; i++)
+		{
+			err = nvs_get_i32(my_handle, menu[i].name, &menu[i].val);
+			switch (err)
+			{
+			case ESP_OK:
+				printf("Read \"%s\" = %d\n", menu[i].name, menu[i].val);
+				break;
+			case ESP_ERR_NVS_NOT_FOUND:
+				printf("The value  \"%s\" is not initialized yet!\n", menu[i].name);
+				break;
+			default:
+				printf("Error (%s) reading!\n", esp_err_to_name(err));
+			}
+		}
+
+		// Close
+		nvs_close(my_handle);
+	}
+	return err;
+}
 
 int limits(int val, int min, int max)
 {
@@ -85,8 +122,8 @@ void ui_task(void *arg)
 	u8g2_esp32_hal_init(u8g2_esp32_hal);
 
 	// initialize the u8g2 library
-	u8g2_Setup_sh1106_i2c_128x64_noname_f(
-		// u8g2_Setup_ssd1306_i2c_128x32_univision_f(
+	// u8g2_Setup_sh1106_i2c_128x64_noname_f(
+	u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,
@@ -124,45 +161,12 @@ void ui_task(void *arg)
 	int encoder_val = 0;
 	bool update = true;
 
-	// Open
-	nvs_handle_t my_handle;
-	esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
-	if (err != ESP_OK)
-	{
-		ESP_LOGE("storage", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
-	}
-	else
-	{
-		for (int i = 0; i < MENU_LINES; i++)
-		{
-			err = nvs_get_i32(my_handle, menu[i].name, &menu[i].val);
-			switch (err)
-			{
-			case ESP_OK:
-				printf("Read \"%s\" = %d\n", menu[i].name, menu[i].val);
-				break;
-			case ESP_ERR_NVS_NOT_FOUND:
-				printf("The value  \"%s\" is not initialized yet!\n", menu[i].name);
-				break;
-			default:
-				printf("Error (%s) reading!\n", esp_err_to_name(err));
-			}
-		}
-
-		// Close
-		nvs_close(my_handle);
-	}
-
 	//результат измерений
 	result_t result;
 
 	keys_events_t encoder_key = KEY_NONE;
 
 	int64_t t1 = 0; // Для определения Double Click
-
-#define TIMEOUT (60 * 1000 / 40)
-
-	int timeout_counter = 0;
 
 	BaseType_t xResult;
 	uint32_t ulNotifiedValue;
@@ -334,7 +338,7 @@ void ui_task(void *arg)
 				else //Сохраняем введенное значение
 				{
 					nvs_handle_t my_handle;
-					err = nvs_open("storage", NVS_READWRITE, &my_handle);
+					esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
 					if (err != ESP_OK)
 					{
 						printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
@@ -428,8 +432,8 @@ void ui_task(void *arg)
 				// u8g2_SetDrawColor(&u8g2, 1);
 				u8g2_SetDrawColor(&u8g2, 2);
 
-				if (menu_current_position - menu_current_display > (DISPLAY_LINES - 1))
-					menu_current_display = menu_current_position - (DISPLAY_LINES - 1);
+				if (menu_current_position - menu_current_display > (u8g2.height / 16 - 1))
+					menu_current_display = menu_current_position - (u8g2.height / 16 - 1);
 
 				if (menu_current_position < menu_current_display)
 					menu_current_display = menu_current_position;
@@ -439,7 +443,7 @@ void ui_task(void *arg)
 					u8g2_DrawBox(&u8g2, 0, 16 * (menu_current_position - menu_current_display), u8g2_GetDisplayWidth(&u8g2), 16);
 				}
 
-				for (int l = 0; l < DISPLAY_LINES; l++)
+				for (int l = 0; l < u8g2.height / 16; l++)
 				{
 					int p = menu_current_display + l;
 					if (p < MENU_LINES)
@@ -468,4 +472,9 @@ void ui_task(void *arg)
 			go_sleep();
 		}
 	}
+}
+
+void reset_sleep_timeout()
+{
+	timeout_counter = 0;
 }
