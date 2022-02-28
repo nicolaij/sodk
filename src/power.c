@@ -94,7 +94,7 @@ void dual_adc(void *arg)
 
     gpio_pad_select_gpio(POWER_PIN);
     gpio_set_direction(POWER_PIN, GPIO_MODE_OUTPUT);
-    gpio_set_level(POWER_PIN, 1);
+    gpio_set_level(POWER_PIN, 0);
 
     dac_output_enable(DAC_CHANNEL_1);
     dac_output_voltage(DAC_CHANNEL_1, 0);
@@ -114,6 +114,12 @@ void dual_adc(void *arg)
 
     while (1)
     {
+<<<<<<< HEAD
+=======
+        // int64_t t1 = esp_timer_get_time();
+        // int64_t timeout = 100000;
+
+>>>>>>> 09b87ad9d800432630805eb033404e8b4848746b
 
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
@@ -132,12 +138,12 @@ void dual_adc(void *arg)
             //int pre_u = 0;
             int sum_u = 0;
             int sum_count = 0;
-            gpio_set_level(POWER_PIN, 0);
+            gpio_set_level(POWER_PIN, 1);
             while (esp_timer_get_time() - t1 < (timeout * 2))
             {
                 if (esp_timer_get_time() - t1 > timeout || u > 4090 || r > 4090)
                 {
-                    gpio_set_level(POWER_PIN, 1);
+                    gpio_set_level(POWER_PIN, 0);
                     if (pos_off == 0)
                     {
                         pos_off = len;
@@ -161,7 +167,7 @@ void dual_adc(void *arg)
                         //считаем скорость роста (<1%)
                         if (u < (pre_u + (pre_u / 100)))
                         {
-                            gpio_set_level(POWER_PIN, 1);
+                            gpio_set_level(POWER_PIN, 0);
                             if (pos_off == 0)
                             {
                                 pos_off = len;
@@ -196,7 +202,7 @@ void dual_adc(void *arg)
                         break;
                 }
             };
-            gpio_set_level(POWER_PIN, 1);
+            gpio_set_level(POWER_PIN, 0);
 
             int sum_r = 0;
             int sum_res = 0;
@@ -266,7 +272,7 @@ void dual_adc(void *arg)
         }
         else if (cmd.cmd == 1) // ON
         {
-            gpio_set_level(POWER_PIN, 0);
+            gpio_set_level(POWER_PIN, 1);
             while (cmd.cmd == 1)
             {
                 len = 0;
@@ -309,7 +315,7 @@ void dual_adc(void *arg)
                     dac_output_voltage(DAC_CHANNEL_1, cmd.power);
                 }
             }
-            gpio_set_level(POWER_PIN, 1);
+            gpio_set_level(POWER_PIN, 0);
         }
 
         vTaskDelay(500 / portTICK_RATE_MS);
