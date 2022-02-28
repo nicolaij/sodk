@@ -114,12 +114,6 @@ void dual_adc(void *arg)
 
     while (1)
     {
-<<<<<<< HEAD
-=======
-        // int64_t t1 = esp_timer_get_time();
-        // int64_t timeout = 100000;
-
->>>>>>> 09b87ad9d800432630805eb033404e8b4848746b
 
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
