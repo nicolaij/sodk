@@ -24,7 +24,6 @@ void go_sleep(void)
 
     fflush(stdout);
     printf("Go sleep...");
-    fflush(stdout);
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
     esp_sleep_enable_timer_wakeup(60 * 1000000);
     esp_deep_sleep_start();

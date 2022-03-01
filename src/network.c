@@ -229,6 +229,7 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
                        "<legend>LoRa</legend><table>";
 
     const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>"
+                       "<p><a href=\"/d\">Буфер данных</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
                        "socket.onopen = function(){socket.send(\"open ws\");};\n"
@@ -415,19 +416,26 @@ static esp_err_t download_get_handler(httpd_req_t *req)
 
     int pos = 0;
     char line[32];
-    while (pos > sizeof(bufferR) / sizeof(bufferR[0]))
+    while (pos < sizeof(bufferR) / sizeof(bufferR[0]))
     {
 
         buf[0] = 0;
-
+        int str_len = 0;
         for (int i = 0; i < 20; i++)
         {
-            sprintf(line, "%4d, %4d, %4d, %4d\n", pos, bufferU[pos], bufferR[pos], kOm(bufferU[pos], bufferR[pos]));
-            strlcat(buf, line, sizeof(buf));
+            int l = sprintf(line, "%4d, %4d, %4d, %4d\n", pos, bufferU[pos], bufferR[pos], kOm(bufferU[pos], bufferR[pos]));
+            strlcpy(&buf[str_len], line, sizeof(buf));
+            str_len += l;
+            if (str_len >= sizeof(buf))
+            {
+                ESP_LOGE(TAG, "Buffer owerflow!!!");
+                return ESP_FAIL;
+            }
+            pos++;
         }
 
         /* Send the buffer contents as HTTP response chunk */
-        if (httpd_resp_send_chunk(req, buf, strlen(buf)) != ESP_OK)
+        if (httpd_resp_send_chunk(req, buf, str_len) != ESP_OK)
         {
             ESP_LOGE(TAG, "File sending failed!");
             /* Abort sending file */
@@ -437,6 +445,8 @@ static esp_err_t download_get_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
     }
+
+    reset_sleep_timeout();
 
     /* Respond with an empty chunk to signal HTTP response completion */
     httpd_resp_send_chunk(req, NULL, 0);
@@ -497,7 +507,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
 
 /* URI handler for getting uploaded files */
 static const httpd_uri_t file_download = {
-    .uri = "/d", // Match all URIs of type /path/to/file
+    .uri = "/d",
     .method = HTTP_GET,
     .handler = download_get_handler,
 };
