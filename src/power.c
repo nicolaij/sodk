@@ -18,9 +18,8 @@
 
 #define LED_GPIO 2
 
-int bufferR[10000];
-int bufferU[10000];
-int buffer3[10000];
+int bufferR[DATALEN];
+int bufferU[DATALEN];
 
 typedef struct
 {
@@ -111,6 +110,8 @@ void dual_adc(void *arg)
     cmd_t cmd;
     cmd.cmd = 0;
     cmd.power = 0;
+    int64_t t1 = esp_timer_get_time();
+    int64_t timeout = menu[0].val * 1000;
 
     while (1)
     {
@@ -119,8 +120,10 @@ void dual_adc(void *arg)
 
         dac_output_voltage(DAC_CHANNEL_1, cmd.power);
 
-        int64_t t1 = esp_timer_get_time();
-        int64_t timeout = menu[0].val * 1000;
+        t1 = esp_timer_get_time();
+        timeout = menu[0].val * 1000;
+
+        printf("Timeout: %lld, cmd:%d\n", timeout, cmd.cmd);
 
         int len = 0;
         int pos_off = 0;
@@ -129,13 +132,13 @@ void dual_adc(void *arg)
         {
             int u = 0;
             int r = 0;
-            //int pre_u = 0;
+            // int pre_u = 0;
             int sum_u = 0;
             int sum_count = 0;
             gpio_set_level(POWER_PIN, 1);
-            while (esp_timer_get_time() - t1 < (timeout * 2))
+            while ((esp_timer_get_time() - t1) < (timeout * 2))
             {
-                if (esp_timer_get_time() - t1 > timeout || u > 4090 || r > 4090)
+                if ((esp_timer_get_time() - t1) > timeout || u > 4090)
                 {
                     gpio_set_level(POWER_PIN, 0);
                     if (pos_off == 0)
@@ -149,7 +152,7 @@ void dual_adc(void *arg)
                 bufferR[len] = adc1_get_raw(chan_r[0].channel);
                 adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
 
-                const int adc_avg_count = 10;
+                const int adc_avg_count = 100;
 
                 if (len > 0)
                 {
@@ -179,21 +182,28 @@ void dual_adc(void *arg)
                         sum_count--;
                         u = sum_u / adc_avg_count;
                     }
-                    else
-                    {
-                        u = sum_u / sum_count;
-                    }
                 }
 
                 len++;
                 if (len >= sizeof(bufferR) / sizeof(bufferR[0]))
+                {
+                    ESP_LOGE("power", "Buffer full!\n");
                     break;
+                }
 
                 //если низкие напряжения - то выходим
                 if (pos_off > 0)
                 {
-                    if (r < 10 || u < 10)
+                    if (r < 10)
+                    {
+                        ESP_LOGE("power", "Big resist! %d\n", pos_off);
                         break;
+                    }
+                    if (u < 10)
+                    {
+                        ESP_LOGE("power", "Low voltage! %d\n", pos_off);
+                        break;
+                    }
                 }
             };
             gpio_set_level(POWER_PIN, 0);
@@ -249,18 +259,19 @@ void dual_adc(void *arg)
             xQueueSend(send_queue, (void *)&result, (portTickType)0);
 
             printf("pos_off: %d; last u:%d\n", pos_off, u);
-            printf("N, U adc, R adc, R kOm\n");
-            vTaskDelay(5);
-            // if (cmd.cmd == 2)
-            for (int i = 0; i < len; i++)
+            if (cmd.cmd == 2)
             {
-                // printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
-                // printf("%4d, %4d, %4d\n", i, volt(buffer2[i]), kOm(buffer2[i], buffer1[i]));
+                printf("N, U adc, R adc, R kOm\n");
+                for (int i = 0; i < len; i++)
+                {
+                    // printf("%4d: %4d (%4d V), %4d (%4d kOm)\n", i, buffer1[i], volt(buffer1[i]), buffer2[i], kOm(buffer1[i], buffer2[i]));
+                    // printf("%4d, %4d, %4d\n", i, volt(buffer2[i]), kOm(buffer2[i], buffer1[i]));
 
-                printf("%4d, %4d, %4d, %4d\n", i, bufferU[i], bufferR[i], kOm(bufferU[i], bufferR[i]));
+                    printf("%4d, %4d, %4d, %4d\n", i, bufferU[i], bufferR[i], kOm(bufferU[i], bufferR[i]));
 
-                if (i % 1000 == 0)
-                    vTaskDelay(1);
+                    if (i % 1000 == 0)
+                        vTaskDelay(1);
+                }
             }
             xEventGroupSetBits(ready_event_group, BIT0);
         }

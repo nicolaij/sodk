@@ -22,6 +22,9 @@
 
 extern menu_t menu[];
 
+extern int bufferR[DATALEN];
+extern int bufferU[DATALEN];
+
 /* The examples use WiFi configuration that you can set via project configuration menu
 
    If you'd rather not, just change the below entries to strings with
@@ -52,6 +55,9 @@ static const char *TAG = "wifi";
 static const char *TAGH = "httpd";
 
 static int s_retry_num = 0;
+
+char buf[512];
+size_t buf_len;
 
 extern int fr;
 extern int bw;
@@ -216,19 +222,19 @@ int wifi_init_sta(void)
 /* An HTTP GET handler */
 static esp_err_t lora_set_handler(httpd_req_t *req)
 {
-    const char *head = "<!DOCTYPE html><html><head>\
-        <meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">\
-        <meta name=\"viewport\" content=\"width=device-width\">\
-        <title>Lora setting</title></head><body><form><fieldset>\
-        <legend>LoRa</legend><table>";
+    const char *head = "<!DOCTYPE html><html><head>"
+                       "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
+                       "<meta name=\"viewport\" content=\"width=device-width\">"
+                       "<title>Lora setting</title></head><body><form><fieldset>"
+                       "<legend>LoRa</legend><table>";
 
-    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>\
-    <p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n\
-    <script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n\
-    socket.onopen = function(){socket.send(\"open ws\");};\n\
-    socket.onmessage = function(e){document.getElementById(\"text\").value += e.data + \"\\n\";}\
-	</script>\
-    </body></html>";
+    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>"
+                       "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
+                       "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
+                       "socket.onopen = function(){socket.send(\"open ws\");};\n"
+                       "socket.onmessage = function(e){document.getElementById(\"text\").value += e.data + \"\\n\";}"
+                       "</script>"
+                       "</body></html>";
 
     const char *lora_set_id[] = {
         "<tr><td><label for=\"id\">ID transceiver:</label></td><td><input type=\"text\" name=\"id\" id=\"id\" size=\"7\" value=\"",
@@ -262,8 +268,6 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
         "<tr><td><label for=\"op\">Output Power(2-17):</label></td><td><input type=\"text\" name=\"op\" id=\"op\" size=\"7\" value=\"",
         "\" /></td></tr>"};
 
-    char buf[512];
-    size_t buf_len;
     char param[32];
 
     /* Read URL query string length and allocate memory for length + 1,
@@ -402,6 +406,43 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+/* Handler to download a file kept on the server */
+static esp_err_t download_get_handler(httpd_req_t *req)
+{
+    const char *filename = "data.txt";
+
+    httpd_resp_set_type(req, "text/plain");
+
+    int pos = 0;
+    char line[32];
+    while (pos > sizeof(bufferR) / sizeof(bufferR[0]))
+    {
+
+        buf[0] = 0;
+
+        for (int i = 0; i < 20; i++)
+        {
+            sprintf(line, "%4d, %4d, %4d, %4d\n", pos, bufferU[pos], bufferR[pos], kOm(bufferU[pos], bufferR[pos]));
+            strlcat(buf, line, sizeof(buf));
+        }
+
+        /* Send the buffer contents as HTTP response chunk */
+        if (httpd_resp_send_chunk(req, buf, strlen(buf)) != ESP_OK)
+        {
+            ESP_LOGE(TAG, "File sending failed!");
+            /* Abort sending file */
+            httpd_resp_sendstr_chunk(req, NULL);
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+            return ESP_FAIL;
+        }
+    }
+
+    /* Respond with an empty chunk to signal HTTP response completion */
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
 httpd_handle_t ws_hd;
 int ws_fd = 0;
 
@@ -423,10 +464,10 @@ static void ws_async_send(char *msg)
 
 static esp_err_t ws_handler(httpd_req_t *req)
 {
-    uint8_t buf[128] = {0};
+    uint8_t bf[128] = {0};
     httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.payload = buf;
+    ws_pkt.payload = bf;
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 128);
     if (ret != ESP_OK)
@@ -453,6 +494,13 @@ static esp_err_t ws_handler(httpd_req_t *req)
         */
     return ret;
 }
+
+/* URI handler for getting uploaded files */
+static const httpd_uri_t file_download = {
+    .uri = "/d", // Match all URIs of type /path/to/file
+    .method = HTTP_GET,
+    .handler = download_get_handler,
+};
 
 static const httpd_uri_t lora_set = {
     .uri = PAGE_LORA_SET,
@@ -483,6 +531,7 @@ static httpd_handle_t start_webserver(void)
         ESP_LOGI(TAG, "Registering URI handlers");
         httpd_register_uri_handler(server, &lora_set);
         httpd_register_uri_handler(server, &ws);
+        httpd_register_uri_handler(server, &file_download);
 
         ws_fd = 0;
 
@@ -505,7 +554,7 @@ void wifi_task(void *arg)
     /* Start the server for the first time */
     start_webserver();
 
-    menu[5].val = 0;
+    menu[5].val = 1;
 
     while (1)
     {

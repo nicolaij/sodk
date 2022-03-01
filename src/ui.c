@@ -122,8 +122,8 @@ void ui_task(void *arg)
 	u8g2_esp32_hal_init(u8g2_esp32_hal);
 
 	// initialize the u8g2 library
-	// u8g2_Setup_sh1106_i2c_128x64_noname_f(
-	u8g2_Setup_ssd1306_i2c_128x32_univision_f(
+	u8g2_Setup_sh1106_i2c_128x64_noname_f(
+	//u8g2_Setup_ssd1306_i2c_128x32_univision_f(
 		&u8g2,
 		U8G2_R0,
 		u8g2_esp32_i2c_byte_cb,

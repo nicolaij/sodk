@@ -8,6 +8,10 @@
 #include "freertos/semphr.h"
 #include "freertos/event_groups.h"
 
+#include <esp_log.h>
+
+#define DATALEN 15000
+
 #define POWER_PIN 32
 
 #define I2C_MASTER_NUM 0          //  I2C port number for master dev

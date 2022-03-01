@@ -6,8 +6,6 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
-#include <esp_log.h>
-
 #include <main.h>
 
 #define BTN_GPIO 0
