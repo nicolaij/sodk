@@ -29,20 +29,22 @@ def readtofile():
     filename = strftime("%y-%m-%d %H.%M.%S.csv", gmtime())
     while True:
         ser_bytes = ser.readline()
-        print(ser_bytes)
+        str = ser_bytes.decode("latin-1", "ignore").strip()
+        print(str)
         with open(filename, "a") as f:
             writer = csv.writer(f, delimiter=",")
-            writer.writerow([time.time(), ser_bytes.decode("utf-8", "ignore")])
+            writer.writerow([time.time(), str])
 
 
 if __name__ == '__main__':
-	while True:
-		try:
-			ser = serial.Serial(port=PORTNAME)
-			print("Serial port - OK")
-			readtofile()
-		except:
-			ser.close()
-			print("Serial port - BUSY")
+    while True:
+        try:
+            ser = serial.Serial(port=PORTNAME)
+            print("Serial port - OK")
+            readtofile()
+        except Exception as e:
+            print(e)
+            ser.close()
+            print("Serial port - BUSY")
 
-		time.sleep(1)
+        time.sleep(1)
