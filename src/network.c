@@ -410,15 +410,20 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 /* Handler to download a file kept on the server */
 static esp_err_t download_get_handler(httpd_req_t *req)
 {
-    const char *filename = "data.txt";
-
-    httpd_resp_set_type(req, "text/plain");
-
     int pos = 0;
     char line[32];
+    char header[96] = "attachment; filename=\"";
+
+    cur_time(line);
+
+    strlcat(header, line, sizeof(header));
+    strlcat(header, ".txt\"", sizeof(header));
+
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_set_hdr(req, "Content-Disposition", header);
+
     while (pos < sizeof(bufferR) / sizeof(bufferR[0]))
     {
-
         buf[0] = 0;
         int str_len = 0;
         for (int i = 0; i < 20; i++)

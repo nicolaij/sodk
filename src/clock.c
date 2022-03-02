@@ -202,15 +202,15 @@ void clock_task(void *arg)
 
     // init i2c DS3231
     // Power on DS3231
-    //gpio_pad_select_gpio(DS3231_POWER_PIN);
-    //gpio_set_direction(DS3231_POWER_PIN, GPIO_MODE_OUTPUT);
-    //gpio_set_level(DS3231_POWER_PIN, 1);
+    // gpio_pad_select_gpio(DS3231_POWER_PIN);
+    // gpio_set_direction(DS3231_POWER_PIN, GPIO_MODE_OUTPUT);
+    // gpio_set_level(DS3231_POWER_PIN, 1);
 
     vTaskDelay(500 / portTICK_PERIOD_MS);
 
     xSemaphoreTake(i2c_mux, portMAX_DELAY);
 
-    //ESP_ERROR_CHECK(i2c_master_init());
+    // ESP_ERROR_CHECK(i2c_master_init());
     if (ESP_OK == i2c_master_clock_read(I2C_MASTER_NUM, buf, 0x12))
     {
         ESP_LOGI("DS3231", "DS3231 read OK. Temperature %.2f°C", (float)((int16_t)(buf[DS3231_TEMPERATUREREG] << 8 | buf[DS3231_TEMPERATUREREG + 1]) / 64) * 0.25f);
@@ -270,4 +270,17 @@ static void initialize_sntp(void)
     sntp_setservername(1, "time.windows.com");
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     sntp_init();
+}
+
+//Текущая дата-время в формате
+void cur_time(char *buf)
+{
+    time_t now;
+    struct tm timeinfo;
+
+    time(&now);
+
+    localtime_r(&now, &timeinfo);
+
+    strftime((char *)buf, 32, "%y-%m-%d %H.%M", &timeinfo);
 }

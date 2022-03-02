@@ -93,3 +93,5 @@ void go_sleep(void);
 int read_nvs_menu(void);
 
 void reset_sleep_timeout(void);
+
+void cur_time(char *buf);

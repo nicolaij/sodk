@@ -128,6 +128,10 @@ void dual_adc(void *arg)
         int len = 0;
         int pos_off = 0;
 
+        int64_t offset_off = 8000;
+        int64_t time_off = 0;
+        int pos_off_cmd = 0;
+
         if (cmd.cmd >= 2) // Pulse
         {
             int u = 0;
@@ -141,11 +145,19 @@ void dual_adc(void *arg)
                 if ((esp_timer_get_time() - t1) > timeout || u > 4090)
                 {
                     gpio_set_level(POWER_PIN, 0);
-                    if (pos_off == 0)
+                    if (pos_off_cmd == 0)
                     {
-                        pos_off = len;
+                        pos_off_cmd = len;
+                        time_off = esp_timer_get_time();
                     }
                 }
+                
+                if (pos_off_cmd > 0)
+                    if (pos_off == 0)
+                        if ((esp_timer_get_time() - time_off) > offset_off)
+                        {
+                            pos_off = len;
+                        }
 
                 // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
                 // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_7);
