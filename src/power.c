@@ -11,7 +11,10 @@
 #include "esp_adc_cal.h"
 #include "esp_rom_sys.h"
 
+#if CONFIG_IDF_TARGET_ESP32
 #include <driver/dac.h>
+#endif
+
 #include "driver/ledc.h"
 
 #include "main.h"
@@ -28,10 +31,16 @@ typedef struct
     int max;
 } measure_t;
 
+#if CONFIG_IDF_TARGET_ESP32
 measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_5, .k = 90, .max = 5000},
     {.channel = ADC1_CHANNEL_7, .k = 1750, .max = 20000},
 };
+#elif CONFIG_IDF_TARGET_ESP32C3
+measure_t chan_r[] = {
+    {.channel = ADC1_CHANNEL_1, .k = 90, .max = 5000},
+};
+#endif
 
 extern menu_t menu[];
 
@@ -52,57 +61,23 @@ void disp_buf(uint8_t *buf, int length)
     printf("======\n");
 }
 
-static void check_efuse(void)
-{
-#if CONFIG_IDF_TARGET_ESP32
-    // Check if TP is burned into eFuse
-    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK)
-    {
-        printf("eFuse Two Point: Supported\n");
-    }
-    else
-    {
-        printf("eFuse Two Point: NOT supported\n");
-    }
-    // Check Vref is burned into eFuse
-    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK)
-    {
-        printf("eFuse Vref: Supported\n");
-    }
-    else
-    {
-        printf("eFuse Vref: NOT supported\n");
-    }
-#elif CONFIG_IDF_TARGET_ESP32S2
-    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK)
-    {
-        printf("eFuse Two Point: Supported\n");
-    }
-    else
-    {
-        printf("Cannot retrieve eFuse Two Point calibration values. Default calibration values will be used.\n");
-    }
-#else
-#error "This example is configured for ESP32/ESP32S2."
-#endif
-}
-
 void dual_adc(void *arg)
 {
-    check_efuse();
 
     gpio_pad_select_gpio(POWER_PIN);
     gpio_set_direction(POWER_PIN, GPIO_MODE_OUTPUT);
     gpio_set_level(POWER_PIN, 0);
 
-    dac_output_enable(DAC_CHANNEL_1);
-    dac_output_voltage(DAC_CHANNEL_1, 0);
-
     adc1_config_width(ADC_WIDTH_12Bit);
     adc1_config_channel_atten(chan_r[0].channel, ADC_ATTEN_11db);
     adc1_config_channel_atten(chan_r[1].channel, ADC_ATTEN_11db);
 
+#if CONFIG_IDF_TARGET_ESP32
+    dac_output_enable(DAC_CHANNEL_1);
+    dac_output_voltage(DAC_CHANNEL_1, 0);
+
     adc2_config_channel_atten(ADC2_CHANNEL_7, ADC_ATTEN_11db);
+#endif
 
     //результат измерений
     result_t result;
@@ -117,9 +92,9 @@ void dual_adc(void *arg)
     {
 
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
-
+#if CONFIG_IDF_TARGET_ESP32
         dac_output_voltage(DAC_CHANNEL_1, cmd.power);
-
+#endif
         t1 = esp_timer_get_time();
         timeout = menu[0].val * 1000;
 
@@ -162,7 +137,7 @@ void dual_adc(void *arg)
                 // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
                 // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_7);
                 bufferR[len] = adc1_get_raw(chan_r[0].channel);
-                adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
+                adc2_get_raw(chan_r[0].channel, ADC_WIDTH_BIT_12, &bufferU[len]);
 
                 const int adc_avg_count = 100;
 
@@ -298,7 +273,7 @@ void dual_adc(void *arg)
                 {
                     // adc_read[0] = adc1_get_raw(ADC1_CHANNEL_5);
                     bufferR[len] = adc1_get_raw(chan_r[0].channel);
-                    adc2_get_raw(ADC2_CHANNEL_7, ADC_WIDTH_BIT_12, &bufferU[len]);
+                    adc2_get_raw(chan_r[0].channel, ADC_WIDTH_BIT_12, &bufferU[len]);
                     len++;
                     if (len >= sizeof(bufferR) / sizeof(bufferR[0]))
                         break;
@@ -329,7 +304,9 @@ void dual_adc(void *arg)
 
                 if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, (1000 - menu[0].val) / portTICK_PERIOD_MS))
                 {
+#if CONFIG_IDF_TARGET_ESP32                    
                     dac_output_voltage(DAC_CHANNEL_1, cmd.power);
+#endif                    
                 }
             }
             gpio_set_level(POWER_PIN, 0);

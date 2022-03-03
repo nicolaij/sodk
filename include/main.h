@@ -12,8 +12,6 @@
 
 #define DATALEN 15000
 
-#define POWER_PIN 32
-
 #define I2C_MASTER_NUM 0          //  I2C port number for master dev
 #define I2C_MASTER_FREQ_HZ 400000 //  I2C master clock frequency
 #define PIN_SDA 22
@@ -25,6 +23,18 @@
 
 #define RESET_BIT 0x1
 #define SLEEP_BIT 0x2
+
+#if CONFIG_IDF_TARGET_ESP32
+
+#define POWER_PIN 32
+#define BTN_GPIO 0
+
+#elif CONFIG_IDF_TARGET_ESP32C3
+
+#define POWER_PIN 18
+#define BTN_GPIO 9
+
+#endif
 
 typedef struct
 {

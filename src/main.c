@@ -24,7 +24,9 @@ void go_sleep(void)
 
     fflush(stdout);
     printf("Go sleep...");
+#if CONFIG_IDF_TARGET_ESP32
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
+#endif
     esp_sleep_enable_timer_wakeup(60 * 1000000);
     esp_deep_sleep_start();
 }
@@ -101,7 +103,7 @@ void app_main()
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
-
+#if CONFIG_IDF_TARGET_ESP32
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 6, NULL);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
@@ -129,7 +131,7 @@ void app_main()
         //засыпаем...
         go_sleep();
     }
-
+#endif
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);

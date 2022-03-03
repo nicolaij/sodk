@@ -8,7 +8,9 @@
 #include "ui.h"
 #include "main.h"
 
+#if CONFIG_IDF_TARGET_ESP32
 #include "rotary_encoder.h"
+#endif
 
 #include <U8g2.h>
 
@@ -97,6 +99,7 @@ void ui_task(void *arg)
 	// Rotary encoder underlying device is represented by a PCNT unit in this example
 	uint32_t pcnt_unit = 0;
 
+#if CONFIG_IDF_TARGET_ESP32
 	// Create rotary encoder instance
 	rotary_encoder_config_t config = ROTARY_ENCODER_DEFAULT_CONFIG((rotary_encoder_dev_t)pcnt_unit, PIN_ENCODER_A, PIN_ENCODER_B);
 	rotary_encoder_t *encoder = NULL;
@@ -107,6 +110,7 @@ void ui_task(void *arg)
 
 	// Start encoder
 	ESP_ERROR_CHECK(encoder->start(encoder));
+#endif
 
 	int enc_btn = 0;
 	gpio_pad_select_gpio(PIN_ENCODER_BTN);
@@ -238,7 +242,7 @@ void ui_task(void *arg)
 
 			enc_btn = 0;
 		}
-
+#if CONFIG_IDF_TARGET_ESP32
 		if (encoder->get_counter_value(encoder) != encoder_val)
 		{
 			encoder_val = encoder->get_counter_value(encoder);
@@ -266,7 +270,7 @@ void ui_task(void *arg)
 			update = true;
 			timeout_counter = 0;
 		}
-
+#endif
 		if (screen == 0)
 		{
 			switch (encoder_key)

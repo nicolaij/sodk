@@ -11,11 +11,7 @@
    pins
 */
 
-#define CONFIG_RST_GPIO 2
-#define CONFIG_CS_GPIO 5
-#define CONFIG_MISO_GPIO 17
-#define CONFIG_MOSI_GPIO 16
-#define CONFIG_SCK_GPIO 15
+#include "lora.h"
 
 /*
  * Register definitions
@@ -346,8 +342,11 @@ int lora_init(void)
        .quadwp_io_num = -1,
        .quadhd_io_num = -1,
        .max_transfer_sz = 0};
-
+#if CONFIG_IDF_TARGET_ESP32
    ret = spi_bus_initialize(VSPI_HOST, &bus, 0);
+#elif CONFIG_IDF_TARGET_ESP32C3
+   ret = spi_bus_initialize(SPI2_HOST, &bus, 0);
+#endif   
    assert(ret == ESP_OK);
 
    spi_device_interface_config_t dev = {
@@ -357,7 +356,11 @@ int lora_init(void)
        .queue_size = 1,
        .flags = 0,
        .pre_cb = NULL};
+#if CONFIG_IDF_TARGET_ESP32
    ret = spi_bus_add_device(VSPI_HOST, &dev, &__spi);
+#elif CONFIG_IDF_TARGET_ESP32C3
+   ret = spi_bus_add_device(SPI2_HOST, &dev, &__spi);
+#endif
    assert(ret == ESP_OK);
 
    /*

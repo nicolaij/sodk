@@ -8,8 +8,6 @@
 
 #include <main.h>
 
-#define BTN_GPIO 0
-
 uint8_t buf[256];
 
 // 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
@@ -150,7 +148,7 @@ void radio_task(void *arg)
     lora_set_tx_power(op);
 
     lora_enable_crc();
-    // lora_disable_crc();
+    //lora_disable_crc();
     //lora_dump_registers();
 
     gpio_pad_select_gpio(BTN_GPIO);
@@ -194,7 +192,7 @@ void radio_task(void *arg)
             x = lora_receive_packet(buf, sizeof(buf));
             buf[x] = 0;
             int rssi = lora_packet_rssi();
-            printf("Received: \"%s\" Len: %d, RSSI: %d\n", buf, x, rssi);
+            printf("{\"Received\": \"%s\" \"Len\": %d, \"RSSI\": %d}\n", buf, x, rssi);
             if (strlen((char *)buf) < 200)
             {
                 sprintf((char *)&buf[x], " - RSSI: %d", rssi);
