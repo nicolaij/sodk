@@ -1,8 +1,13 @@
+import csv
 import time
-from time import gmtime, strftime
+from time import localtime, strftime
+
 import serial
 import serial.tools.list_ports
-import csv
+
+import json
+
+x = '{ "id":10, "U":500, "R":1501, "rssi":-101}'
 
 PORTNAME = "COM7"
 
@@ -17,34 +22,37 @@ for port, desc, hwid in (ports):
 #    print(port.device)
 
 
-def portIsUsable(portName):
-    try:
-        ser = serial.Serial(port=portName)
-        return True
-    except:
-        return False
-
-
 def readtofile():
-    filename = strftime("%y-%m-%d %H.%M.%S.csv", gmtime())
     while True:
         ser_bytes = ser.readline()
-        str = ser_bytes.decode("latin-1", "ignore").strip()
-        print(str)
-        with open(filename, "a") as f:
-            writer = csv.writer(f, delimiter=",")
-            writer.writerow([time.time(), str])
-
+        print(ser_bytes.hex())
+        str = ser_bytes.decode(encoding="latin-1", errors="ignore").strip()
+        print("\"" + str + "\"")
+        js = json.loads(x)
+        if js["id"] > 1 and js["id"] < 127:
+            filename = strftime("%y-%m-%d %H.%M.%S.csv", localtime())
+            f = open(filename, "w", newline='')
+            f.write("ASCII\n,\n")
+            f.write("SODK,1,Server Local,1,1\n")
+            cur_time = time.strftime("%Y/%m/%d,%H:%M:%S.000")
+            f.write("Sodk_ZRTS_%dU,0,%s,1,%d,192\n" % (js["id"], cur_time, js["U"]))
+            f.write("Sodk_ZRTS_%dR,0,%s,1,%d,192\n" % (js["id"], cur_time, js["R"]))
+            f.write("Sodk_ZRTS_%drssi,0,%s,1,%d,192\n" % (js["id"], cur_time, js["rssi"]))
+            f.close()
+            #writer = csv.writer(f, delimiter=",")
+            #writer.writerow(["Sodk_ZRTS_" + js["id"] + "R","0",time.strftime("%Y/%m/%d,%H:%M:%S.000"), str, js["U"], js["R"]])
+            #writer.writerow([time.strftime("%Y/%m/%d,%H:%M:%S.000"), str, js["id"], js["U"], js["R"]])
 
 if __name__ == '__main__':
     while True:
         try:
-            ser = serial.Serial(port=PORTNAME)
-            print("Serial port - OK")
+            ser = serial.Serial(port=PORTNAME, baudrate=115200,
+                                parity=serial.PARITY_NONE)
+            print("Open serial port \"" + ser.name + "\" - OK")
             readtofile()
         except Exception as e:
             print(e)
-            ser.close()
             print("Serial port - BUSY")
+            ser.close()
 
         time.sleep(1)
