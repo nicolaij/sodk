@@ -148,12 +148,14 @@ void radio_task(void *arg)
     lora_set_tx_power(op);
 
     lora_enable_crc();
-    //lora_disable_crc();
-    //lora_dump_registers();
+    // lora_disable_crc();
+    // lora_dump_registers();
 
     gpio_pad_select_gpio(BTN_GPIO);
     gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
     gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
+
+    ESP_LOGI(TAG, "lora start");
 
     //результат измерений
     result_t result;
@@ -192,11 +194,21 @@ void radio_task(void *arg)
             x = lora_receive_packet(buf, sizeof(buf));
             buf[x] = 0;
             int rssi = lora_packet_rssi();
-            printf("{\"Received\": \"%s\" \"Len\": %d, \"RSSI\": %d}\n", buf, x, rssi);
-            if (strlen((char *)buf) < 200)
+            //printf("Received: \"%s\" Len: %d RSSI: %d\n", buf, x, rssi);
+            if (x > 10 && x < 200)
             {
-                sprintf((char *)&buf[x], " - RSSI: %d", rssi);
+                if (buf[x - 1] == '}')
+                {
+                    sprintf((char *)&buf[x - 1], ",\"rssi\":%d}", rssi);
+                }
+                else
+                {
+                    sprintf((char *)&buf[x], " - RSSI: %d", rssi);
+                }
+                printf("%s\n",buf);
+                //fflush(stdout);
             }
+
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             lora_receive();
             // lora_idle();
@@ -224,7 +236,7 @@ void radio_task(void *arg)
             lora_send_packet((uint8_t *)buf, l);
             printf("Send:\"%s\"\n", buf);
 
-            vTaskDelay(1000 / portTICK_PERIOD_MS); 
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
 
             // xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
         }

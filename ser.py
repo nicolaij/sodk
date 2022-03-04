@@ -7,7 +7,9 @@ import serial.tools.list_ports
 
 import json
 
-x = '{ "id":10, "U":500, "R":1501, "rssi":-101}'
+#x = '{ "id":10, "U":500, "R":1501, "rssi":-101}'
+
+DIR = "\\\\database-zrts\\DataImport\\"
 
 PORTNAME = "COM7"
 
@@ -25,23 +27,26 @@ for port, desc, hwid in (ports):
 def readtofile():
     while True:
         ser_bytes = ser.readline()
-        print(ser_bytes.hex())
+        # print(ser_bytes.hex())
         str = ser_bytes.decode(encoding="latin-1", errors="ignore").strip()
         print("\"" + str + "\"")
-        js = json.loads(x)
-        if js["id"] > 1 and js["id"] < 127:
-            filename = strftime("%y-%m-%d %H.%M.%S.csv", localtime())
-            f = open(filename, "w", newline='')
-            f.write("ASCII\n,\n")
-            f.write("SODK,1,Server Local,1,1\n")
-            cur_time = time.strftime("%Y/%m/%d,%H:%M:%S.000")
-            f.write("Sodk_ZRTS_%dU,0,%s,1,%d,192\n" % (js["id"], cur_time, js["U"]))
-            f.write("Sodk_ZRTS_%dR,0,%s,1,%d,192\n" % (js["id"], cur_time, js["R"]))
-            f.write("Sodk_ZRTS_%drssi,0,%s,1,%d,192\n" % (js["id"], cur_time, js["rssi"]))
-            f.close()
-            #writer = csv.writer(f, delimiter=",")
-            #writer.writerow(["Sodk_ZRTS_" + js["id"] + "R","0",time.strftime("%Y/%m/%d,%H:%M:%S.000"), str, js["U"], js["R"]])
-            #writer.writerow([time.strftime("%Y/%m/%d,%H:%M:%S.000"), str, js["id"], js["U"], js["R"]])
+        if (str[0] == "{"):
+            js = json.loads(str)
+            if js["id"] > 1 and js["id"] < 127:
+                filename = strftime("%y-%m-%d %H.%M.%S.csv", localtime())
+                #f = open(DIR + filename, "w", newline='')
+                f = open(DIR + filename, "w")
+                f.write("ASCII\n,\n")
+                f.write("SODK,1,Server Local,1,1\n")
+                cur_time = time.strftime("%Y/%m/%d,%H:%M:%S.000")
+                f.write("Sodk_ZRTS_%dU,0,%s,0,%d,192\n" %
+                        (js["id"], cur_time, js["U"]))
+                f.write("Sodk_ZRTS_%dR,0,%s,0,%d,192\n" %
+                        (js["id"], cur_time, js["R"]))
+                f.write("Sodk_ZRTS_%drssi,0,%s,0,%d,192\n" %
+                        (js["id"], cur_time, js["rssi"]))
+                f.close()
+
 
 if __name__ == '__main__':
     while True:
@@ -49,10 +54,11 @@ if __name__ == '__main__':
             ser = serial.Serial(port=PORTNAME, baudrate=115200,
                                 parity=serial.PARITY_NONE)
             print("Open serial port \"" + ser.name + "\" - OK")
+            #time.sleep(1)
             readtofile()
         except Exception as e:
+            print("Error:")
             print(e)
-            print("Serial port - BUSY")
             ser.close()
 
         time.sleep(1)

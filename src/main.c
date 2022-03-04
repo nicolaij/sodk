@@ -8,6 +8,8 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+#define RECEIVER_ONLY 1
+
 RTC_DATA_ATTR int bootCount = 0;
 
 TaskHandle_t xHandleLora = NULL;
@@ -87,7 +89,7 @@ void app_main()
     }
     ESP_ERROR_CHECK(err);
 
-	read_nvs_menu();
+    read_nvs_menu();
 
     uicmd_queue = xQueueCreate(2, sizeof(cmd_t));
     adc1_queue = xQueueCreate(2, sizeof(result_t));
@@ -104,6 +106,7 @@ void app_main()
 
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
 #if CONFIG_IDF_TARGET_ESP32
+#ifndef RECEIVER_ONLY
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 6, NULL);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
@@ -111,8 +114,9 @@ void app_main()
         xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
 
         xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
-
+#endif
         xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+#ifndef RECEIVER_ONLY
     }
     else
     {
@@ -131,6 +135,7 @@ void app_main()
         //засыпаем...
         go_sleep();
     }
+#endif
 #endif
     while (1)
     {
