@@ -138,6 +138,10 @@ void radio_task(void *arg)
 {
     int x;
 
+    gpio_pad_select_gpio(BTN_GPIO);
+    gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
+
     read_nvs_lora(&id, &fr, &bw, &sf, &op);
 
     lora_init();
@@ -150,10 +154,6 @@ void radio_task(void *arg)
     lora_enable_crc();
     // lora_disable_crc();
     // lora_dump_registers();
-
-    gpio_pad_select_gpio(BTN_GPIO);
-    gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
 
     ESP_LOGI(TAG, "lora start");
 
@@ -224,15 +224,14 @@ void radio_task(void *arg)
             xEventGroupSetBits(ready_event_group, BIT1);
         }
 
-        if (gpio_get_level(BTN_GPIO) == 0)
+        if (gpio_get_level(BTN_GPIO) == 1)
         {
             time_t now;
             struct tm timeinfo;
-            int l;
 
             time(&now);
             localtime_r(&now, &timeinfo);
-            l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
+            size_t l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
             lora_send_packet((uint8_t *)buf, l);
             printf("Send:\"%s\"\n", buf);
 

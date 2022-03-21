@@ -99,9 +99,9 @@ void dual_adc(void *arg)
             ret = adc_digi_read_bytes((uint8_t *)bufferADC, 256, &ret_num, ADC_MAX_DELAY);
             printf("adc_digi_read_bytes: %d\n", ret_num);
             adc_digi_output_data_t *p = (void *)bufferADC;
-            for (int i = 0; i < ret_num; i += 4)
+            for (int i = 0; i < ret_num + 8; i += 4)
             {
-                printf("ADC%d_CH%d: %x\n", p->type2.unit + 1, p->type2.channel, p->type2.data);
+                printf("ADC%d_CH%d: %d\n", p->type2.unit + 1, p->type2.channel, p->type2.data);
                 p++;
             }
             // If you see task WDT in this task, it means the conversion is too fast for the task to handle

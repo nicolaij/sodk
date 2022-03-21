@@ -14,13 +14,13 @@ TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
 
 menu_t menu[] = {
-    {.id="pulse", .name = "Импульс", .val = 100, .min = 1, .max = 1000},
-    {.id="kU", .name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
-    {.id="kR", .name = "коэф. R", .val = 575, .min = 1, .max = 1000},
-    {.id="offsU", .name = "смещ. U", .val = 22, .min = -500, .max = 500},
-    {.id="offsADC", .name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
-    {.id="", .name = "WiFi", .val = 0, .min = 0, .max = 1},
-    {.id="", .name = "Выход  ", .val = 0, .min = 0, .max = 0},
+    {.id = "pulse", .name = "Импульс", .val = 100, .min = 1, .max = 1000},
+    {.id = "kU", .name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
+    {.id = "kR", .name = "коэф. R", .val = 575, .min = 1, .max = 1000},
+    {.id = "offsU", .name = "смещ. U", .val = 22, .min = -500, .max = 500},
+    {.id = "offsADC", .name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
+    {.id = "", .name = "WiFi", .val = 0, .min = 0, .max = 1},
+    {.id = "", .name = "Выход  ", .val = 0, .min = 0, .max = 0},
 };
 
 int read_nvs_menu()
@@ -152,6 +152,11 @@ void app_main()
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 6, NULL);
 #endif
 
+    cmd_t cmd;
+    cmd.cmd = 3;
+    cmd.power = 255;
+    xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
         xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
@@ -162,10 +167,6 @@ void app_main()
     }
     else
     {
-        cmd_t cmd;
-        cmd.cmd = 3;
-        cmd.power = 255;
-        xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 
         xEventGroupWaitBits(
             ready_event_group, /* The event group being tested. */
