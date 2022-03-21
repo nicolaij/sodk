@@ -14,13 +14,13 @@ TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
 
 menu_t menu[] = {
-    {.name = "Импульс", .val = 100, .min = 1, .max = 1000},
-    {.name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
-    {.name = "коэф. R", .val = 575, .min = 1, .max = 1000},
-    {.name = "смещ. U", .val = 22, .min = -500, .max = 500},
-    {.name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
-    {.name = "WiFi", .val = 0, .min = 0, .max = 1},
-    {.name = "Выход  ", .val = 0, .min = 0, .max = 0},
+    {.id="pulse", .name = "Импульс", .val = 100, .min = 1, .max = 1000},
+    {.id="kU", .name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
+    {.id="kR", .name = "коэф. R", .val = 575, .min = 1, .max = 1000},
+    {.id="offsU", .name = "смещ. U", .val = 22, .min = -500, .max = 500},
+    {.id="offsADC", .name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
+    {.id="", .name = "WiFi", .val = 0, .min = 0, .max = 1},
+    {.id="", .name = "Выход  ", .val = 0, .min = 0, .max = 0},
 };
 
 int read_nvs_menu()

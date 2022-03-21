@@ -351,10 +351,16 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     }
 
     httpd_resp_sendstr_chunk(req, head);
-    
-//-----------------------------СОДК------------------------------
-    httpd_resp_sendstr_chunk(req, sodkstart);
 
+//-----------------------------СОДК------------------------------
+    strlcpy(buf, sodkstart, sizeof(buf));
+    for (int i = 0; i < 5; i++)
+    {
+        strlcat(buf, "<tr><td>", sizeof(buf));
+        strlcat(buf, menu[i].name, sizeof(buf));
+        strlcat(buf, "</td><td>", sizeof(buf));
+    }
+    httpd_resp_sendstr_chunk(req, buf);
     httpd_resp_sendstr_chunk(req, sodkend);
 
 //-----------------------------LoRa------------------------------

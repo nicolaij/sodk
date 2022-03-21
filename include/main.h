@@ -66,6 +66,7 @@ typedef enum
 
 typedef struct
 {
+    char id[8];
     char name[32];
     int32_t val;
     int32_t min;
