@@ -27,8 +27,10 @@ typedef struct
     int max;
 } measure_t;
 
+
 measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = 90, .max = 5000},
+    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 5000},
+    {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},
 };
 
 extern menu_t menu[];
@@ -41,8 +43,8 @@ static void continuous_adc_init()
     adc_digi_init_config_t adc_dma_config = {
         .max_store_buf_size = 1024,
         .conv_num_each_intr = 256,
-        .adc1_chan_mask = 1 << ADC1_CHANNEL_1,
-        .adc2_chan_mask = 1 << ADC2_CHANNEL_0,
+        .adc1_chan_mask = 1 << chan_r[0].channel,
+        .adc2_chan_mask = 1 << chan_r[1].channel,
     };
     ret = adc_digi_initialize(&adc_dma_config);
     assert(ret == ESP_OK);
@@ -58,11 +60,11 @@ static void continuous_adc_init()
     };
 
     adc_pattern[0].atten = ADC_ATTEN_DB_11;
-    adc_pattern[0].channel = ADC1_CHANNEL_1;
+    adc_pattern[0].channel = chan_r[0].channel;
     adc_pattern[0].unit = 0;
 
     adc_pattern[1].atten = ADC_ATTEN_DB_11;
-    adc_pattern[1].channel = ADC2_CHANNEL_0;
+    adc_pattern[1].channel = chan_r[1].channel;
     adc_pattern[1].unit = 1;
 
     dig_cfg.adc_pattern = adc_pattern;

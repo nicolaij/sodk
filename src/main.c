@@ -36,7 +36,7 @@ int read_nvs_menu()
     {
         for (int i = 0; i < sizeof(menu) / sizeof(menu[0]); i++)
         {
-            err = nvs_get_i32(my_handle, menu[i].name, &menu[i].val);
+            err = nvs_get_i32(my_handle, menu[i].id, &menu[i].val);
             switch (err)
             {
             case ESP_OK:
@@ -149,7 +149,7 @@ void app_main()
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
 
 #ifndef RECEIVER_ONLY
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 6, NULL);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 6, NULL);
 #endif
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)

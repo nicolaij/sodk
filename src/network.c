@@ -23,15 +23,19 @@
 
 extern menu_t menu[];
 
+#if CONFIG_IDF_TARGET_ESP32
 extern int bufferR[DATALEN];
 extern int bufferU[DATALEN];
+#elif CONFIG_IDF_TARGET_ESP32C3
+extern int bufferADC[DATALEN * 2];
+#endif
 
 /* The examples use WiFi configuration that you can set via project configuration menu
 
    If you'd rather not, just change the below entries to strings with
    the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
 */
-#define CLIENT_WIFI_SSID "MiMikalai"
+#define CLIENT_WIFI_SSID "Nadtocheeva 5"
 #define CLIENT_WIFI_PASS "123123123"
 #define AP_WIFI_SSID "MegaOm"
 #define AP_WIFI_PASS "123123123"
@@ -66,6 +70,13 @@ extern int sf;
 extern int op;
 extern int id;
 
+int timeout_counter = 0;
+
+void reset_sleep_timeout()
+{
+    timeout_counter = 0;
+}
+
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
@@ -92,6 +103,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+
         reset_sleep_timeout();
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
@@ -226,7 +238,7 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
-                       "<title>Lora setting</title></head><body>";
+                       "<title>Settings</title></head><body>";
     const char *sodkstart = "<form><fieldset><legend>СОДК</legend><table>";
     const char *sodkend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
 
@@ -285,6 +297,46 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
             ESP_LOGI(TAGH, "Found URL query => %s", buf);
 
             bool param_change = false;
+
+            for (int i = 0; i < 5; i++)
+            {
+                if (httpd_query_key_value(buf, menu[i].id, param, 7) == ESP_OK)
+                {
+                    int p = atoi(param);
+                    if (menu[i].val != p && p >= menu[i].min && p <= menu[i].max)
+                    {
+                        param_change = true;
+                        
+                        menu[i].val = p;
+
+                        nvs_handle_t my_handle;
+                        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+                        if (err != ESP_OK)
+                        {
+                            printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+                        }
+                        else
+                        {
+                            // Write
+                            printf("Write: \"%s\" ", menu[i].name);
+                            err = nvs_set_i32(my_handle, menu[i].id, menu[i].val);
+                            printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+                            // Commit written value.
+                            // After setting any values, nvs_commit() must be called to ensure changes are written
+                            // to flash storage. Implementations may write to storage at other times,
+                            // but this is not guaranteed.
+                            printf("Committing updates in NVS ... ");
+                            err = nvs_commit(my_handle);
+                            printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+
+                            // Close
+                            nvs_close(my_handle);
+                        }
+                    }
+                }
+            }
+
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
             {
                 int p = atoi(param);
@@ -352,18 +404,27 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 
     httpd_resp_sendstr_chunk(req, head);
 
-//-----------------------------СОДК------------------------------
-    strlcpy(buf, sodkstart, sizeof(buf));
+    //-----------------------------СОДК------------------------------
+    httpd_resp_sendstr_chunk(req, sodkstart);
     for (int i = 0; i < 5; i++)
     {
-        strlcat(buf, "<tr><td>", sizeof(buf));
+        strlcpy(buf, "\n<tr><td><label for=\"", sizeof(buf));
+        strlcat(buf, menu[i].id, sizeof(buf));
+        strlcat(buf, "\">", sizeof(buf));
         strlcat(buf, menu[i].name, sizeof(buf));
-        strlcat(buf, "</td><td>", sizeof(buf));
+        strlcat(buf, "</label></td><td><input type=\"text\" name=\"", sizeof(buf));
+        strlcat(buf, menu[i].id, sizeof(buf));
+        strlcat(buf, "\" id=\"", sizeof(buf));
+        strlcat(buf, menu[i].id, sizeof(buf));
+        strlcat(buf, "\" size=\"7\" value=\"", sizeof(buf));
+        itoa(menu[i].val, param, 10);
+        strlcat(buf, param, sizeof(buf));
+        strlcat(buf, "\" /></td></tr>", sizeof(buf));
+        httpd_resp_sendstr_chunk(req, buf);
     }
-    httpd_resp_sendstr_chunk(req, buf);
     httpd_resp_sendstr_chunk(req, sodkend);
 
-//-----------------------------LoRa------------------------------
+    //-----------------------------LoRa------------------------------
     httpd_resp_sendstr_chunk(req, lorastart);
 
     // Generate id
@@ -417,8 +478,6 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 
     httpd_resp_sendstr_chunk(req, loraend);
 
-
-
     httpd_resp_sendstr_chunk(req, tail);
     /* Send empty chunk to signal HTTP response completion */
     httpd_resp_sendstr_chunk(req, NULL);
@@ -443,6 +502,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_set_hdr(req, "Content-Disposition", header);
 
+#if CONFIG_IDF_TARGET_ESP32
     while (pos < sizeof(bufferR) / sizeof(bufferR[0]))
     {
         buf[0] = 0;
@@ -471,6 +531,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
     }
+#endif
 
     reset_sleep_timeout();
 

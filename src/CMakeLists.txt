@@ -1,5 +1,5 @@
 
-set(srcs "main.c" "radio.c")
+set(srcs "main.c" "radio.c" "network.c" "clock.c")
 
 if(IDF_TARGET STREQUAL "esp32c3")
     list(APPEND srcs "powerC3.c")

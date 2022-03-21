@@ -12,8 +12,6 @@
 #include "esp_adc_cal.h"
 #include "esp_rom_sys.h"
 
-#if CONFIG_IDF_TARGET_ESP32
-
 #include <driver/dac.h>
 
 #include "driver/ledc.h"
@@ -32,16 +30,10 @@ typedef struct
     int max;
 } measure_t;
 
-#if CONFIG_IDF_TARGET_ESP32
 measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_5, .k = 90, .max = 5000},
     {.channel = ADC1_CHANNEL_7, .k = 1750, .max = 20000},
 };
-#elif CONFIG_IDF_TARGET_ESP32C3
-measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = 90, .max = 5000},
-};
-#endif
 
 extern menu_t menu[];
 
@@ -92,9 +84,7 @@ void dual_adc(void *arg)
     while (1)
     {
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
-#if CONFIG_IDF_TARGET_ESP32
         dac_output_voltage(DAC_CHANNEL_1, cmd.power);
-#endif
         t1 = esp_timer_get_time();
         timeout = menu[0].val * 1000;
 
@@ -303,10 +293,8 @@ void dual_adc(void *arg)
                 printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%d,%d) buffer:%d\n", result.U, result.adc2, result.R, result.adc11, result.adc12, len);
 
                 if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, (1000 - menu[0].val) / portTICK_PERIOD_MS))
-                {
-#if CONFIG_IDF_TARGET_ESP32                    
-                    dac_output_voltage(DAC_CHANNEL_1, cmd.power);
-#endif                    
+                {                
+                    dac_output_voltage(DAC_CHANNEL_1, cmd.power);              
                 }
             }
             gpio_set_level(POWER_PIN, 0);
@@ -336,4 +324,3 @@ int kOm(int adc_u, int adc_r)
         return chan_r[0].max;
     return r;
 };
-#endif
