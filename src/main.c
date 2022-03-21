@@ -8,12 +8,53 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
-#define RECEIVER_ONLY 1
-
 RTC_DATA_ATTR int bootCount = 0;
 
 TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
+
+menu_t menu[] = {
+    {.name = "Импульс", .val = 100, .min = 1, .max = 1000},
+    {.name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
+    {.name = "коэф. R", .val = 575, .min = 1, .max = 1000},
+    {.name = "смещ. U", .val = 22, .min = -500, .max = 500},
+    {.name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
+    {.name = "WiFi", .val = 0, .min = 0, .max = 1},
+    {.name = "Выход  ", .val = 0, .min = 0, .max = 0},
+};
+
+int read_nvs_menu()
+{
+    // Open
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE("storage", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    }
+    else
+    {
+        for (int i = 0; i < sizeof(menu) / sizeof(menu[0]); i++)
+        {
+            err = nvs_get_i32(my_handle, menu[i].name, &menu[i].val);
+            switch (err)
+            {
+            case ESP_OK:
+                printf("Read \"%s\" = %d\n", menu[i].name, menu[i].val);
+                break;
+            case ESP_ERR_NVS_NOT_FOUND:
+                printf("The value  \"%s\" is not initialized yet!\n", menu[i].name);
+                break;
+            default:
+                printf("Error (%s) reading!\n", esp_err_to_name(err));
+            }
+        }
+
+        // Close
+        nvs_close(my_handle);
+    }
+    return err;
+}
 
 void go_sleep(void)
 {
@@ -29,6 +70,7 @@ void go_sleep(void)
 #if CONFIG_IDF_TARGET_ESP32
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
 #endif
+
     esp_sleep_enable_timer_wakeup(60 * 1000000);
     esp_deep_sleep_start();
 }
@@ -105,18 +147,18 @@ void app_main()
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
-#if CONFIG_IDF_TARGET_ESP32
+
 #ifndef RECEIVER_ONLY
     xTaskCreate(dual_adc, "dual_adc", 1024 * 2, NULL, 6, NULL);
+#endif
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
+        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+#if CONFIG_IDF_TARGET_ESP32
         xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
-
         xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
 #endif
-        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
-#ifndef RECEIVER_ONLY
     }
     else
     {
@@ -128,15 +170,14 @@ void app_main()
         xEventGroupWaitBits(
             ready_event_group, /* The event group being tested. */
             BIT0 | BIT1,       /* The bits within the event group to wait for. */
-            pdTRUE,            /* BIT_0 & BIT_4 should be cleared before returning. */
+            pdTRUE,            /* BIT_0 & BIT_1 should be cleared before returning. */
             pdTRUE,
             3000 / portTICK_PERIOD_MS);
 
         //засыпаем...
         go_sleep();
     }
-#endif
-#endif
+
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);

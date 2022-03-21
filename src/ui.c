@@ -21,15 +21,7 @@
 
 static const char *TAG = "ui";
 
-menu_t menu[] = {
-	{.name = "Импульс", .val = 100, .min = 1, .max = 1000},
-	{.name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
-	{.name = "коэф. R", .val = 575, .min = 1, .max = 1000},
-	{.name = "смещ. U", .val = 22, .min = -500, .max = 500},
-	{.name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
-	{.name = "WiFi", .val = 0, .min = 0, .max = 1},
-	{.name = "Выход  ", .val = 0, .min = 0, .max = 0},
-};
+extern menu_t menu[];
 
 #define MENU_LINES sizeof(menu) / sizeof(menu[0])
 
@@ -42,39 +34,6 @@ u8g2_t u8g2;
 #define TIMEOUT (60 * 1000 / 40)
 
 int timeout_counter = 0;
-
-int read_nvs_menu()
-{
-	// Open
-	nvs_handle_t my_handle;
-	esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
-	if (err != ESP_OK)
-	{
-		ESP_LOGE("storage", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
-	}
-	else
-	{
-		for (int i = 0; i < MENU_LINES; i++)
-		{
-			err = nvs_get_i32(my_handle, menu[i].name, &menu[i].val);
-			switch (err)
-			{
-			case ESP_OK:
-				printf("Read \"%s\" = %d\n", menu[i].name, menu[i].val);
-				break;
-			case ESP_ERR_NVS_NOT_FOUND:
-				printf("The value  \"%s\" is not initialized yet!\n", menu[i].name);
-				break;
-			default:
-				printf("Error (%s) reading!\n", esp_err_to_name(err));
-			}
-		}
-
-		// Close
-		nvs_close(my_handle);
-	}
-	return err;
-}
 
 int limits(int val, int min, int max)
 {

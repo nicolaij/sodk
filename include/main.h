@@ -67,9 +67,9 @@ typedef enum
 typedef struct
 {
     char name[32];
-    int val;
-    int min;
-    int max;
+    int32_t val;
+    int32_t min;
+    int32_t max;
 } menu_t;
 
 QueueHandle_t uicmd_queue;

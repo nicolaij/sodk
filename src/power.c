@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -12,8 +13,8 @@
 #include "esp_rom_sys.h"
 
 #if CONFIG_IDF_TARGET_ESP32
+
 #include <driver/dac.h>
-#endif
 
 #include "driver/ledc.h"
 
@@ -90,7 +91,6 @@ void dual_adc(void *arg)
 
     while (1)
     {
-
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 #if CONFIG_IDF_TARGET_ESP32
         dac_output_voltage(DAC_CHANNEL_1, cmd.power);
@@ -336,3 +336,4 @@ int kOm(int adc_u, int adc_r)
         return chan_r[0].max;
     return r;
 };
+#endif

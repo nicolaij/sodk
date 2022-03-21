@@ -1,8 +1,13 @@
-idf_component_register(SRCS "main.c"
-                            "power.c"
-							"ui.c"
-                            "clock.c"
-                            "u8g2_esp32_hal.c"
-                            "network.c"
-                            "radio.c"
+
+set(srcs "main.c" "radio.c")
+
+if(IDF_TARGET STREQUAL "esp32c3")
+    list(APPEND srcs "powerC3.c")
+endif()
+if(IDF_TARGET STREQUAL "esp32")
+    list(APPEND srcs "power.c")
+endif()
+
+idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS ".")
+

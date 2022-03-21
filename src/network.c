@@ -226,11 +226,13 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
-                       "<title>Lora setting</title></head><body><form><fieldset>"
-                       "<legend>LoRa</legend><table>";
+                       "<title>Lora setting</title></head><body>";
+    const char *sodkstart = "<form><fieldset><legend>СОДК</legend><table>";
+    const char *sodkend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
 
-    const char *tail = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>"
-                       "<p><a href=\"/d\">Буфер данных</a></p>"
+    const char *lorastart = "<form><fieldset><legend>LoRa</legend><table>";
+    const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
+    const char *tail = "<p><a href=\"/d\">Буфер данных</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
                        "socket.onopen = function(){socket.send(\"open ws\");};\n"
@@ -349,6 +351,14 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     }
 
     httpd_resp_sendstr_chunk(req, head);
+    
+//-----------------------------СОДК------------------------------
+    httpd_resp_sendstr_chunk(req, sodkstart);
+
+    httpd_resp_sendstr_chunk(req, sodkend);
+
+//-----------------------------LoRa------------------------------
+    httpd_resp_sendstr_chunk(req, lorastart);
 
     // Generate id
     strlcpy(buf, lora_set_id[0], sizeof(buf));
@@ -398,6 +408,10 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, lora_set_op[1], sizeof(buf));
     httpd_resp_sendstr_chunk(req, buf);
+
+    httpd_resp_sendstr_chunk(req, loraend);
+
+
 
     httpd_resp_sendstr_chunk(req, tail);
     /* Send empty chunk to signal HTTP response completion */
