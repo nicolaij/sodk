@@ -138,10 +138,6 @@ void radio_task(void *arg)
 {
     int x;
 
-    gpio_pad_select_gpio(BTN_GPIO);
-    gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
-
     read_nvs_lora(&id, &fr, &bw, &sf, &op);
 
     lora_init();
@@ -194,7 +190,7 @@ void radio_task(void *arg)
             x = lora_receive_packet(buf, sizeof(buf));
             buf[x] = 0;
             int rssi = lora_packet_rssi();
-            //printf("Received: \"%s\" Len: %d RSSI: %d\n", buf, x, rssi);
+            // printf("Received: \"%s\" Len: %d RSSI: %d\n", buf, x, rssi);
             if (x > 10 && x < 200)
             {
                 if (buf[x - 1] == '}')
@@ -205,8 +201,8 @@ void radio_task(void *arg)
                 {
                     sprintf((char *)&buf[x], " - RSSI: %d", rssi);
                 }
-                printf("%s\n",buf);
-                //fflush(stdout);
+                printf("%s\n", buf);
+                // fflush(stdout);
             }
 
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
@@ -224,7 +220,10 @@ void radio_task(void *arg)
             xEventGroupSetBits(ready_event_group, BIT1);
         }
 
-        if (gpio_get_level(BTN_GPIO) == 1)
+        gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
+        gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
+
+        if (gpio_get_level(BTN_GPIO) == 0)
         {
             time_t now;
             struct tm timeinfo;
@@ -239,6 +238,8 @@ void radio_task(void *arg)
 
             // xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
         }
+
+        gpio_set_direction(CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
 
         vTaskDelay(1);
     }

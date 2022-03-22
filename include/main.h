@@ -32,7 +32,7 @@
 #elif CONFIG_IDF_TARGET_ESP32C3
 
 #define POWER_PIN 18
-#define BTN_GPIO 0
+#define BTN_GPIO 9
 
 #endif
 

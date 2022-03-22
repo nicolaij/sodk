@@ -27,7 +27,6 @@ typedef struct
     int max;
 } measure_t;
 
-
 measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_4, .k = 1, .max = 5000},
     {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},
@@ -39,6 +38,8 @@ static void continuous_adc_init()
 {
     esp_err_t ret = ESP_OK;
     assert(ret == ESP_OK);
+
+    //esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
         .max_store_buf_size = 1024,
@@ -54,8 +55,8 @@ static void continuous_adc_init()
     // Do not set the sampling frequency out of the range between `SOC_ADC_SAMPLE_FREQ_THRES_LOW` and `SOC_ADC_SAMPLE_FREQ_THRES_HIGH`
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
-        .conv_limit_num = 255,
-        .sample_freq_hz = 1000,
+        .conv_limit_num = 200,
+        .sample_freq_hz = 8000,
         .adc_pattern_len = 2,
     };
 
@@ -93,19 +94,39 @@ void dual_adc(void *arg)
     {
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
-        int n = 1;
-        while (n--)
+        uint8_t *ptr = (uint8_t *)bufferADC;
+        while (ptr < (uint8_t *)&bufferADC[DATALEN * 2] - 256)
         {
-            ret = adc_digi_read_bytes((uint8_t *)bufferADC, 256, &ret_num, ADC_MAX_DELAY);
-            printf("adc_digi_read_bytes: %d\n", ret_num);
-            adc_digi_output_data_t *p = (void *)bufferADC;
-            for (int i = 0; i < ret_num + 8; i += 4)
+            ret = adc_digi_read_bytes(ptr, 256, &ret_num, ADC_MAX_DELAY);
+            assert(ret == ESP_OK);
+            ptr = ptr + ret_num;
+        }
+
+        adc_digi_output_data_t *p = (void *)bufferADC;
+        int adc1 = 0;
+        int adc2 = 0;
+        int n = 0;
+        while ((uint8_t *)p < ptr)
+        {
+            while (p->type2.unit != 0 && (uint8_t *)p < ptr)
             {
-                printf("ADC%d_CH%d: %d\n", p->type2.unit + 1, p->type2.channel, p->type2.data);
                 p++;
             }
-            // If you see task WDT in this task, it means the conversion is too fast for the task to handle
+            adc1 = p->type2.data;
+            p++;
+            while (p->type2.unit != 1 && (uint8_t *)p < ptr)
+            {
+                p++;
+            }
+            adc2 = p->type2.data;
+            if ((uint8_t *)p > ptr)
+                break;
+            p++;
+            printf("%5d, %4d, %4d\n", n++, adc1, adc2);
+            if (n % 2000 == 0)
+                vTaskDelay(1);
         }
+        // If you see task WDT in this task, it means the conversion is too fast for the task to handle
 
         result.adc11 = 0;
         result.adc2 = 0;
