@@ -53,7 +53,7 @@ static void continuous_adc_init(adc_atten_t adc1_atten)
     adc_digi_pattern_table_t adc_pattern[10] = {0};
 
     // Do not set the sampling frequency out of the range between `SOC_ADC_SAMPLE_FREQ_THRES_LOW` and `SOC_ADC_SAMPLE_FREQ_THRES_HIGH`
-    static adc_digi_config_t dig_cfg = {
+    adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
         .conv_limit_num = 200,
         .sample_freq_hz = 8000,
@@ -116,6 +116,7 @@ void dual_adc(void *arg)
                     gpio_set_level(POWER_PIN, 0);
                     ptr_end = ptr;
                     time_off = esp_timer_get_time();
+                    printf("off time: %d\n", (ptr_end - (uint8_t *)bufferADC) / 8);
                 }
                 else
                 {
@@ -150,6 +151,8 @@ void dual_adc(void *arg)
                             gpio_set_level(POWER_PIN, 0);
                             ptr_end = ptr;
                             time_off = esp_timer_get_time();
+
+                            printf("off: %d\n", (ptr_end - (uint8_t *)bufferADC) / 8);
                         }
                     }
                 };
@@ -182,7 +185,10 @@ void dual_adc(void *arg)
                             //переключаем
                             ptr_0db = ptr;
                             trigger0db = true;
-                            continuous_adc_init(ADC_ATTEN_DB_0);
+                            //ESP_ERROR_CHECK(adc_digi_stop());
+                            //continuous_adc_init(ADC_ATTEN_DB_0);
+                            //ESP_ERROR_CHECK(adc_digi_start());
+                            printf("0db: %d\n", (ptr_0db - (uint8_t *)bufferADC) / 8);
                         };
                     }
                 }
