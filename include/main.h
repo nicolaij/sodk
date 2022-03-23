@@ -66,8 +66,8 @@ typedef enum
 
 typedef struct
 {
-    char id[8];
-    char name[32];
+    const char id[8];
+    const char name[32];
     int32_t val;
     int32_t min;
     int32_t max;

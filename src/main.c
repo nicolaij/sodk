@@ -15,12 +15,15 @@ TaskHandle_t xHandleUI = NULL;
 
 menu_t menu[] = {
     {.id = "pulse", .name = "Импульс", .val = 100, .min = 1, .max = 1000},
+    {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 1, .max = 1000},
     {.id = "kU", .name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
-    {.id = "kR", .name = "коэф. R", .val = 575, .min = 1, .max = 1000},
     {.id = "offsU", .name = "смещ. U", .val = 22, .min = -500, .max = 500},
-    {.id = "offsADC", .name = "смещ. adcR", .val = 145, .min = -500, .max = 500},
+    {.id = "kR11", .name = "коэф. R (11dB)", .val = 575, .min = 1, .max = 2000},
+    {.id = "offsA11", .name = "смещ. adc R (11dB)", .val = 145, .min = -500, .max = 500},
+    {.id = "kR0", .name = "коэф. R (0dB)", .val = 2040, .min = 1, .max = 5000},
+    {.id = "offsA0", .name = "смещ. adc R (0dB)", .val = 145, .min = -500, .max = 500},
     {.id = "", .name = "WiFi", .val = 0, .min = 0, .max = 1},
-    {.id = "", .name = "Выход  ", .val = 0, .min = 0, .max = 0},
+    {.id = "", .name = "Выход ", .val = 0, .min = 0, .max = 0},
 };
 
 int read_nvs_menu()

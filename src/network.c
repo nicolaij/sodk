@@ -298,7 +298,7 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 
             bool param_change = false;
 
-            for (int i = 0; i < 5; i++)
+            for (int i = 0; i < 8; i++)
             {
                 if (httpd_query_key_value(buf, menu[i].id, param, 7) == ESP_OK)
                 {
@@ -406,7 +406,7 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 
     //-----------------------------СОДК------------------------------
     httpd_resp_sendstr_chunk(req, sodkstart);
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 8; i++)
     {
         strlcpy(buf, "\n<tr><td><label for=\"", sizeof(buf));
         strlcat(buf, menu[i].id, sizeof(buf));
