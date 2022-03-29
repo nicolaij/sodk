@@ -95,6 +95,7 @@ void radio_task(void *arg);
 
 int volt(int adc);
 int kOm(int adc_u, int adc_r);
+int kOm0db(int adc_u, int adc_r);
 
 int read_nvs_lora(int *id, int *fr, int *bw, int *sf, int *op);
 int write_nvs_lora(const char *key, int value);

@@ -93,7 +93,7 @@ void dual_adc(void *arg)
         uint8_t *ptr = (uint8_t *)bufferADC;
         uint8_t *ptr_end = 0; //выключаем источник питания
         uint8_t *ptr_0db = 0; //переключаем чувствительность
-        bool trigger0db = false;
+        int trigger0db = 2;
 
         int64_t time_off = 0;
         int64_t t1 = esp_timer_get_time();
@@ -160,37 +160,39 @@ void dual_adc(void *arg)
             else
             //Отключили питание
             {
-                if (trigger0db == false)
+                if (trigger0db > 0) //проверяем чувствительность
                 {
-                    if (ptr_0db == 0)
+                    // int64_t t1 = esp_timer_get_time();
+                    const int count_avg = 3;
+                    int sum_avg_c = 0;
+                    int n = 0;
+                    adc_digi_output_data_t *p = (void *)ptr;
+                    while (n++ < count_avg)
                     {
-                        //переключение чувствительности
-                        const int count_avg = 3;
-                        int sum_avg_c = 0;
-                        int n = 0;
-                        adc_digi_output_data_t *p = (void *)ptr;
-                        while (n++ < count_avg)
+                        //ток
+                        do
                         {
-                            //ток
-                            do
-                            {
-                                p--;
-                            } while (p->type2.unit != 0 && (uint8_t *)p > (uint8_t *)bufferADC);
+                            p--;
+                        } while (p->type2.unit != 0 && (uint8_t *)p > (uint8_t *)bufferADC);
 
-                            sum_avg_c += p->type2.data;
-                        };
+                        sum_avg_c += p->type2.data;
+                    };
 
-                        if (sum_avg_c / count_avg < 1000)
-                        {
-                            //переключаем
-                            ptr_0db = ptr;
-                            trigger0db = true;
-                            //ESP_ERROR_CHECK(adc_digi_stop());
-                            //continuous_adc_init(ADC_ATTEN_DB_0);
-                            //ESP_ERROR_CHECK(adc_digi_start());
-                            printf("0db: %d\n", (ptr_0db - (uint8_t *)bufferADC) / 8);
-                        };
-                    }
+                    if (sum_avg_c / count_avg < 1000)
+                    {
+                        //переключаем
+                        ptr_0db = ptr;
+                        trigger0db = -1;
+                        // printf("stop\n");
+                        ESP_ERROR_CHECK(adc_digi_stop());
+                        ESP_ERROR_CHECK(adc_digi_deinitialize());
+                        continuous_adc_init(ADC_ATTEN_DB_0);
+                        // printf("start\n");
+                        ESP_ERROR_CHECK(adc_digi_start());
+                    };
+                    // int64_t t2 = esp_timer_get_time();
+                    // printf("dt: %lld\n", t2 - t1);
+                    trigger0db--;
                 }
             }
         }
@@ -201,12 +203,14 @@ void dual_adc(void *arg)
         int adc1 = 0;
         int adc2 = 0;
         int n = 0;
+        uint8_t *p_process;
         while ((uint8_t *)p < ptr)
         {
             while (p->type2.unit != 0 && (uint8_t *)p < ptr)
             {
                 p++;
             }
+            p_process = p;
             adc1 = p->type2.data;
             p++;
             while (p->type2.unit != 1 && (uint8_t *)p < ptr)
@@ -217,7 +221,15 @@ void dual_adc(void *arg)
             p++;
             if ((uint8_t *)p > ptr)
                 break;
-            printf("%5d, %4d, %4d\n", n++, adc1, adc2);
+
+            if (p_process < ptr_0db)
+            { // 11db
+                printf("%5d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, volt(adc2), kOm(adc2, adc1));
+            }
+            else
+            { // 0db
+                printf("%6d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, volt(adc2), kOm0db(adc2, adc1));
+            }
             if (n % 2000 == 0)
                 vTaskDelay(1);
         }
