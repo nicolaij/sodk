@@ -210,7 +210,7 @@ void dual_adc(void *arg)
             {
                 p++;
             }
-            p_process = p;
+            p_process = (uint8_t *)p;
             adc1 = p->type2.data;
             p++;
             while (p->type2.unit != 1 && (uint8_t *)p < ptr)
