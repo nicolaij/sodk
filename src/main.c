@@ -2,6 +2,7 @@
 #include "esp_system.h"
 #include "esp_spi_flash.h"
 
+#include "driver/gpio.h"
 #include "esp_sleep.h"
 
 #include "main.h"
@@ -68,13 +69,24 @@ void go_sleep(void)
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    fflush(stdout);
-    printf("Go sleep...");
 #if CONFIG_IDF_TARGET_ESP32
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
 #endif
-
+/*
+#if CONFIG_IDF_TARGET_ESP32C3
+    const gpio_config_t config = {
+        .pin_bit_mask = BIT64(GPIO_NUM_0),
+        .mode = GPIO_MODE_INPUT,
+    };
+    ESP_ERROR_CHECK(gpio_config(&config));
+    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(GPIO_NUM_0), ESP_GPIO_WAKEUP_GPIO_HIGH));
+#endif
+*/
     esp_sleep_enable_timer_wakeup(60 * 1000000);
+
+    printf("Go sleep...");
+    fflush(stdout);
+
     esp_deep_sleep_start();
 }
 
@@ -88,8 +100,34 @@ void app_main()
         printf("Wakeup caused by external signal using RTC_IO\n");
         break;
     case ESP_SLEEP_WAKEUP_EXT1:
-        printf("Wakeup caused by external signal using RTC_CNTL\n");
+        printf("Wake up from GPIO EXT1\n");
+        /*    {
+                uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+                if (wakeup_pin_mask != 0)
+                {
+                    int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+                    printf("Wake up from GPIO %d\n", pin);
+                }
+                else
+                {
+                    printf("Wake up from GPIO\n");
+                }
+            }*/
         break;
+    case ESP_SLEEP_WAKEUP_GPIO:
+    {
+        uint64_t wakeup_pin_mask = esp_sleep_get_gpio_wakeup_status();
+        if (wakeup_pin_mask != 0)
+        {
+            int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+            printf("Wake up from GPIO %d\n", pin);
+        }
+        else
+        {
+            printf("Wake up from GPIO\n");
+        }
+    }
+    break;
     case ESP_SLEEP_WAKEUP_TIMER:
         printf("Wakeup caused by timer\n");
         break;
@@ -123,6 +161,7 @@ void app_main()
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
 
+//go_sleep();
     // Initialize NVS
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
@@ -170,13 +209,12 @@ void app_main()
     }
     else
     {
-
         xEventGroupWaitBits(
             ready_event_group, /* The event group being tested. */
             BIT0 | BIT1,       /* The bits within the event group to wait for. */
             pdTRUE,            /* BIT_0 & BIT_1 should be cleared before returning. */
             pdTRUE,
-            3000 / portTICK_PERIOD_MS);
+            portMAX_DELAY);
 
         //засыпаем...
         go_sleep();

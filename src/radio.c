@@ -231,8 +231,14 @@ void radio_task(void *arg)
             time(&now);
             localtime_r(&now, &timeinfo);
             size_t l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
-            lora_send_packet((uint8_t *)buf, l);
-            printf("Send:\"%s\"\n", buf);
+            //lora_send_packet((uint8_t *)buf, l);
+            printf("Press BTN:\"%s\"\n", buf);
+
+            cmd_t cmd;
+            cmd.cmd = 3;
+            cmd.power = 255;
+
+            xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
 

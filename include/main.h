@@ -14,6 +14,7 @@
 
 #define I2C_MASTER_NUM 0          //  I2C port number for master dev
 #define I2C_MASTER_FREQ_HZ 400000 //  I2C master clock frequency
+
 #define PIN_SDA 22
 #define PIN_SCL 23
 

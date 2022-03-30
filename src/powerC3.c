@@ -82,22 +82,27 @@ void dual_adc(void *arg)
     cmd_t cmd;
     cmd.cmd = 0;
     cmd.power = 0;
-    continuous_adc_init(ADC_ATTEN_DB_11);
 
     while (1)
     {
+        continuous_adc_init(ADC_ATTEN_DB_11);
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
         ESP_ERROR_CHECK(adc_digi_start());
 
         uint8_t *ptr = (uint8_t *)bufferADC;
-        uint8_t *ptr_end = 0; //выключаем источник питания
+        uint8_t *ptr_off = 0; //выключаем источник питания
         uint8_t *ptr_0db = 0; //переключаем чувствительность
-        int trigger0db = 2;
+        int trigger0db = 1;
 
         int64_t time_off = 0;
         int64_t t1 = esp_timer_get_time();
         int64_t timeout = menu[0].val * 1000;
+
+        result.adc11 = 0;
+        result.adc2 = 0;
+        result.U = 0;
+        result.R = 0;
 
         //(Лимит напряж - смещение) * коэфф. U
         int adcU_limit = ((menu[1].val - menu[3].val) * menu[2].val) / 1000;
@@ -107,16 +112,16 @@ void dual_adc(void *arg)
             ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, 256, &ret_num, ADC_MAX_DELAY));
             ptr = ptr + ret_num;
 
-            if (ptr_end == 0)
+            if (ptr_off == 0)
             {
                 //отсечка по времени
                 if ((esp_timer_get_time() - t1) > timeout)
                 {
                     //ВЫРУБАЕМ
                     gpio_set_level(POWER_PIN, 0);
-                    ptr_end = ptr;
+                    ptr_off = ptr;
                     time_off = esp_timer_get_time();
-                    printf("off time: %d\n", (ptr_end - (uint8_t *)bufferADC) / 8);
+                    printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / 8);
                 }
                 else
                 {
@@ -149,10 +154,10 @@ void dual_adc(void *arg)
                         {
                             //ВЫРУБАЕМ
                             gpio_set_level(POWER_PIN, 0);
-                            ptr_end = ptr;
+                            ptr_off = ptr;
                             time_off = esp_timer_get_time();
 
-                            printf("off: %d\n", (ptr_end - (uint8_t *)bufferADC) / 8);
+                            printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / 8);
                         }
                     }
                 };
@@ -198,12 +203,21 @@ void dual_adc(void *arg)
         }
 
         ESP_ERROR_CHECK(adc_digi_stop());
+        ESP_ERROR_CHECK(adc_digi_deinitialize());
 
         adc_digi_output_data_t *p = (void *)bufferADC;
         int adc1 = 0;
         int adc2 = 0;
         int n = 0;
         uint8_t *p_process;
+
+        const int count_avg = 32;
+        int sum_avg_c = 0;
+        int sum_avg_u = 0;
+        int sum_n = 0;
+
+        int block_off = -1;
+
         while ((uint8_t *)p < ptr)
         {
             while (p->type2.unit != 0 && (uint8_t *)p < ptr)
@@ -222,23 +236,36 @@ void dual_adc(void *arg)
             if ((uint8_t *)p > ptr)
                 break;
 
-            if (p_process < ptr_0db)
-            { // 11db
-                printf("%5d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, volt(adc2), kOm(adc2, adc1));
+            sum_n++;
+            sum_avg_u += volt(adc2);
+            sum_avg_c += (p_process < ptr_0db) ? kOm(adc2, adc1) : kOm0db(adc2, adc1);
+
+            if ((uint8_t *)p >= ptr_off)
+            {
+                block_off++;
             }
-            else
-            { // 0db
-                printf("%6d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, volt(adc2), kOm0db(adc2, adc1));
+
+            if (sum_n == count_avg || block_off == 0)
+            {
+                if (block_off == count_avg) //первый блок после отключения
+                {
+                    result.adc11 = adc1;
+                    result.adc2 = adc2;
+                    result.U = sum_avg_u / sum_n;
+                    result.R = sum_avg_c / sum_n;
+                    // printf("-------------------------------------\n");
+                }
+
+                printf("%5d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, sum_avg_c / sum_n, sum_avg_u / sum_n);
+                sum_avg_u = 0;
+                sum_avg_c = 0;
+                sum_n = 0;
             }
-            if (n % 2000 == 0)
+
+            if (n % 1000 == 0)
                 vTaskDelay(1);
         }
         // If you see task WDT in this task, it means the conversion is too fast for the task to handle
-
-        result.adc11 = 0;
-        result.adc2 = 0;
-        result.U = 0;
-        result.R = 0;
 
         xQueueSend(send_queue, (void *)&result, (portTickType)0);
         xEventGroupSetBits(ready_event_group, BIT0);
