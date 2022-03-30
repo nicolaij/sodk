@@ -164,7 +164,7 @@ void radio_task(void *arg)
         xResult = xTaskNotifyWait(pdFALSE,          /* Не очищать биты на входе. */
                                   ULONG_MAX,        /* На выходе очищаются все биты. */
                                   &ulNotifiedValue, /* Здесь хранится значение оповещения. */
-                                  0);               /* Время таймаута на блокировке. */
+                                  (portTickType)0); /* Время таймаута на блокировке. */
         if (xResult == pdPASS)
         {
             /* Было получено оповещение. Проверка, какие биты установлены. */
@@ -213,9 +213,10 @@ void radio_task(void *arg)
             // vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
 
-        if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)1))
+        if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)0))
         {
             int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", id, bootCount, result.U, result.R);
+            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             lora_send_packet((uint8_t *)buf, l);
             xEventGroupSetBits(ready_event_group, BIT1);
         }

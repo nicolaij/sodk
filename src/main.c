@@ -201,7 +201,7 @@ void app_main()
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
-//        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
 #if CONFIG_IDF_TARGET_ESP32
         xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
         xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);

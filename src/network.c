@@ -651,20 +651,22 @@ void wifi_task(void *arg)
     /* Start the server for the first time */
     start_webserver();
 
-    menu[5].val = 1;
+    menu[9].val = 1;
 
     while (1)
     {
-        if (menu[5].val == 0 && wifi_on == 1)
+        /*
+        if (menu[9].val == 0 && wifi_on == 1)
         {
             ESP_ERROR_CHECK(esp_wifi_stop());
             wifi_on = 0;
         }
-        else if (menu[5].val == 1 && wifi_on == 0)
+        else if (menu[9].val == 1 && wifi_on == 0)
         {
             ESP_ERROR_CHECK(esp_wifi_start());
             wifi_on = 1;
         }
+        */
 
         if (pdTRUE == xQueueReceive(ws_send_queue, msg, (portTickType)1000 / portTICK_PERIOD_MS))
         {
