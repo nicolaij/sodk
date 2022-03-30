@@ -306,7 +306,7 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
                     if (menu[i].val != p && p >= menu[i].min && p <= menu[i].max)
                     {
                         param_change = true;
-                        
+
                         menu[i].val = p;
 
                         nvs_handle_t my_handle;
@@ -533,6 +533,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
     }
 #endif
 
+
     reset_sleep_timeout();
 
     /* Respond with an empty chunk to signal HTTP response completion */
@@ -672,6 +673,11 @@ void wifi_task(void *arg)
         {
             if (ws_fd > 0)
                 httpd_queue_work(ws_hd, ws_async_send, msg);
+        }
+
+        if (timeout_counter++ >= 60)
+        {
+            xEventGroupSetBits(ready_event_group, BIT2);
         }
     }
 }

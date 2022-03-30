@@ -13,6 +13,7 @@ RTC_DATA_ATTR int bootCount = 0;
 
 TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
+TaskHandle_t xHandleWifi = NULL;
 
 menu_t menu[] = {
     {.id = "pulse", .name = "Импульс", .val = 100, .min = 1, .max = 1000},
@@ -72,16 +73,16 @@ void go_sleep(void)
 #if CONFIG_IDF_TARGET_ESP32
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
 #endif
-/*
-#if CONFIG_IDF_TARGET_ESP32C3
-    const gpio_config_t config = {
-        .pin_bit_mask = BIT64(GPIO_NUM_0),
-        .mode = GPIO_MODE_INPUT,
-    };
-    ESP_ERROR_CHECK(gpio_config(&config));
-    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(GPIO_NUM_0), ESP_GPIO_WAKEUP_GPIO_HIGH));
-#endif
-*/
+    /*
+    #if CONFIG_IDF_TARGET_ESP32C3
+        const gpio_config_t config = {
+            .pin_bit_mask = BIT64(GPIO_NUM_0),
+            .mode = GPIO_MODE_INPUT,
+        };
+        ESP_ERROR_CHECK(gpio_config(&config));
+        ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(GPIO_NUM_0), ESP_GPIO_WAKEUP_GPIO_HIGH));
+    #endif
+    */
     esp_sleep_enable_timer_wakeup(60 * 1000000);
 
     printf("Go sleep...");
@@ -161,8 +162,8 @@ void app_main()
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
 
-//go_sleep();
-    // Initialize NVS
+    // go_sleep();
+    //  Initialize NVS
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
@@ -199,26 +200,34 @@ void app_main()
     cmd.power = 255;
     xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 
+    // BIT0 - окончание измерения
+    // BIT1 - окончание передачи
+    // BIT2 - timeout работы wifi
+    xEventGroupWaitBits(
+        ready_event_group, /* The event group being tested. */
+        BIT0 | BIT1,       /* The bits within the event group to wait for. */
+        pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdTRUE,
+        portMAX_DELAY);
+
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
-        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
 #if CONFIG_IDF_TARGET_ESP32
         xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
         xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
 #endif
-    }
-    else
-    {
+
         xEventGroupWaitBits(
-            ready_event_group, /* The event group being tested. */
-            BIT0 | BIT1,       /* The bits within the event group to wait for. */
-            pdTRUE,            /* BIT_0 & BIT_1 should be cleared before returning. */
+            ready_event_group,  /* The event group being tested. */
+            BIT0 | BIT1 | BIT2, /* The bits within the event group to wait for. */
+            pdFALSE,            /* BIT_0 & BIT_1 should be cleared before returning. */
             pdTRUE,
             portMAX_DELAY);
-
-        //засыпаем...
-        go_sleep();
     }
+
+    //засыпаем...
+    go_sleep();
 
     while (1)
     {
