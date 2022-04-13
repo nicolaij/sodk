@@ -109,3 +109,5 @@ int read_nvs_menu(void);
 void reset_sleep_timeout(void);
 
 void cur_time(char *buf);
+
+void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off);

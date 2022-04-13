@@ -494,13 +494,40 @@ static esp_err_t download_get_handler(httpd_req_t *req)
     char line[32];
     char header[96] = "attachment; filename=\"";
 
-    cur_time(line);
-
     strlcat(header, line, sizeof(header));
     strlcat(header, ".txt\"", sizeof(header));
 
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_set_hdr(req, "Content-Disposition", header);
+
+    while (pos < sizeof(bufferADC) / sizeof(bufferADC[0]))
+    {
+        buf[0] = 0;
+        int str_len = 0;
+        for (int i = 0; i < 20; i++)
+        {
+            int l = sprintf(line, "%4d\n", pos, bufferADC[pos]);
+            strlcpy(&buf[str_len], line, sizeof(buf));
+            str_len += l;
+            if (str_len >= sizeof(buf))
+            {
+                ESP_LOGE(TAG, "Buffer owerflow!!!");
+                return ESP_FAIL;
+            }
+            pos++;
+        }
+
+        /* Send the buffer contents as HTTP response chunk */
+        if (httpd_resp_send_chunk(req, buf, str_len) != ESP_OK)
+        {
+            ESP_LOGE(TAG, "File sending failed!");
+            /* Abort sending file */
+            httpd_resp_sendstr_chunk(req, NULL);
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+            return ESP_FAIL;
+        }
+    }
 
 #if CONFIG_IDF_TARGET_ESP32
     while (pos < sizeof(bufferR) / sizeof(bufferR[0]))

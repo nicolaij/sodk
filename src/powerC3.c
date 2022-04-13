@@ -81,9 +81,6 @@ void dual_adc(void *arg)
 
     uint32_t ret_num = 0;
 
-    //результат измерений
-    result_t result;
-
     cmd_t cmd;
     cmd.cmd = 0;
     cmd.power = 0;
@@ -121,11 +118,6 @@ void dual_adc(void *arg)
         int64_t time_off = 0;
         int64_t t1 = esp_timer_get_time();
         int64_t timeout = menu[0].val * 1000;
-
-        result.adc11 = 0;
-        result.adc2 = 0;
-        result.U = 0;
-        result.R = 0;
 
         //(Лимит напряж - смещение) * коэфф. U
         int adcU_limit = ((menu[1].val - menu[3].val) * menu[2].val) / 1000;
@@ -232,69 +224,8 @@ void dual_adc(void *arg)
         ESP_ERROR_CHECK(adc_digi_stop());
         ESP_ERROR_CHECK(adc_digi_deinitialize());
 
-        adc_digi_output_data_t *p = (void *)bufferADC;
-        int adc1 = 0;
-        int adc2 = 0;
-        int n = 0;
-        uint8_t *p_process;
+        processBuffer(ptr, ptr_0db, ptr_off);
 
-        const int count_avg = 32;
-        int sum_avg_c = 0;
-        int sum_avg_u = 0;
-        int sum_n = 0;
-
-        int block_off = -1;
-
-        while ((uint8_t *)p < ptr)
-        {
-            while (p->type2.unit != 0 && (uint8_t *)p < ptr)
-            {
-                p++;
-            }
-            p_process = (uint8_t *)p;
-            adc1 = p->type2.data;
-            p++;
-            while (p->type2.unit != 1 && (uint8_t *)p < ptr)
-            {
-                p++;
-            }
-            adc2 = p->type2.data;
-            p++;
-            if ((uint8_t *)p > ptr)
-                break;
-
-            sum_n++;
-            sum_avg_u += volt(adc2);
-            sum_avg_c += (p_process < ptr_0db) ? kOm(adc2, adc1) : kOm0db(adc2, adc1);
-
-            if ((uint8_t *)p >= ptr_off)
-            {
-                block_off++;
-            }
-
-            if (sum_n == count_avg || block_off == 0)
-            {
-                if (block_off == count_avg) //первый блок после отключения
-                {
-                    result.adc11 = adc1;
-                    result.adc2 = adc2;
-                    result.U = sum_avg_u / sum_n;
-                    result.R = sum_avg_c / sum_n;
-                    // printf("-------------------------------------\n");
-                }
-
-                printf("%5d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, sum_avg_c / sum_n, sum_avg_u / sum_n);
-                sum_avg_u = 0;
-                sum_avg_c = 0;
-                sum_n = 0;
-            }
-
-            if (n % 1000 == 0)
-                vTaskDelay(1);
-        }
-        // If you see task WDT in this task, it means the conversion is too fast for the task to handle
-
-        xQueueSend(send_queue, (void *)&result, (portTickType)0);
         xEventGroupSetBits(ready_event_group, BIT0);
     };
 }
@@ -333,3 +264,68 @@ int kOm0db(int adc_u, int adc_r)
         return chan_r[0].max0db;
     return r;
 };
+
+void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
+{
+    //результат измерений
+    result_t result = {};
+
+    adc_digi_output_data_t *p = (void *)bufferADC;
+    int n = 0;
+
+    const int count_avg = 32;
+    int sum_avg_c = 0;
+    int sum_avg_u = 0;
+    int sum_n = 0;
+
+    int block_off = -1;
+
+    while ((uint8_t *)(p + 1) < endptr)
+    {
+        if (p->type2.unit == 0 && (p + 1)->type2.unit == 1)
+        {
+            int adc1 = p->type2.data;
+            int adc2 = (p + 1)->type2.data;
+
+            sum_n++;
+            sum_avg_u += volt(adc2);
+            sum_avg_c += ((uint8_t *)p < ptr_0db) ? kOm(adc2, adc1) : kOm0db(adc2, adc1);
+
+            if ((uint8_t *)p >= ptr_off)
+            {
+                block_off++;
+            }
+
+            if (sum_n == count_avg || block_off == 0)
+            {
+                if (block_off == count_avg) //первый блок после отключения
+                {
+                    result.adc11 = adc1;
+                    result.adc2 = adc2;
+                    result.U = sum_avg_u / sum_n;
+                    result.R = sum_avg_c / sum_n;
+                    // printf("-------------------------------------\n");
+                }
+
+                printf("%5d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, sum_avg_c / sum_n, sum_avg_u / sum_n);
+                sum_avg_u = 0;
+                sum_avg_c = 0;
+                sum_n = 0;
+            }
+
+            if (n % 1000 == 0)
+                vTaskDelay(1);
+        }
+        else
+        {
+            p++;
+            continue;
+        }
+
+        p = p + 2;
+    }
+
+    xQueueSend(send_queue, (void *)&result, (portTickType)0);
+    
+    return;
+}
