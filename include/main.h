@@ -18,10 +18,10 @@
 #define RESET_BIT 0x1
 #define SLEEP_BIT 0x2
 
+#if CONFIG_IDF_TARGET_ESP32
+
 #define PIN_SDA 22
 #define PIN_SCL 23
-
-#if CONFIG_IDF_TARGET_ESP32
 
 #define PIN_ENCODER_A 19
 #define PIN_ENCODER_B 18
