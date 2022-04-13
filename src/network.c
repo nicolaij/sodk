@@ -533,7 +533,6 @@ static esp_err_t download_get_handler(httpd_req_t *req)
     }
 #endif
 
-
     reset_sleep_timeout();
 
     /* Respond with an empty chunk to signal HTTP response completion */

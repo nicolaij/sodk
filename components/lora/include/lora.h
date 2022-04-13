@@ -11,16 +11,12 @@
 #define CONFIG_MOSI_GPIO 16
 #define CONFIG_SCK_GPIO 15
 
-#define POWER_PIN 32
-
 #elif CONFIG_IDF_TARGET_ESP32C3
 #define CONFIG_RST_GPIO 10
 #define CONFIG_CS_GPIO 9
 #define CONFIG_MISO_GPIO 2
 #define CONFIG_MOSI_GPIO 7
 #define CONFIG_SCK_GPIO 6
-
-#define POWER_PIN 18
 
 #endif
 

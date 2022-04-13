@@ -48,6 +48,7 @@ static void continuous_adc_init(adc_atten_t adc1_atten)
         .adc1_chan_mask = 1 << chan_r[0].channel,
         .adc2_chan_mask = 1 << chan_r[1].channel,
     };
+
     ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
 
     adc_digi_pattern_table_t adc_pattern[10] = {0};
@@ -74,6 +75,10 @@ static void continuous_adc_init(adc_atten_t adc1_atten)
 
 void dual_adc(void *arg)
 {
+
+    // zero-initialize the config structure.
+    gpio_config_t io_conf = {};
+
     uint32_t ret_num = 0;
 
     //результат измерений
@@ -83,12 +88,30 @@ void dual_adc(void *arg)
     cmd.cmd = 0;
     cmd.power = 0;
 
+    // disable interrupt
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    // set as output mode
+    io_conf.mode = GPIO_MODE_OUTPUT_OD;
+    io_conf.pin_bit_mask = (1 << ENABLE_PIN);
+    io_conf.pull_down_en = 0;
+    io_conf.pull_up_en = 0;
+    // configure GPIO with the given settings
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1 << POWER_PIN);
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 0));
+
     while (1)
     {
         continuous_adc_init(ADC_ATTEN_DB_11);
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
-        ESP_ERROR_CHECK(adc_digi_start());
+        ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
+        vTaskDelay(1);
+        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
 
         uint8_t *ptr = (uint8_t *)bufferADC;
         uint8_t *ptr_off = 0; //выключаем источник питания
@@ -107,6 +130,8 @@ void dual_adc(void *arg)
         //(Лимит напряж - смещение) * коэфф. U
         int adcU_limit = ((menu[1].val - menu[3].val) * menu[2].val) / 1000;
 
+        ESP_ERROR_CHECK(adc_digi_start());
+
         while (ptr < (uint8_t *)&bufferADC[DATALEN * 2] - 256)
         {
             ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, 256, &ret_num, ADC_MAX_DELAY));
@@ -118,6 +143,7 @@ void dual_adc(void *arg)
                 if ((esp_timer_get_time() - t1) > timeout)
                 {
                     //ВЫРУБАЕМ
+                    gpio_set_level(ENABLE_PIN, 1);
                     gpio_set_level(POWER_PIN, 0);
                     ptr_off = ptr;
                     time_off = esp_timer_get_time();
@@ -153,6 +179,7 @@ void dual_adc(void *arg)
                         if (sum_avg_c / count_avg > 4090 || sum_avg_u / count_avg > adcU_limit)
                         {
                             //ВЫРУБАЕМ
+                            gpio_set_level(ENABLE_PIN, 1);
                             gpio_set_level(POWER_PIN, 0);
                             ptr_off = ptr;
                             time_off = esp_timer_get_time();
