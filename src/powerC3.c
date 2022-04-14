@@ -29,8 +29,8 @@ typedef struct
 } measure_t;
 
 measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 5000},
-    {.channel = ADC1_CHANNEL_3, .k = 1, .max = 25000},
+    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 5000},
+    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 25000},
     {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},
 };
 
@@ -58,7 +58,7 @@ static void continuous_adc_init(int chan)
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
         .conv_limit_num = 200,
-        .sample_freq_hz = 8000,
+        .sample_freq_hz = SOC_ADC_SAMPLE_FREQ_THRES_HIGH / 2,
         .adc_pattern_len = 2,
     };
 
@@ -70,7 +70,7 @@ static void continuous_adc_init(int chan)
     }
     else
     {
-        adc_pattern[0].atten = ADC_ATTEN_DB_0;
+        adc_pattern[0].atten = ADC_ATTEN_DB_11;
         adc_pattern[0].channel = chan_r[1].channel;
     }
 
@@ -117,14 +117,14 @@ void dual_adc(void *arg)
 
         ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
         vTaskDelay(1);
-        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+        // ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
 
         uint8_t *ptr = (uint8_t *)bufferADC;
-        uint8_t *ptr_off = 0; //выключаем источник питания
+        uint8_t *ptr_off = 0;  //выключаем источник питания
         uint8_t *ptr_chan = 0; //переключаем канал
         int triggerChan = 1;
 
-        int64_t time_off = 0;
+        // int64_t time_off = 0;
         int64_t t1 = esp_timer_get_time();
         int64_t timeout = menu[0].val * 1000;
 
@@ -147,7 +147,7 @@ void dual_adc(void *arg)
                     gpio_set_level(ENABLE_PIN, 1);
                     gpio_set_level(POWER_PIN, 0);
                     ptr_off = ptr;
-                    time_off = esp_timer_get_time();
+                    // time_off = esp_timer_get_time();
                     printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / 8);
                 }
                 else
@@ -183,7 +183,7 @@ void dual_adc(void *arg)
                             gpio_set_level(ENABLE_PIN, 1);
                             gpio_set_level(POWER_PIN, 0);
                             ptr_off = ptr;
-                            time_off = esp_timer_get_time();
+                            // time_off = esp_timer_get_time();
 
                             printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / 8);
                         };
@@ -211,7 +211,7 @@ void dual_adc(void *arg)
                         sum_avg_c += p->type2.data;
                     };
 
-                    if (sum_avg_c / count_avg < 500)
+                    if (sum_avg_c / count_avg < 180)
                     {
                         //переключаем
                         ptr_chan = ptr;
@@ -233,7 +233,7 @@ void dual_adc(void *arg)
 
         processBuffer(ptr, ptr_chan, ptr_off);
 
-        xEventGroupSetBits(ready_event_group, BIT0);
+        xEventGroupSetBits(ready_event_group, END_MEASURE);
     };
 }
 
@@ -285,8 +285,32 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     int sum_avg_u = 0;
     int sum_n = 0;
 
-    int block_off = -1;
+    const int filter_avg = 5; 
+    int sum_adc1 = 0;
+    int sum_adc2 = 0;
+    int sum_n_adc = 0;
 
+    int pre_adc1[32];
+    int pre_adc2[32];
+    int pre_pos = 0;
+
+    int block_off = -1;
+/*
+    while ((uint8_t *)p < endptr)
+    {
+        if (p->type2.unit == 0)
+        {
+            printf("%4d, ", p->type2.data);
+        }
+        else if (p->type2.unit == 1)
+        {
+            printf("%4d\n", p->type2.data);
+        }
+
+        p++;
+    };
+    p = (void *)bufferADC;
+*/
     while ((uint8_t *)(p + 1) < endptr)
     {
         if (p->type2.unit == 0 && (p + 1)->type2.unit == 1)
@@ -336,3 +360,36 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
 
     return;
 }
+
+int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
+{
+    adc_digi_output_data_t *p = (void *)(*ptr_adc);
+
+    if ((*ptr_adc) == 0)
+    {
+        p = (void *)bufferADC;
+        (*ptr_adc) = (uint8_t *)p;
+        strcpy(line, "id, chan0, adc0, chan1, adc1\n");
+        return 2;
+    };
+
+    while ((uint8_t *)(p + 1) < (uint8_t *)bufferADC + sizeof(bufferADC))
+    {
+        if (p->type2.unit == 0 && (p + 1)->type2.unit == 1)
+        {
+            sprintf(line, "%5d, %4d, %4d, %4d, %4d\n", (*num)++, p->type2.channel, p->type2.data, (p + 1)->type2.channel, (p + 1)->type2.data);
+            // printf("%s", line);
+        }
+        else
+        {
+            p++;
+            continue;
+        };
+
+        p = p + 2;
+        (*ptr_adc) = (uint8_t *)p;
+        return 1;
+    };
+
+    return 0;
+};

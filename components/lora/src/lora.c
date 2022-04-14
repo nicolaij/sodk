@@ -330,10 +330,14 @@ int lora_init(void)
    /*
     * Configure CPU hardware to communicate with the radio chip
     */
-   gpio_pad_select_gpio(CONFIG_RST_GPIO);
-   gpio_set_direction(CONFIG_RST_GPIO, GPIO_MODE_OUTPUT);
-   gpio_pad_select_gpio(CONFIG_CS_GPIO);
-   gpio_set_direction(CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1 << CONFIG_RST_GPIO) | (1 << CONFIG_CS_GPIO);
+    io_conf.pull_down_en = 0;
+    io_conf.pull_up_en = 1;
+    // configure GPIO with the given settings
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
 
    spi_bus_config_t bus = {
        .miso_io_num = CONFIG_MISO_GPIO,

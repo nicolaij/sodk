@@ -11,11 +11,11 @@
 uint8_t buf[256];
 
 // 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
-int fr = 867500; // frequency kHz
-int bw = 7;      // Номер полосы
-int sf = 7;      // SpreadingFactor
-int op = 17;     // OutputPower
-int id = 1;      // ID передатчика
+int32_t fr = 867500; // frequency kHz
+int32_t bw = 7;      // Номер полосы
+int32_t sf = 7;      // SpreadingFactor
+int32_t op = 17;     // OutputPower
+int32_t id = 1;      // ID передатчика
 
 static const char *TAG = "radio";
 
@@ -23,7 +23,7 @@ static const char *TAG = "radio";
 params int32 - список параметров
 return кол-во элементов
 */
-int read_nvs_lora(int *id, int *fr, int *bw, int *sf, int *op)
+int read_nvs_lora(int32_t *id, int32_t *fr, int32_t *bw, int32_t *sf, int32_t *op)
 {
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open("lora", NVS_READONLY, &my_handle);
@@ -185,6 +185,7 @@ void radio_task(void *arg)
         }
 
         lora_receive(); // put into receive mode
+
         while (lora_received())
         {
             x = lora_receive_packet(buf, sizeof(buf));
@@ -217,8 +218,9 @@ void radio_task(void *arg)
         {
             int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", id, bootCount, result.U, result.R);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+            printf("%s\n", buf);
+            xEventGroupSetBits(ready_event_group, END_TRANSMIT);
             lora_send_packet((uint8_t *)buf, l);
-            xEventGroupSetBits(ready_event_group, BIT1);
         }
 
         gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);

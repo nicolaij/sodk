@@ -81,6 +81,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
     {
+        reset_sleep_timeout();
         esp_wifi_connect();
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
@@ -108,6 +109,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_AP_STACONNECTED)
     {
+        reset_sleep_timeout();
         wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
         ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
     }
@@ -490,75 +492,50 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 /* Handler to download a file kept on the server */
 static esp_err_t download_get_handler(httpd_req_t *req)
 {
-    int pos = 0;
     char line[32];
     char header[96] = "attachment; filename=\"";
 
-    strlcat(header, line, sizeof(header));
-    strlcat(header, ".txt\"", sizeof(header));
+    // strlcat(header, line, sizeof(header));
+    strlcat(header, "ADCdata.txt\"", sizeof(header));
 
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_set_hdr(req, "Content-Disposition", header);
+    uint8_t *ptr_adc = 0;
 
-    while (pos < sizeof(bufferADC) / sizeof(bufferADC[0]))
+    buf[0] = 0;
+    int l = 0;
+    int n = 0;
+    while (getADC_Data(line, &ptr_adc, &n) > 0)
     {
-        buf[0] = 0;
-        int str_len = 0;
-        for (int i = 0; i < 20; i++)
+        l = strlcat(buf, line, sizeof(buf));
+        if (l > (sizeof(buf) - sizeof(line)))
         {
-            int l = sprintf(line, "%4d\n", pos, bufferADC[pos]);
-            strlcpy(&buf[str_len], line, sizeof(buf));
-            str_len += l;
-            if (str_len >= sizeof(buf))
+            /* Send the buffer contents as HTTP response chunk */
+            if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
             {
-                ESP_LOGE(TAG, "Buffer owerflow!!!");
+                ESP_LOGE(TAG, "File sending failed!");
+                /* Abort sending file */
+                httpd_resp_sendstr_chunk(req, NULL);
+                /* Respond with 500 Internal Server Error */
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
                 return ESP_FAIL;
             }
-            pos++;
+
+            buf[0] = 0;
+            l = 0;
         }
 
-        /* Send the buffer contents as HTTP response chunk */
-        if (httpd_resp_send_chunk(req, buf, str_len) != ESP_OK)
+        if (n % 1000 == 0)
         {
-            ESP_LOGE(TAG, "File sending failed!");
-            /* Abort sending file */
-            httpd_resp_sendstr_chunk(req, NULL);
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
-            return ESP_FAIL;
+            vTaskDelay(1);
+            reset_sleep_timeout();
         }
     }
 
-#if CONFIG_IDF_TARGET_ESP32
-    while (pos < sizeof(bufferR) / sizeof(bufferR[0]))
+    if (l > 0)
     {
-        buf[0] = 0;
-        int str_len = 0;
-        for (int i = 0; i < 20; i++)
-        {
-            int l = sprintf(line, "%4d, %4d, %4d, %4d\n", pos, bufferU[pos], bufferR[pos], kOm(bufferU[pos], bufferR[pos]));
-            strlcpy(&buf[str_len], line, sizeof(buf));
-            str_len += l;
-            if (str_len >= sizeof(buf))
-            {
-                ESP_LOGE(TAG, "Buffer owerflow!!!");
-                return ESP_FAIL;
-            }
-            pos++;
-        }
-
-        /* Send the buffer contents as HTTP response chunk */
-        if (httpd_resp_send_chunk(req, buf, str_len) != ESP_OK)
-        {
-            ESP_LOGE(TAG, "File sending failed!");
-            /* Abort sending file */
-            httpd_resp_sendstr_chunk(req, NULL);
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
-            return ESP_FAIL;
-        }
+        httpd_resp_send_chunk(req, buf, l);
     }
-#endif
 
     reset_sleep_timeout();
 

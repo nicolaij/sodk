@@ -86,6 +86,10 @@ SemaphoreHandle_t i2c_mux;
 
 EventGroupHandle_t ready_event_group;
 
+//Конец измерений
+#define END_MEASURE BIT0
+#define END_TRANSMIT BIT1
+
 extern RTC_DATA_ATTR int bootCount;
 
 void ui_task(void *arg);
@@ -99,7 +103,7 @@ int volt(int adc);
 int kOm(int adc_u, int adc_r);
 int kOm0db(int adc_u, int adc_r);
 
-int read_nvs_lora(int *id, int *fr, int *bw, int *sf, int *op);
+int read_nvs_lora(int32_t *id, int32_t *fr, int32_t *bw, int32_t *sf, int32_t *op);
 int write_nvs_lora(const char *key, int value);
 
 void go_sleep(void);
@@ -111,3 +115,5 @@ void reset_sleep_timeout(void);
 void cur_time(char *buf);
 
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off);
+
+int getADC_Data(char *line, uint8_t **ptr_adc, int *num);

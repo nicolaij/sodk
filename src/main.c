@@ -9,6 +9,10 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+#if CONFIG_IDF_TARGET_ESP32C3
+#include "driver/temp_sensor.h"
+#endif
+
 RTC_DATA_ATTR int bootCount = 0;
 
 TaskHandle_t xHandleLora = NULL;
@@ -160,7 +164,19 @@ void app_main()
     printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
-    // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
+#if CONFIG_IDF_TARGET_ESP32C3
+    static const char *TAG = "TempSensor";
+    //    ESP_LOGI(TAG, "Initializing Temperature sensor");
+    float tsens_out;
+    temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
+    temp_sensor_get_config(&temp_sensor);
+    //ESP_LOGI(TAG, "default dac %d, clk_div %d", temp_sensor.dac_offset, temp_sensor.clk_div);
+    temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
+    temp_sensor_set_config(temp_sensor);
+    temp_sensor_start();
+    temp_sensor_read_celsius(&tsens_out);
+    ESP_LOGI(TAG, "Temperature out celsius %f°C", tsens_out);
+#endif
 
     // go_sleep();
     //  Initialize NVS
@@ -205,7 +221,7 @@ void app_main()
     // BIT2 - timeout работы wifi
     xEventGroupWaitBits(
         ready_event_group, /* The event group being tested. */
-        BIT0 | BIT1,       /* The bits within the event group to wait for. */
+        END_MEASURE,       /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
         portMAX_DELAY);
@@ -219,9 +235,9 @@ void app_main()
 #endif
 
         xEventGroupWaitBits(
-            ready_event_group,  /* The event group being tested. */
-            BIT0 | BIT1 | BIT2, /* The bits within the event group to wait for. */
-            pdFALSE,            /* BIT_0 & BIT_1 should be cleared before returning. */
+            ready_event_group,                 /* The event group being tested. */
+            END_MEASURE | END_TRANSMIT | BIT2, /* The bits within the event group to wait for. */
+            pdFALSE,                           /* BIT_0 & BIT_1 should be cleared before returning. */
             pdTRUE,
             portMAX_DELAY);
     }
