@@ -25,9 +25,9 @@ menu_t menu[] = {
     {.id = "kU", .name = "коэф. U", .val = 5555, .min = 1000, .max = 10000},
     {.id = "offsU", .name = "смещ. U", .val = 22, .min = -500, .max = 500},
     {.id = "kR1", .name = "коэф. R (ch 1)", .val = 575, .min = 1, .max = 2000},
-    {.id = "offsAR1", .name = "смещ. adc R (ch 1)", .val = 145, .min = -500, .max = 500},
+    {.id = "offsAR1", .name = "смещ. adc R (ch 1)", .val = 0, .min = -500, .max = 500},
     {.id = "kR2", .name = "коэф. R (ch 2)", .val = 2040, .min = 1, .max = 5000},
-    {.id = "offsAR2", .name = "смещ. adc R (ch 2)", .val = 145, .min = -500, .max = 500},
+    {.id = "offsAR2", .name = "смещ. adc R (ch 2)", .val = 0, .min = -500, .max = 500},
     {.id = "", .name = "WiFi", .val = 0, .min = 0, .max = 1},
     {.id = "", .name = "Выход ", .val = 0, .min = 0, .max = 0},
 };

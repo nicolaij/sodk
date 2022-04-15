@@ -46,8 +46,9 @@ typedef struct
 
 typedef struct
 {
-    int adc11;
-    int adc12;
+    int Ubat0;
+    int Ubat1;
+    int adc1;
     int adc2;
     int R;
     int U;

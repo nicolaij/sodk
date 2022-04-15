@@ -238,7 +238,7 @@ void radio_task(void *arg)
             printf("Press BTN:\"%s\"\n", buf);
 
             cmd_t cmd;
-            cmd.cmd = 3;
+            cmd.cmd = 10;
             cmd.power = 255;
 
             xQueueSend(uicmd_queue, &cmd, (portTickType)0);

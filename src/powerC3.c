@@ -29,8 +29,8 @@ typedef struct
 } measure_t;
 
 measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 5000},
-    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 25000},
+    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 3000},
+    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 50000},
     {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},
 };
 
@@ -110,18 +110,50 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 0));
 
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
+
     while (1)
     {
-        continuous_adc_init(0);
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
+        continuous_adc_init(0);
+
+        //подаем питание на источник питания
         ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
         vTaskDelay(1);
-        // ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+
+        //Измеряем акк перед включением силы
+        uint32_t adc_batt[2];
+        const uint32_t adc_samples = 32;
+        adc_batt[0] = 0;
+        for (int i = 0; i < adc_samples; i++)
+        {
+            adc_batt[0] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
+        }
+        adc_batt[0] /= adc_samples;
+
+        //включаем источник питания
+        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+
+        //Измеряем акк после включения силы
+        adc_batt[1] = 0;
+        for (int i = 0; i < adc_samples; i++)
+        {
+            adc_batt[1] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
+        }
+        adc_batt[1] /= adc_samples;
+
+        printf("Ubat: %d/%d\n", adc_batt[0], adc_batt[1]);
+
+        if (cmd.cmd == 10)
+        {
+            vTaskDelay(3000 / portTICK_PERIOD_MS);
+        }
 
         uint8_t *ptr = (uint8_t *)bufferADC;
-        uint8_t *ptr_off = 0;  //выключаем источник питания
-        uint8_t *ptr_chan = 0; //переключаем канал
+        uint8_t *ptr_off = NULL;  //выключаем источник питания
+        uint8_t *ptr_chan = NULL; //переключаем канал
         int triggerChan = 1;
 
         // int64_t time_off = 0;
@@ -130,6 +162,7 @@ void dual_adc(void *arg)
 
         //(Лимит напряж - смещение) * коэфф. U
         int adcU_limit = ((menu[1].val - menu[3].val) * menu[2].val) / 1000;
+        adcU_limit = 9999;
 
         ESP_ERROR_CHECK(adc_digi_start());
 
@@ -138,6 +171,9 @@ void dual_adc(void *arg)
             ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, 256, &ret_num, ADC_MAX_DELAY));
             ptr = ptr + ret_num;
 
+            // memset(ptr, 0, ret_num);
+            // printf("ret_num: %d\n", ret_num);
+
             if (ptr_off == 0)
             {
                 //отсечка по времени
@@ -145,7 +181,6 @@ void dual_adc(void *arg)
                 {
                     //ВЫРУБАЕМ
                     gpio_set_level(ENABLE_PIN, 1);
-                    gpio_set_level(POWER_PIN, 0);
                     ptr_off = ptr;
                     // time_off = esp_timer_get_time();
                     printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / 8);
@@ -181,7 +216,6 @@ void dual_adc(void *arg)
                         {
                             //ВЫРУБАЕМ
                             gpio_set_level(ENABLE_PIN, 1);
-                            gpio_set_level(POWER_PIN, 0);
                             ptr_off = ptr;
                             // time_off = esp_timer_get_time();
 
@@ -211,7 +245,7 @@ void dual_adc(void *arg)
                         sum_avg_c += p->type2.data;
                     };
 
-                    if (sum_avg_c / count_avg < 180)
+                    if (sum_avg_c / count_avg < 145)
                     {
                         //переключаем
                         ptr_chan = ptr;
@@ -228,6 +262,8 @@ void dual_adc(void *arg)
             };
         };
 
+        gpio_set_level(POWER_PIN, 0);
+
         ESP_ERROR_CHECK(adc_digi_stop());
         ESP_ERROR_CHECK(adc_digi_deinitialize());
 
@@ -241,16 +277,16 @@ int volt(int adc)
 {
     if (adc < 2)
         return 0;
-    return adc * 1000 / menu[2].val + menu[3].val;
+    return (adc + menu[3].val) * 1000 / menu[2].val;
 };
 
 int kOm(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
     int k = menu[4].val;
-    if (adc_r < 2)
+    if ((adc_r + menu[5].val) < 2)
         return chan_r[0].max;
-    if (adc_u < 2)
+    if ((adc_u + menu[3].val) < 2)
         return 0;
     int r = u * k / (adc_r + menu[5].val);
     if (r > chan_r[0].max)
@@ -262,9 +298,9 @@ int kOm0db(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
     int k = menu[6].val;
-    if (adc_r < 2)
+    if ((adc_r + menu[7].val) < 2)
         return chan_r[1].max;
-    if (adc_u < 2)
+    if ((adc_u + menu[3].val) < 2)
         return 0;
     int r = u * k / (adc_r + menu[7].val);
     if (r > chan_r[1].max)
@@ -285,7 +321,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     int sum_avg_u = 0;
     int sum_n = 0;
 
-    const int filter_avg = 5; 
+    const int filter_avg = 5;
     int sum_adc1 = 0;
     int sum_adc2 = 0;
     int sum_n_adc = 0;
@@ -295,22 +331,22 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     int pre_pos = 0;
 
     int block_off = -1;
-/*
-    while ((uint8_t *)p < endptr)
-    {
-        if (p->type2.unit == 0)
+    /*
+        while ((uint8_t *)p < endptr)
         {
-            printf("%4d, ", p->type2.data);
-        }
-        else if (p->type2.unit == 1)
-        {
-            printf("%4d\n", p->type2.data);
-        }
+            if (p->type2.unit == 0)
+            {
+                printf("%4d, ", p->type2.data);
+            }
+            else if (p->type2.unit == 1)
+            {
+                printf("%4d\n", p->type2.data);
+            }
 
-        p++;
-    };
-    p = (void *)bufferADC;
-*/
+            p++;
+        };
+        p = (void *)bufferADC;
+    */
     while ((uint8_t *)(p + 1) < endptr)
     {
         if (p->type2.unit == 0 && (p + 1)->type2.unit == 1)
@@ -318,9 +354,23 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
             int adc1 = p->type2.data;
             int adc2 = (p + 1)->type2.data;
 
-            sum_n++;
-            sum_avg_u += volt(adc2);
-            sum_avg_c += ((uint8_t *)p < ptr_0db) ? kOm(adc2, adc1) : kOm0db(adc2, adc1);
+            if (ptr_0db != NULL && (uint8_t *)p >= ptr_0db)
+            {
+                sum_n++;
+                sum_avg_u += volt(adc2);
+                sum_avg_c += kOm0db(adc2, adc1);
+            }
+            else
+            {
+                sum_n++;
+                sum_avg_u += volt(adc2);
+                sum_avg_c += kOm(adc2, adc1);
+            }
+
+            if ((uint8_t *)p == ptr_off)
+                printf("off %d -------------------------------------\n", (ptr_off - (uint8_t *)bufferADC) / 8);
+            if ((uint8_t *)p == ptr_0db)
+                printf("adc1 %d (%d) ------------------------------------\n", (ptr_0db - (uint8_t *)bufferADC) / 8, sum_n);
 
             if ((uint8_t *)p >= ptr_off)
             {
@@ -331,7 +381,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
             {
                 if (block_off == count_avg) //первый блок после отключения
                 {
-                    result.adc11 = adc1;
+                    result.adc1 = adc1;
                     result.adc2 = adc2;
                     result.U = sum_avg_u / sum_n;
                     result.R = sum_avg_c / sum_n;

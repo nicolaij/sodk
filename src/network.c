@@ -561,6 +561,7 @@ static void ws_async_send(char *msg)
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
 
     httpd_ws_send_frame_async(ws_hd, ws_fd, &ws_pkt);
+    reset_sleep_timeout();
 }
 
 static esp_err_t ws_handler(httpd_req_t *req)
