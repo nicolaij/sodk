@@ -492,7 +492,7 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 /* Handler to download a file kept on the server */
 static esp_err_t download_get_handler(httpd_req_t *req)
 {
-    char line[32];
+    char line[128];
     char header[96] = "attachment; filename=\"";
 
     // strlcat(header, line, sizeof(header));

@@ -29,10 +29,14 @@ typedef struct
 } measure_t;
 
 measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 3000},
-    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 50000},
-    {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},
+    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 3000},  //Основной канал
+    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 50000}, //х20
+    {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},  //Напряжение источника питания
+    {.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC1_CHANNEL_3, .k = 1, .max = 1000},  //Напряжение 0 проводника
 };
+
+#define ADC_DMA 4
 
 extern menu_t menu[];
 
@@ -44,9 +48,9 @@ static void continuous_adc_init(int chan)
     // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = 1024,
+        .max_store_buf_size = 256 * 4 * ADC_DMA,
         .conv_num_each_intr = 256,
-        .adc1_chan_mask = 1 << chan_r[chan].channel,
+        .adc1_chan_mask = 1 << chan_r[chan].channel | 1 << chan_r[3].channel | 1 << chan_r[4].channel,
         .adc2_chan_mask = 1 << chan_r[2].channel,
     };
 
@@ -58,8 +62,8 @@ static void continuous_adc_init(int chan)
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
         .conv_limit_num = 200,
-        .sample_freq_hz = SOC_ADC_SAMPLE_FREQ_THRES_HIGH / 2,
-        .adc_pattern_len = 2,
+        .sample_freq_hz = 10000,
+        .adc_pattern_len = ADC_DMA,
     };
 
     adc_pattern[0].unit = 0;
@@ -77,6 +81,14 @@ static void continuous_adc_init(int chan)
     adc_pattern[1].atten = ADC_ATTEN_DB_11;
     adc_pattern[1].channel = chan_r[2].channel;
     adc_pattern[1].unit = 1;
+
+    adc_pattern[2].atten = ADC_ATTEN_DB_11;
+    adc_pattern[2].channel = chan_r[3].channel;
+    adc_pattern[2].unit = 0;
+
+    adc_pattern[3].atten = ADC_ATTEN_DB_11;
+    adc_pattern[3].channel = chan_r[4].channel;
+    adc_pattern[3].unit = 0;
 
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_digi_controller_config(&dig_cfg));
@@ -122,30 +134,30 @@ void dual_adc(void *arg)
         //подаем питание на источник питания
         ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
         vTaskDelay(1);
-
-        //Измеряем акк перед включением силы
-        uint32_t adc_batt[2];
-        const uint32_t adc_samples = 32;
-        adc_batt[0] = 0;
-        for (int i = 0; i < adc_samples; i++)
-        {
-            adc_batt[0] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
-        }
-        adc_batt[0] /= adc_samples;
-
+        /*
+                //Измеряем акк перед включением силы
+                uint32_t adc_batt[2];
+                const uint32_t adc_samples = 32;
+                adc_batt[0] = 0;
+                for (int i = 0; i < adc_samples; i++)
+                {
+                    adc_batt[0] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
+                }
+                adc_batt[0] /= adc_samples;
+        */
         //включаем источник питания
         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+        /*
+                //Измеряем акк после включения силы
+                adc_batt[1] = 0;
+                for (int i = 0; i < adc_samples; i++)
+                {
+                    adc_batt[1] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
+                }
+                adc_batt[1] /= adc_samples;
 
-        //Измеряем акк после включения силы
-        adc_batt[1] = 0;
-        for (int i = 0; i < adc_samples; i++)
-        {
-            adc_batt[1] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
-        }
-        adc_batt[1] /= adc_samples;
-
-        printf("Ubat: %d/%d\n", adc_batt[0], adc_batt[1]);
-
+                printf("Ubat: %d/%d\n", adc_batt[0], adc_batt[1]);
+        */
         if (cmd.cmd == 10)
         {
             vTaskDelay(3000 / portTICK_PERIOD_MS);
@@ -161,8 +173,7 @@ void dual_adc(void *arg)
         int64_t timeout = menu[0].val * 1000;
 
         //(Лимит напряж - смещение) * коэфф. U
-        int adcU_limit = ((menu[1].val - menu[3].val) * menu[2].val) / 1000;
-        adcU_limit = 9999;
+        int adcU_limit = (menu[1].val * menu[2].val) / 1000;
 
         ESP_ERROR_CHECK(adc_digi_start());
 
@@ -199,14 +210,14 @@ void dual_adc(void *arg)
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 1 && (uint8_t *)p > (uint8_t *)bufferADC);
+                        } while (p->type2.unit != 1 && p->type2.channel != 0 && (uint8_t *)p > (uint8_t *)bufferADC);
                         sum_avg_u += p->type2.data;
 
                         //ток
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 0 && (uint8_t *)p > (uint8_t *)bufferADC);
+                        } while (p->type2.unit != 0 && p->type2.channel != 1 && (uint8_t *)p > (uint8_t *)bufferADC);
                         sum_avg_c += p->type2.data;
                     };
 
@@ -240,7 +251,7 @@ void dual_adc(void *arg)
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 0 && (uint8_t *)p > (uint8_t *)bufferADC);
+                        } while (p->type2.unit != 0 && p->type2.channel != 1 && (uint8_t *)p > (uint8_t *)bufferADC);
 
                         sum_avg_c += p->type2.data;
                     };
@@ -334,16 +345,12 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     /*
         while ((uint8_t *)p < endptr)
         {
-            if (p->type2.unit == 0)
+            for (int i = 0; i < ADC_DMA; i++)
             {
-                printf("%4d, ", p->type2.data);
+                printf("%d-%d: %4d, ", p->type2.unit, p->type2.channel, p->type2.data);
+                p++;
             }
-            else if (p->type2.unit == 1)
-            {
-                printf("%4d\n", p->type2.data);
-            }
-
-            p++;
+            printf("\n");
         };
         p = (void *)bufferADC;
     */
@@ -419,15 +426,15 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
     {
         p = (void *)bufferADC;
         (*ptr_adc) = (uint8_t *)p;
-        strcpy(line, "id, chan0, adc0, chan1, adc1\n");
+        strcpy(line, "id, chan0, adc0, chan1, adc1, chan2, adc2, chan3, adc3\n");
         return 2;
     };
 
-    while ((uint8_t *)(p + 1) < (uint8_t *)bufferADC + sizeof(bufferADC))
+    while ((uint8_t *)(p + ADC_DMA) <= (uint8_t *)bufferADC + sizeof(bufferADC))
     {
-        if (p->type2.unit == 0 && (p + 1)->type2.unit == 1)
+        if (p->type2.channel == 1 && (p + 1)->type2.channel == 0 && (p + 2)->type2.channel == 0 && (p + 4)->type2.channel == 3)
         {
-            sprintf(line, "%5d, %4d, %4d, %4d, %4d\n", (*num)++, p->type2.channel, p->type2.data, (p + 1)->type2.channel, (p + 1)->type2.data);
+            sprintf(line, "%5d, %4d, %4d, %4d, %4d\n", (*num)++, p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data);
             // printf("%s", line);
         }
         else
@@ -436,7 +443,7 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
             continue;
         };
 
-        p = p + 2;
+        p = p + ADC_DMA;
         (*ptr_adc) = (uint8_t *)p;
         return 1;
     };
