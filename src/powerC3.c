@@ -20,6 +20,8 @@
 
 uint32_t bufferADC[DATALEN * 2];
 
+#define ADC_BLOCK 512
+
 typedef struct
 {
     adc1_channel_t channel;
@@ -48,34 +50,35 @@ static void continuous_adc_init(int chan)
     // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = 256 * 4 * ADC_DMA,
-        .conv_num_each_intr = 256,
-        .adc1_chan_mask = 1 << chan_r[chan].channel | 1 << chan_r[3].channel | 1 << chan_r[4].channel,
+        .max_store_buf_size = ADC_BLOCK * 4,
+        .conv_num_each_intr = ADC_BLOCK,
+        .adc1_chan_mask = (1 << chan_r[chan].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[2].channel,
     };
 
     ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
 
-    adc_digi_pattern_table_t adc_pattern[10] = {0};
+    static adc_digi_pattern_table_t adc_pattern[10] = {0};
 
     // Do not set the sampling frequency out of the range between `SOC_ADC_SAMPLE_FREQ_THRES_LOW` and `SOC_ADC_SAMPLE_FREQ_THRES_HIGH`
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
         .conv_limit_num = 200,
-        .sample_freq_hz = 10000,
+        .sample_freq_hz = SOC_ADC_SAMPLE_FREQ_THRES_HIGH / 2,
         .adc_pattern_len = ADC_DMA,
     };
 
-    adc_pattern[0].unit = 0;
     if (chan == 0)
     {
         adc_pattern[0].atten = ADC_ATTEN_DB_11;
         adc_pattern[0].channel = chan_r[0].channel;
+        adc_pattern[0].unit = 0;
     }
     else
     {
         adc_pattern[0].atten = ADC_ATTEN_DB_11;
         adc_pattern[0].channel = chan_r[1].channel;
+        adc_pattern[0].unit = 0;
     }
 
     adc_pattern[1].atten = ADC_ATTEN_DB_11;
@@ -122,8 +125,8 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 0));
 
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
+    // adc1_config_width(ADC_WIDTH_BIT_12);
+    // adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
 
     while (1)
     {
@@ -177,10 +180,18 @@ void dual_adc(void *arg)
 
         ESP_ERROR_CHECK(adc_digi_start());
 
-        while (ptr < (uint8_t *)&bufferADC[DATALEN * 2] - 256)
+        while (ptr < (uint8_t *)&bufferADC[DATALEN * 2] - ADC_BLOCK)
         {
-            ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, 256, &ret_num, ADC_MAX_DELAY));
+            ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, ADC_BLOCK, &ret_num, ADC_MAX_DELAY));
+            /*            adc_digi_output_data_t *p = (void *)ptr;
+                        if (p->type2.data > 500)
+                            p->type2.data = p->type2.data - 500;
+                        else
+                            p->type2.data = 0;
+            */
             ptr = ptr + ret_num;
+
+            // vTaskDelay(1);
 
             // memset(ptr, 0, ret_num);
             // printf("ret_num: %d\n", ret_num);
@@ -194,12 +205,12 @@ void dual_adc(void *arg)
                     gpio_set_level(ENABLE_PIN, 1);
                     ptr_off = ptr;
                     // time_off = esp_timer_get_time();
-                    printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / 8);
+                    printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
                 }
                 else
                 {
                     //отсечка по току, напряжению
-                    const int count_avg = 3;
+                    const int count_avg = 8;
                     int sum_avg_c = 0;
                     int sum_avg_u = 0;
                     int n = 0;
@@ -210,14 +221,14 @@ void dual_adc(void *arg)
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 1 && p->type2.channel != 0 && (uint8_t *)p > (uint8_t *)bufferADC);
+                        } while (p->type2.unit != 1 || p->type2.channel != 0);
                         sum_avg_u += p->type2.data;
 
                         //ток
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 0 && p->type2.channel != 1 && (uint8_t *)p > (uint8_t *)bufferADC);
+                        } while (p->type2.unit != 0 || p->type2.channel != 1);
                         sum_avg_c += p->type2.data;
                     };
 
@@ -230,7 +241,7 @@ void dual_adc(void *arg)
                             ptr_off = ptr;
                             // time_off = esp_timer_get_time();
 
-                            printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / 8);
+                            printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
                         };
                     };
                 };
@@ -251,8 +262,7 @@ void dual_adc(void *arg)
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 0 && p->type2.channel != 1 && (uint8_t *)p > (uint8_t *)bufferADC);
-
+                        } while (p->type2.unit != 0 || p->type2.channel != 1);
                         sum_avg_c += p->type2.data;
                     };
 
@@ -327,7 +337,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     adc_digi_output_data_t *p = (void *)bufferADC;
     int n = 0;
 
-    const int count_avg = 32;
+    const int count_avg = 8;
     int sum_avg_c = 0;
     int sum_avg_u = 0;
     int sum_n = 0;
@@ -342,12 +352,12 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     int pre_pos = 0;
 
     int block_off = -1;
-    /*
-        while ((uint8_t *)p < endptr)
+
+    /*    while ((uint8_t *)p < endptr)
         {
             for (int i = 0; i < ADC_DMA; i++)
             {
-                printf("%d-%d: %4d, ", p->type2.unit, p->type2.channel, p->type2.data);
+                printf("%d,%d, %4d, ", p->type2.unit, p->type2.channel, p->type2.data);
                 p++;
             }
             printf("\n");
@@ -356,7 +366,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     */
     while ((uint8_t *)(p + 1) < endptr)
     {
-        if (p->type2.unit == 0 && (p + 1)->type2.unit == 1)
+        if (p->type2.unit == 0 && p->type2.channel == 1 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == 0)
         {
             int adc1 = p->type2.data;
             int adc2 = (p + 1)->type2.data;
@@ -375,13 +385,14 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
             }
 
             if ((uint8_t *)p == ptr_off)
-                printf("off %d -------------------------------------\n", (ptr_off - (uint8_t *)bufferADC) / 8);
+                printf("off %d -------------------------------------\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
             if ((uint8_t *)p == ptr_0db)
-                printf("adc1 %d (%d) ------------------------------------\n", (ptr_0db - (uint8_t *)bufferADC) / 8, sum_n);
+                printf("adc1 %d (%d) ------------------------------------\n", (ptr_0db - (uint8_t *)bufferADC) / (ADC_DMA * 4), sum_n);
 
             if ((uint8_t *)p >= ptr_off)
             {
-                block_off++;
+                if (ptr_0db == NULL || (ptr_0db >= ptr_off && (uint8_t *)p >= ptr_0db))
+                    block_off++;
             };
 
             if (sum_n == count_avg || block_off == 0)
@@ -410,7 +421,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
             continue;
         };
 
-        p = p + 2;
+        p = p + ADC_DMA;
     };
 
     xQueueSend(send_queue, (void *)&result, (portTickType)0);
@@ -426,13 +437,13 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
     {
         p = (void *)bufferADC;
         (*ptr_adc) = (uint8_t *)p;
-        strcpy(line, "id, chan0, adc0, chan1, adc1, chan2, adc2, chan3, adc3\n");
+        strcpy(line, "id, adc0, adc1, adc2, adc3\n");
         return 2;
     };
 
-    while ((uint8_t *)(p + ADC_DMA) <= (uint8_t *)bufferADC + sizeof(bufferADC))
+    while ((uint8_t *)(p + ADC_DMA) < (uint8_t *)bufferADC + sizeof(bufferADC))
     {
-        if (p->type2.channel == 1 && (p + 1)->type2.channel == 0 && (p + 2)->type2.channel == 0 && (p + 4)->type2.channel == 3)
+        if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 2)->type2.unit == 0 && (p + 3)->type2.unit == 0)
         {
             sprintf(line, "%5d, %4d, %4d, %4d, %4d\n", (*num)++, p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data);
             // printf("%s", line);
