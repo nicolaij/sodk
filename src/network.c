@@ -70,11 +70,12 @@ extern int sf;
 extern int op;
 extern int id;
 
-int timeout_counter = 0;
+const int64_t sleeptimeout = 60000000;
+int64_t timeout_start;
 
 void reset_sleep_timeout()
 {
-    timeout_counter = 0;
+    timeout_start = esp_timer_get_time();
 }
 
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
@@ -300,7 +301,7 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 
             bool param_change = false;
 
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < 12; i++)
             {
                 if (httpd_query_key_value(buf, menu[i].id, param, 7) == ESP_OK)
                 {
@@ -408,9 +409,14 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
 
     //-----------------------------СОДК------------------------------
     httpd_resp_sendstr_chunk(req, sodkstart);
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 12; i++)
     {
-        strlcpy(buf, "\n<tr><td><label for=\"", sizeof(buf));
+        if (i % 2 == 0)
+            strlcpy(buf, "\n<tr>", sizeof(buf));
+        else
+            strlcpy(buf, " ", sizeof(buf));
+
+        strlcat(buf, "<td><label for=\"", sizeof(buf));
         strlcat(buf, menu[i].id, sizeof(buf));
         strlcat(buf, "\">", sizeof(buf));
         strlcat(buf, menu[i].name, sizeof(buf));
@@ -421,7 +427,11 @@ static esp_err_t lora_set_handler(httpd_req_t *req)
         strlcat(buf, "\" size=\"7\" value=\"", sizeof(buf));
         itoa(menu[i].val, param, 10);
         strlcat(buf, param, sizeof(buf));
-        strlcat(buf, "\" /></td></tr>", sizeof(buf));
+        strlcat(buf, "\" /></td>", sizeof(buf));
+
+        if (i % 2 == 1)
+            strlcat(buf, "</tr>", sizeof(buf));
+
         httpd_resp_sendstr_chunk(req, buf);
     }
     httpd_resp_sendstr_chunk(req, sodkend);
@@ -656,30 +666,23 @@ void wifi_task(void *arg)
     /* Start the server for the first time */
     start_webserver();
 
-    menu[9].val = 1;
+    menu[12].val = 1;
+
+    reset_sleep_timeout();
 
     while (1)
     {
-        /*
-        if (menu[9].val == 0 && wifi_on == 1)
-        {
-            ESP_ERROR_CHECK(esp_wifi_stop());
-            wifi_on = 0;
-        }
-        else if (menu[9].val == 1 && wifi_on == 0)
-        {
-            ESP_ERROR_CHECK(esp_wifi_start());
-            wifi_on = 1;
-        }
-        */
 
         if (pdTRUE == xQueueReceive(ws_send_queue, msg, (portTickType)1000 / portTICK_PERIOD_MS))
         {
             if (ws_fd > 0)
+            {
                 httpd_queue_work(ws_hd, ws_async_send, msg);
+                reset_sleep_timeout();
+            }
         }
 
-        if (timeout_counter++ >= 60)
+        if (esp_timer_get_time() - timeout_start > sleeptimeout)
         {
             xEventGroupSetBits(ready_event_group, BIT2);
         }
