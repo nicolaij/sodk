@@ -30,9 +30,9 @@ typedef struct
     int max0db;
 } measure_t;
 
-measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 3000},  //Основной канал
-    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 50000}, //х20
+const measure_t chan_r[] = {
+    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 49999}, //х20
     {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},  //Напряжение источника питания
     {.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
     {.channel = ADC1_CHANNEL_3, .k = 1, .max = 1000},  //Напряжение 0 проводника
@@ -64,7 +64,7 @@ static void continuous_adc_init(int chan)
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
         .conv_limit_num = 200,
-        .sample_freq_hz = SOC_ADC_SAMPLE_FREQ_THRES_HIGH / 2,
+        .sample_freq_hz = 64000,
         .adc_pattern_len = ADC_DMA,
     };
 
@@ -171,14 +171,15 @@ void dual_adc(void *arg)
         uint8_t *ptr_chan = NULL; //переключаем канал
         int triggerChan = 1;
 
-        // int64_t time_off = 0;
-        int64_t t1 = esp_timer_get_time();
         int64_t timeout = menu[0].val * 1000;
 
         //(Лимит напряж - смещение) * коэфф. U
         int adcU_limit = (menu[1].val * menu[2].val) / 1000;
 
         ESP_ERROR_CHECK(adc_digi_start());
+
+        // int64_t time_off = 0;
+        int64_t t1 = esp_timer_get_time();
 
         while (ptr < (uint8_t *)&bufferADC[DATALEN * 2] - ADC_BLOCK)
         {
@@ -196,7 +197,7 @@ void dual_adc(void *arg)
             // memset(ptr, 0, ret_num);
             // printf("ret_num: %d\n", ret_num);
 
-            if (ptr_off == 0)
+            if (ptr_off == NULL)
             {
                 //отсечка по времени
                 if ((esp_timer_get_time() - t1) > timeout)
@@ -205,12 +206,12 @@ void dual_adc(void *arg)
                     gpio_set_level(ENABLE_PIN, 1);
                     ptr_off = ptr;
                     // time_off = esp_timer_get_time();
-                    printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
+                    //printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
                 }
                 else
                 {
                     //отсечка по току, напряжению
-                    const int count_avg = 8;
+                    const int count_avg = 4;
                     int sum_avg_c = 0;
                     int sum_avg_u = 0;
                     int n = 0;
@@ -234,14 +235,13 @@ void dual_adc(void *arg)
 
                     if ((uint8_t *)p >= (uint8_t *)bufferADC)
                     {
-                        if (sum_avg_c / count_avg > 4090 || sum_avg_u / count_avg > adcU_limit)
+                        if (sum_avg_c / count_avg > 4080 || sum_avg_u / count_avg > adcU_limit)
                         {
                             //ВЫРУБАЕМ
                             gpio_set_level(ENABLE_PIN, 1);
                             ptr_off = ptr;
-                            // time_off = esp_timer_get_time();
-
-                            printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
+                            //time_off = esp_timer_get_time();
+                            // printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
                         };
                     };
                 };
@@ -252,7 +252,7 @@ void dual_adc(void *arg)
                 if (triggerChan > 0) //проверяем чувствительность
                 {
                     // int64_t t1 = esp_timer_get_time();
-                    const int count_avg = 3;
+                    const int count_avg = 4;
                     int sum_avg_c = 0;
                     int n = 0;
                     adc_digi_output_data_t *p = (void *)ptr;
@@ -266,7 +266,9 @@ void dual_adc(void *arg)
                         sum_avg_c += p->type2.data;
                     };
 
-                    if (sum_avg_c / count_avg < 145)
+                    // printf("sum: %d / %d\n", sum_avg_c, count_avg);
+
+                    if ((sum_avg_c / count_avg) < 145)
                     {
                         //переключаем
                         ptr_chan = ptr;
@@ -276,8 +278,8 @@ void dual_adc(void *arg)
                         continuous_adc_init(1);
                         ESP_ERROR_CHECK(adc_digi_start());
                     };
-                    // int64_t t2 = esp_timer_get_time();
-                    // printf("dt: %lld\n", t2 - t1);
+                    int64_t t2 = esp_timer_get_time();
+                    //printf("dt: %lld\n", t2 - t1);
                     triggerChan--;
                 };
             };
@@ -337,7 +339,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
     adc_digi_output_data_t *p = (void *)bufferADC;
     int n = 0;
 
-    const int count_avg = 8;
+    const int count_avg = 32;
     int sum_avg_c = 0;
     int sum_avg_u = 0;
     int sum_n = 0;
@@ -364,9 +366,10 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
         };
         p = (void *)bufferADC;
     */
+
     while ((uint8_t *)(p + 1) < endptr)
     {
-        if (p->type2.unit == 0 && p->type2.channel == 1 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == 0)
+        if (p->type2.unit == 0 && (p->type2.channel == chan_r[0].channel || p->type2.channel == chan_r[1].channel) && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[2].channel)
         {
             int adc1 = p->type2.data;
             int adc2 = (p + 1)->type2.data;
@@ -387,11 +390,11 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
             if ((uint8_t *)p == ptr_off)
                 printf("off %d -------------------------------------\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
             if ((uint8_t *)p == ptr_0db)
-                printf("adc1 %d (%d) ------------------------------------\n", (ptr_0db - (uint8_t *)bufferADC) / (ADC_DMA * 4), sum_n);
+                printf("adc1 %d ------------------------------------\n", (ptr_0db - (uint8_t *)bufferADC) / (ADC_DMA * 4));
 
             if ((uint8_t *)p >= ptr_off)
             {
-                if (ptr_0db == NULL || (ptr_0db >= ptr_off && (uint8_t *)p >= ptr_0db))
+                if (ptr_0db == NULL || (ptr_0db != NULL  && (uint8_t *)p >= ptr_0db))
                     block_off++;
             };
 
