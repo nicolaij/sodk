@@ -46,12 +46,13 @@ typedef struct
 
 typedef struct
 {
-    int Ubat0;
-    int Ubat1;
     int adc1;
-    int adc2;
     int R;
+    int adc2;
     int U;
+    int Ubatt0;
+    int Ubatt1;
+    int U0;
 } result_t;
 
 #define PWM_MIN 0
@@ -100,6 +101,7 @@ void clock_task(void *arg);
 void wifi_task(void *arg);
 void radio_task(void *arg);
 
+int current(int adc);
 int volt(int adc);
 int kOm(int adc_u, int adc_r);
 int kOm0db(int adc_u, int adc_r);

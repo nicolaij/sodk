@@ -216,8 +216,8 @@ void radio_task(void *arg)
 
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)0))
         {
-            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d}", id, bootCount, result.U, result.R);
-            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ubatt1\":%d,\"Ubatt0\":%d,\"U0\":%d}", id, bootCount, result.U, result.R, result.Ubatt1, result.Ubatt0, result.U0);
+            xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
             printf("%s\n", buf);
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);
             lora_send_packet((uint8_t *)buf, l);
@@ -234,7 +234,7 @@ void radio_task(void *arg)
             time(&now);
             localtime_r(&now, &timeinfo);
             size_t l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
-            //lora_send_packet((uint8_t *)buf, l);
+            // lora_send_packet((uint8_t *)buf, l);
             printf("Press BTN:\"%s\"\n", buf);
 
             cmd_t cmd;
