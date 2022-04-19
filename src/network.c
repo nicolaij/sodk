@@ -70,8 +70,10 @@ extern int sf;
 extern int op;
 extern int id;
 
-const int64_t sleeptimeout = 60000000;
+const int64_t sleeptimeout = 180 * 1000000;
 int64_t timeout_start;
+
+bool need_ws_send = false;
 
 void reset_sleep_timeout()
 {
@@ -236,7 +238,7 @@ int wifi_init_sta(void)
 }
 
 /* An HTTP GET handler */
-static esp_err_t lora_set_handler(httpd_req_t *req)
+static esp_err_t settings_handler(httpd_req_t *req)
 {
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
@@ -564,14 +566,13 @@ static void ws_async_send(char *msg)
 {
     if (ws_fd == 0)
         return;
-    httpd_ws_frame_t ws_pkt;
+    static httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
     ws_pkt.payload = (uint8_t *)msg;
     ws_pkt.len = strlen(msg);
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
 
     httpd_ws_send_frame_async(ws_hd, ws_fd, &ws_pkt);
-    reset_sleep_timeout();
 }
 
 static esp_err_t ws_handler(httpd_req_t *req)
@@ -595,6 +596,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
     ws_fd = httpd_req_to_sockfd(req);
     ESP_LOGI(TAGH, "ws_fd: %d", ws_fd);
 
+    if (strcmp("open ws", (const char *)ws_pkt.payload) == 0)
+        need_ws_send = true;
+
     /*
         strlcpy((char*)buf, "Test!!!", sizeof(buf));
 
@@ -617,7 +621,7 @@ static const httpd_uri_t file_download = {
 static const httpd_uri_t lora_set = {
     .uri = PAGE_LORA_SET,
     .method = HTTP_GET,
-    .handler = lora_set_handler,
+    .handler = settings_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
     .user_ctx = "Hello World!"};
@@ -673,18 +677,23 @@ void wifi_task(void *arg)
     while (1)
     {
 
-        if (pdTRUE == xQueueReceive(ws_send_queue, msg, (portTickType)1000 / portTICK_PERIOD_MS))
+        if (pdTRUE == xQueueReceive(ws_send_queue, msg, 1000 / portTICK_PERIOD_MS))
         {
-            if (ws_fd > 0)
-            {
-                httpd_queue_work(ws_hd, ws_async_send, msg);
-                reset_sleep_timeout();
-            }
+            need_ws_send = true;
+        }
+
+        if (need_ws_send && ws_fd > 0)
+        {
+            httpd_queue_work(ws_hd, ws_async_send, msg);
+            reset_sleep_timeout();
+            need_ws_send = false;
         }
 
         if (esp_timer_get_time() - timeout_start > sleeptimeout)
         {
             xEventGroupSetBits(ready_event_group, BIT2);
         }
+
+        vTaskDelay(1);
     }
 }

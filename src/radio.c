@@ -8,7 +8,7 @@
 
 #include <main.h>
 
-uint8_t buf[256];
+uint8_t buf[WS_BUF_LINE];
 
 // 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
 int32_t fr = 867500; // frequency kHz
@@ -137,10 +137,11 @@ int write_nvs_lora(const char *key, int value)
 void radio_task(void *arg)
 {
     int x;
+    int ver = 0;
 
     read_nvs_lora(&id, &fr, &bw, &sf, &op);
 
-    lora_init();
+    ver = lora_init();
 
     lora_set_frequency(fr * 1000);
     lora_set_bandwidth_n(bw);
@@ -186,7 +187,7 @@ void radio_task(void *arg)
 
         lora_receive(); // put into receive mode
 
-        while (lora_received())
+        while (ver == 0x12 && lora_received())
         {
             x = lora_receive_packet(buf, sizeof(buf));
             buf[x] = 0;
@@ -206,7 +207,7 @@ void radio_task(void *arg)
                 // fflush(stdout);
             }
 
-            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+            //xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
             lora_receive();
             // lora_idle();
             // vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -216,11 +217,12 @@ void radio_task(void *arg)
 
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)0))
         {
-            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ubatt1\":%d,\"Ubatt0\":%d,\"U0\":%d}", id, bootCount, result.U, result.R, result.Ubatt1, result.Ubatt0, result.U0);
+            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%d,\"Ub0\":%d,\"U0\":%d}", id, bootCount, result.U, result.R, result.Ubatt1, result.Ubatt0, result.U0);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
             printf("%s\n", buf);
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);
-            lora_send_packet((uint8_t *)buf, l);
+            if (ver == 0x12)
+                lora_send_packet((uint8_t *)buf, l);
         }
 
         gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);

@@ -22,6 +22,9 @@ uint32_t bufferADC[DATALEN * 2];
 
 #define ADC_BLOCK 256
 
+//результат измерений
+result_t result = {};
+
 typedef struct
 {
     adc1_channel_t channel;
@@ -182,15 +185,14 @@ void dual_adc(void *arg)
         do
         {
             ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, ADC_BLOCK, &ret_num, ADC_MAX_DELAY));
+            ptr = ptr + ret_num;
+
             /*            adc_digi_output_data_t *p = (void *)ptr;
                         if (p->type2.data > 500)
                             p->type2.data = p->type2.data - 500;
                         else
                             p->type2.data = 0;
             */
-            ptr = ptr + ret_num;
-
-            // vTaskDelay(1);
 
             // memset(ptr, 0, ret_num);
             // printf("ret_num: %d\n", ret_num);
@@ -292,6 +294,8 @@ void dual_adc(void *arg)
         processBuffer(ptr, ptr_chan, ptr_off);
 
         xEventGroupSetBits(ready_event_group, END_MEASURE);
+        
+        vTaskDelay(1);
     };
 }
 
@@ -360,10 +364,7 @@ int kOm0db(int adc_u, int adc_r)
 
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
 {
-    //результат измерений
-    result_t result = {};
-
-    char buf[128];
+    char buf[WS_BUF_LINE];
 
     adc_digi_output_data_t *p = (void *)bufferADC;
     int n = 0;
@@ -403,7 +404,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
         p = (void *)bufferADC;
     */
     sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4), (ptr_0db - (uint8_t *)bufferADC) / (ADC_DMA * 4));
-    xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+    //xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
     printf("%s\n", buf);
 
     while ((uint8_t *)p < endptr)
@@ -507,7 +508,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
                 // printf("%5d, %4d, %4d, %4d, %4d\n", n++, adc1, adc2, sum_avg_c / sum_n, sum_avg_u / sum_n);
                 sprintf(buf, "%5d, %4d, %5d, %4d, %5d, %4d, %5d, %4d, %5d", n++, adc1, sum_avg_c / sum_n, adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
                 // xQueueOverwrite(ws_send_queue, (char *)buf);
-                xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
+                xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
                 printf("%s\n", buf);
                 sum_n = 0;
             };

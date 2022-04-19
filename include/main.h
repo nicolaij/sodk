@@ -38,6 +38,8 @@
 
 #endif
 
+#define WS_BUF_LINE 128
+
 typedef struct
 {
     int cmd;

@@ -22,15 +22,15 @@ TaskHandle_t xHandleWifi = NULL;
 menu_t menu[] = {
     {.id = "pulse", .name = "Импульс", .val = 100, .min = 1, .max = 10000},
     {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 1, .max = 1000},
-    {.id = "kU", .name = "коэф. U", .val = 150, .min = 1, .max = 10000},
+    {.id = "kU", .name = "коэф. U", .val = 160, .min = 1, .max = 10000},
     {.id = "offsU", .name = "смещ. U", .val = 0, .min = -100000, .max = 100000},
     {.id = "kR1", .name = "коэф. R (ch 1)", .val = 1400, .min = 1, .max = 10000},
     {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 30000, .min = 1, .max = 100000},
+    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 67, .min = 1, .max = 100000},
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kUbat", .name = "коэф. U batt", .val = 2040, .min = 1, .max = 10000},
+    {.id = "kUbat", .name = "коэф. U batt", .val = 4000, .min = 1, .max = 10000},
     {.id = "offsUbat", .name = "смещ. U batt", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kU0", .name = "коэф. U петли", .val = 150, .min = 1, .max = 10000},
+    {.id = "kU0", .name = "коэф. U петли", .val = 160, .min = 1, .max = 10000},
     {.id = "offsU0", .name = "смещ. U петли", .val = 0, .min = -100000, .max = 100000},
     {.id = "", .name = "WiFi", .val = 0, .min = 0, .max = 1},
     {.id = "", .name = "Выход ", .val = 0, .min = 0, .max = 0},
@@ -201,7 +201,7 @@ void app_main()
 
     send_queue = xQueueCreate(2, sizeof(result_t));
 
-    ws_send_queue = xQueueCreate(256, 256);
+    ws_send_queue = xQueueCreate(512, WS_BUF_LINE);
 
     i2c_mux = xSemaphoreCreateMutex();
 
