@@ -294,8 +294,6 @@ void dual_adc(void *arg)
         processBuffer(ptr, ptr_chan, ptr_off);
 
         xEventGroupSetBits(ready_event_group, END_MEASURE);
-        
-        vTaskDelay(1);
     };
 }
 

@@ -165,7 +165,7 @@ void radio_task(void *arg)
         xResult = xTaskNotifyWait(pdFALSE,          /* Не очищать биты на входе. */
                                   ULONG_MAX,        /* На выходе очищаются все биты. */
                                   &ulNotifiedValue, /* Здесь хранится значение оповещения. */
-                                  (portTickType)0); /* Время таймаута на блокировке. */
+                                  (portTickType)2); /* Время таймаута на блокировке. */
         if (xResult == pdPASS)
         {
             /* Было получено оповещение. Проверка, какие биты установлены. */
@@ -181,13 +181,14 @@ void radio_task(void *arg)
             {
                 ESP_LOGI(TAG, "lora_sleep");
                 lora_sleep();
+                xEventGroupSetBits(ready_event_group, END_LORA_SLEEP);
                 vTaskDelay(10000 / portTICK_PERIOD_MS);
             }
         }
 
         lora_receive(); // put into receive mode
 
-        while (ver == 0x12 && lora_received())
+        while (lora_received())
         {
             x = lora_receive_packet(buf, sizeof(buf));
             buf[x] = 0;
@@ -218,11 +219,11 @@ void radio_task(void *arg)
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)0))
         {
             int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%d,\"Ub0\":%d,\"U0\":%d}", id, bootCount, result.U, result.R, result.Ubatt1, result.Ubatt0, result.U0);
-            xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
             printf("%s\n", buf);
-            xEventGroupSetBits(ready_event_group, END_TRANSMIT);
+            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             if (ver == 0x12)
                 lora_send_packet((uint8_t *)buf, l);
+            xEventGroupSetBits(ready_event_group, END_TRANSMIT);
         }
 
         gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
@@ -251,7 +252,5 @@ void radio_task(void *arg)
         }
 
         gpio_set_direction(CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
-
-        vTaskDelay(1);
     }
 }

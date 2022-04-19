@@ -691,7 +691,7 @@ void wifi_task(void *arg)
 
         if (esp_timer_get_time() - timeout_start > sleeptimeout)
         {
-            xEventGroupSetBits(ready_event_group, BIT2);
+            xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);
         }
 
         vTaskDelay(1);

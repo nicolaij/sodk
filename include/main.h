@@ -93,6 +93,9 @@ EventGroupHandle_t ready_event_group;
 //Конец измерений
 #define END_MEASURE BIT0
 #define END_TRANSMIT BIT1
+#define END_WIFI_TIMEOUT BIT2
+#define END_LORA_SLEEP BIT3
+#define END_UI_SLEEP BIT4
 
 extern RTC_DATA_ATTR int bootCount;
 

@@ -71,12 +71,6 @@ int read_nvs_menu()
 
 void go_sleep(void)
 {
-    if (xHandleLora)
-        xTaskNotify(xHandleLora, SLEEP_BIT, eSetValueWithOverwrite);
-    if (xHandleUI)
-        xTaskNotify(xHandleUI, SLEEP_BIT, eSetValueWithOverwrite);
-
-    vTaskDelay(100 / portTICK_PERIOD_MS);
 
 #if CONFIG_IDF_TARGET_ESP32
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
@@ -93,7 +87,7 @@ void go_sleep(void)
     */
     esp_sleep_enable_timer_wakeup(60 * 1000000);
 
-    printf("Go sleep...");
+    printf("Go sleep...\n");
     fflush(stdout);
 
     esp_deep_sleep_start();
@@ -174,7 +168,7 @@ void app_main()
     float tsens_out;
     temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
     temp_sensor_get_config(&temp_sensor);
-    //ESP_LOGI(TAG, "default dac %d, clk_div %d", temp_sensor.dac_offset, temp_sensor.clk_div);
+    // ESP_LOGI(TAG, "default dac %d, clk_div %d", temp_sensor.dac_offset, temp_sensor.clk_div);
     temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
     temp_sensor_set_config(temp_sensor);
     temp_sensor_start();
@@ -239,11 +233,39 @@ void app_main()
 #endif
 
         xEventGroupWaitBits(
-            ready_event_group,                 /* The event group being tested. */
-            END_MEASURE | END_TRANSMIT | BIT2, /* The bits within the event group to wait for. */
-            pdFALSE,                           /* BIT_0 & BIT_1 should be cleared before returning. */
+            ready_event_group, /* The event group being tested. */
+            END_WIFI_TIMEOUT,  /* The bits within the event group to wait for. */
+            pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
             pdTRUE,
             portMAX_DELAY);
+    }
+
+    xEventGroupWaitBits(
+        ready_event_group, /* The event group being tested. */
+        END_TRANSMIT,      /* The bits within the event group to wait for. */
+        pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdTRUE,
+        portMAX_DELAY);
+
+    xTaskNotify(xHandleLora, SLEEP_BIT, eSetValueWithOverwrite);
+
+    xEventGroupWaitBits(
+        ready_event_group, /* The event group being tested. */
+        END_LORA_SLEEP,    /* The bits within the event group to wait for. */
+        pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdTRUE,
+        10);
+
+    if (xHandleUI)
+    {
+        xTaskNotify(xHandleUI, SLEEP_BIT, eSetValueWithOverwrite);
+
+        xEventGroupWaitBits(
+            ready_event_group, /* The event group being tested. */
+            END_UI_SLEEP,      /* The bits within the event group to wait for. */
+            pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
+            pdTRUE,
+            10);
     }
 
     //засыпаем...

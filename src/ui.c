@@ -150,6 +150,7 @@ void ui_task(void *arg)
 			{
 				ESP_LOGI(TAG, "u8g2_SetPowerSave");
 				u8g2_SetPowerSave(&u8g2, true);
+                xEventGroupSetBits(ready_event_group, END_UI_SLEEP);
 				vTaskDelay(10000 / portTICK_PERIOD_MS);
 			}
 		}
