@@ -21,6 +21,8 @@
 
 #include <esp_http_server.h>
 
+#include "esp_spiffs.h"
+
 extern menu_t menu[];
 
 #if CONFIG_IDF_TARGET_ESP32
@@ -70,7 +72,7 @@ extern int sf;
 extern int op;
 extern int id;
 
-const int64_t sleeptimeout = 180 * 1000000;
+const int64_t sleeptimeout = 60 * 1000000;
 int64_t timeout_start;
 
 bool need_ws_send = false;
@@ -125,8 +127,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
 void wifi_init_softap(void)
 {
-    // ESP_ERROR_CHECK(esp_netif_init());
-    // ESP_ERROR_CHECK(esp_event_loop_create_default());
+
     esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -168,10 +169,7 @@ void wifi_init_softap(void)
 
 int wifi_init_sta(void)
 {
-    s_wifi_event_group = xEventGroupCreate();
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
     esp_netif_create_default_wifi_sta();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -501,6 +499,66 @@ static esp_err_t settings_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+static esp_err_t d3_get_handler(httpd_req_t *req)
+{
+    const char *filepath = "/spiffs/d3.min.js";
+    FILE *fd = NULL;
+    struct stat file_stat;
+
+    if (stat(filepath, &file_stat) == -1)
+    {
+        ESP_LOGE(TAG, "Failed to stat file : %s", filepath);
+        /* Respond with 404 Not Found */
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File does not exist");
+        return ESP_FAIL;
+    }
+
+    fd = fopen(filepath, "r");
+    if (!fd)
+    {
+        ESP_LOGE(TAG, "Failed to read existing file : %s", filepath);
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "Sending file : %s (%ld bytes)...", filepath, file_stat.st_size);
+
+    httpd_resp_set_type(req, "text/html");
+
+    /* Retrieve the pointer to scratch buffer for temporary storage */
+    size_t chunksize;
+    do
+    {
+        /* Read file in chunks into the scratch buffer */
+        chunksize = fread(buf, 1, sizeof(buf), fd);
+
+        if (chunksize > 0)
+        {
+            /* Send the buffer contents as HTTP response chunk */
+            if (httpd_resp_send_chunk(req, buf, chunksize) != ESP_OK)
+            {
+                fclose(fd);
+                ESP_LOGE(TAG, "File sending failed!");
+                /* Abort sending file */
+                httpd_resp_sendstr_chunk(req, NULL);
+                /* Respond with 500 Internal Server Error */
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+                return ESP_FAIL;
+            }
+        }
+
+        /* Keep looping till the whole file is sent */
+    } while (chunksize != 0);
+
+    /* Close file after sending complete */
+    fclose(fd);
+    ESP_LOGI(TAG, "File sending complete");
+
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+};
+
 /* Handler to download a file kept on the server */
 static esp_err_t download_get_handler(httpd_req_t *req)
 {
@@ -540,7 +598,6 @@ static esp_err_t download_get_handler(httpd_req_t *req)
         if (n % 1000 == 0)
         {
             vTaskDelay(1);
-            reset_sleep_timeout();
         }
     }
 
@@ -566,7 +623,7 @@ static void ws_async_send(char *msg)
 {
     if (ws_fd == 0)
         return;
-    static httpd_ws_frame_t ws_pkt;
+    httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
     ws_pkt.payload = (uint8_t *)msg;
     ws_pkt.len = strlen(msg);
@@ -632,7 +689,13 @@ static const httpd_uri_t ws = {
     .handler = ws_handler,
     .user_ctx = NULL,
     .is_websocket = true};
-
+/*
+static const httpd_uri_t d3_get = {
+    .uri = "/d3.min.js",
+    .method = HTTP_GET,
+    .handler = d3_get_handler,
+    .user_ctx = NULL};
+*/
 static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
@@ -648,6 +711,7 @@ static httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &lora_set);
         httpd_register_uri_handler(server, &ws);
         httpd_register_uri_handler(server, &file_download);
+        //httpd_register_uri_handler(server, &d3_get);
 
         ws_fd = 0;
 
@@ -661,11 +725,53 @@ static httpd_handle_t start_webserver(void)
 void wifi_task(void *arg)
 {
     char msg[256];
+/*
+    ESP_LOGI("SPIFFS", "Initializing SPIFFS");
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/spiffs",
+        .partition_label = NULL,
+        .max_files = 5,
+        .format_if_mount_failed = true};
+
+    // Use settings defined above to initialize and mount SPIFFS filesystem.
+    // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+
+    if (ret != ESP_OK)
+    {
+        if (ret == ESP_FAIL)
+        {
+            ESP_LOGE("SPIFFS", "Failed to mount or format filesystem");
+        }
+        else if (ret == ESP_ERR_NOT_FOUND)
+        {
+            ESP_LOGE("SPIFFS", "Failed to find SPIFFS partition");
+        }
+        else
+        {
+            ESP_LOGE("SPIFFS", "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+        }
+    }
+
+    size_t total = 0, used = 0;
+    ret = esp_spiffs_info(conf.partition_label, &total, &used);
+    if (ret != ESP_OK)
+    {
+        ESP_LOGE("SPIFFS", "Failed to get SPIFFS partition information (%s)", esp_err_to_name(ret));
+    }
+    else
+    {
+        ESP_LOGI("SPIFFS", "Partition size: total: %d, used: %d", total, used);
+    }
 
     int wifi_on = 1;
+*/
+    s_wifi_event_group = xEventGroupCreate();
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    if (wifi_init_sta() == 0)
-        wifi_init_softap();
+    //if (wifi_init_sta() == 0)
+    wifi_init_softap();
 
     /* Start the server for the first time */
     start_webserver();
