@@ -63,7 +63,7 @@ static const char *TAGH = "httpd";
 
 static int s_retry_num = 0;
 
-char buf[512];
+char buf[1024];
 size_t buf_len;
 
 extern int fr;
@@ -238,6 +238,7 @@ int wifi_init_sta(void)
 /* An HTTP GET handler */
 static esp_err_t settings_handler(httpd_req_t *req)
 {
+    reset_sleep_timeout();
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
@@ -494,13 +495,13 @@ static esp_err_t settings_handler(httpd_req_t *req)
     /* Send empty chunk to signal HTTP response completion */
     httpd_resp_sendstr_chunk(req, NULL);
 
-    reset_sleep_timeout();
-
     return ESP_OK;
 }
 
 static esp_err_t d3_get_handler(httpd_req_t *req)
 {
+    reset_sleep_timeout();
+
     const char *filepath = "/spiffs/d3.min.js";
     FILE *fd = NULL;
     struct stat file_stat;
@@ -524,14 +525,14 @@ static esp_err_t d3_get_handler(httpd_req_t *req)
 
     ESP_LOGI(TAG, "Sending file : %s (%ld bytes)...", filepath, file_stat.st_size);
 
-    httpd_resp_set_type(req, "text/html");
+    httpd_resp_set_type(req, "text/plain");
 
-    /* Retrieve the pointer to scratch buffer for temporary storage */
     size_t chunksize;
     do
     {
-        /* Read file in chunks into the scratch buffer */
+        //memset(buf, 0, sizeof(buf));
         chunksize = fread(buf, 1, sizeof(buf), fd);
+        //printf("fread %d\n", chunksize);
 
         if (chunksize > 0)
         {
@@ -547,7 +548,6 @@ static esp_err_t d3_get_handler(httpd_req_t *req)
                 return ESP_FAIL;
             }
         }
-
         /* Keep looping till the whole file is sent */
     } while (chunksize != 0);
 
@@ -562,6 +562,8 @@ static esp_err_t d3_get_handler(httpd_req_t *req)
 /* Handler to download a file kept on the server */
 static esp_err_t download_get_handler(httpd_req_t *req)
 {
+    reset_sleep_timeout();
+
     char line[128];
     char header[96] = "attachment; filename=\"";
 
@@ -605,8 +607,6 @@ static esp_err_t download_get_handler(httpd_req_t *req)
     {
         httpd_resp_send_chunk(req, buf, l);
     }
-
-    reset_sleep_timeout();
 
     /* Respond with an empty chunk to signal HTTP response completion */
     httpd_resp_send_chunk(req, NULL, 0);
@@ -689,18 +689,20 @@ static const httpd_uri_t ws = {
     .handler = ws_handler,
     .user_ctx = NULL,
     .is_websocket = true};
-/*
+
 static const httpd_uri_t d3_get = {
     .uri = "/d3.min.js",
     .method = HTTP_GET,
     .handler = d3_get_handler,
-    .user_ctx = NULL};
-*/
+    .user_ctx = ""};
+
 static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    //config.stack_size        = 1024*8;
     config.lru_purge_enable = true;
+    //config.send_wait_timeout = 10;
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -711,7 +713,7 @@ static httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &lora_set);
         httpd_register_uri_handler(server, &ws);
         httpd_register_uri_handler(server, &file_download);
-        //httpd_register_uri_handler(server, &d3_get);
+        httpd_register_uri_handler(server, &d3_get);
 
         ws_fd = 0;
 
@@ -725,7 +727,7 @@ static httpd_handle_t start_webserver(void)
 void wifi_task(void *arg)
 {
     char msg[256];
-/*
+
     ESP_LOGI("SPIFFS", "Initializing SPIFFS");
     esp_vfs_spiffs_conf_t conf = {
         .base_path = "/spiffs",
@@ -765,13 +767,13 @@ void wifi_task(void *arg)
     }
 
     int wifi_on = 1;
-*/
+
     s_wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    //if (wifi_init_sta() == 0)
-    wifi_init_softap();
+    if (wifi_init_sta() == 0)
+        wifi_init_softap();
 
     /* Start the server for the first time */
     start_webserver();
