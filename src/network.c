@@ -29,7 +29,7 @@ extern menu_t menu[];
 extern int bufferR[DATALEN];
 extern int bufferU[DATALEN];
 #elif CONFIG_IDF_TARGET_ESP32C3
-extern int bufferADC[DATALEN * 2];
+extern int bufferADC[DATALEN];
 #endif
 
 /* The examples use WiFi configuration that you can set via project configuration menu
@@ -76,6 +76,12 @@ const int64_t sleeptimeout = 60 * 1000000;
 int64_t timeout_start;
 
 bool need_ws_send = false;
+
+typedef struct
+{
+    char filepath[32];
+    char content[32];
+} down_data_t;
 
 void reset_sleep_timeout()
 {
@@ -242,6 +248,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
+                       "<script src=\"/d3.min.js\"></script>"
                        "<title>Settings</title></head><body>";
     const char *sodkstart = "<form><fieldset><legend>СОДК</legend><table>";
     const char *sodkend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
@@ -498,11 +505,11 @@ static esp_err_t settings_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t d3_get_handler(httpd_req_t *req)
+static esp_err_t download_get_handler(httpd_req_t *req)
 {
     reset_sleep_timeout();
 
-    const char *filepath = "/spiffs/d3.min.js";
+    char *filepath = ((down_data_t *)(req->user_ctx))->filepath;
     FILE *fd = NULL;
     struct stat file_stat;
 
@@ -525,14 +532,17 @@ static esp_err_t d3_get_handler(httpd_req_t *req)
 
     ESP_LOGI(TAG, "Sending file : %s (%ld bytes)...", filepath, file_stat.st_size);
 
-    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_set_type(req, ((down_data_t *)(req->user_ctx))->content);
+    int l = strlen(filepath);
+    if (filepath[l - 3] == '.' && filepath[l - 2] == 'g' && filepath[l - 1] == 'z')
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
     size_t chunksize;
     do
     {
-        //memset(buf, 0, sizeof(buf));
+        // memset(buf, 0, sizeof(buf));
         chunksize = fread(buf, 1, sizeof(buf), fd);
-        //printf("fread %d\n", chunksize);
+        // printf("fread %d\n", chunksize);
 
         if (chunksize > 0)
         {
@@ -560,7 +570,7 @@ static esp_err_t d3_get_handler(httpd_req_t *req)
 };
 
 /* Handler to download a file kept on the server */
-static esp_err_t download_get_handler(httpd_req_t *req)
+static esp_err_t download_ADCdata_handler(httpd_req_t *req)
 {
     reset_sleep_timeout();
 
@@ -672,7 +682,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
 static const httpd_uri_t file_download = {
     .uri = "/d",
     .method = HTTP_GET,
-    .handler = download_get_handler,
+    .handler = download_ADCdata_handler,
 };
 
 static const httpd_uri_t lora_set = {
@@ -691,18 +701,24 @@ static const httpd_uri_t ws = {
     .is_websocket = true};
 
 static const httpd_uri_t d3_get = {
+    .uri = "/d3",
+    .method = HTTP_GET,
+    .handler = download_get_handler,
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/testD3.html", .content = "text/html"})};
+
+static const httpd_uri_t d3_get_gz = {
     .uri = "/d3.min.js",
     .method = HTTP_GET,
-    .handler = d3_get_handler,
-    .user_ctx = ""};
+    .handler = download_get_handler,
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/d3.min.js.gz", .content = "application/javascript"})};
 
 static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    //config.stack_size        = 1024*8;
+    // config.stack_size        = 1024*8;
     config.lru_purge_enable = true;
-    //config.send_wait_timeout = 10;
+    // config.send_wait_timeout = 10;
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -714,6 +730,7 @@ static httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &ws);
         httpd_register_uri_handler(server, &file_download);
         httpd_register_uri_handler(server, &d3_get);
+        httpd_register_uri_handler(server, &d3_get_gz);
 
         ws_fd = 0;
 

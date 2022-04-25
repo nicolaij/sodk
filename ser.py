@@ -9,8 +9,8 @@ import json
 
 #x = '{ "id":10, "U":500, "R":1501, "rssi":-101}'
 
-#DIR = "\\\\database-zrts\\DataImport\\"
-DIR = ""
+DIR = "\\\\database-zrts\\DataImport\\"
+#DIR = ""
 
 PORTNAME = "COM7"
 
@@ -46,6 +46,12 @@ def readtofile():
                         (js["id"], cur_time, js["R"]))
                 f.write("Sodk_ZRTS_%drssi,0,%s,0,%d,192\n" %
                         (js["id"], cur_time, js["rssi"]))
+                f.write("Sodk_ZRTS_%dU0,0,%s,0,%d,192\n" %
+                        (js["id"], cur_time, js["U0"]))
+                f.write("Sodk_ZRTS_%dUBatt0,0,%s,0,%d,192\n" %
+                        (js["id"], cur_time, js["Ub0"]))
+                f.write("Sodk_ZRTS_%dUBatt1,0,%s,0,%d,192\n" %
+                        (js["id"], cur_time, js["Ub1"]))
                 f.close()
         else:
             print(":".join("{:02x}".format(ord(c)) for c in str))

@@ -18,7 +18,7 @@
 // int bufferR[DATALEN];
 // int bufferU[DATALEN];
 
-uint32_t bufferADC[DATALEN * 2];
+uint32_t bufferADC[DATALEN];
 
 #define ADC_BLOCK 256
 
@@ -53,7 +53,7 @@ static void continuous_adc_init(int chan)
     // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BLOCK * 4,
+        .max_store_buf_size = ADC_BLOCK * 8,
         .conv_num_each_intr = ADC_BLOCK,
         .adc1_chan_mask = (1 << chan_r[chan].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[2].channel,
@@ -142,30 +142,9 @@ void dual_adc(void *arg)
         //подаем питание на источник питания
         ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
         vTaskDelay(1);
-        /*
-                //Измеряем акк перед включением силы
-                uint32_t adc_batt[2];
-                const uint32_t adc_samples = 32;
-                adc_batt[0] = 0;
-                for (int i = 0; i < adc_samples; i++)
-                {
-                    adc_batt[0] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
-                }
-                adc_batt[0] /= adc_samples;
-        */
+
         //включаем источник питания
         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
-        /*
-                //Измеряем акк после включения силы
-                adc_batt[1] = 0;
-                for (int i = 0; i < adc_samples; i++)
-                {
-                    adc_batt[1] += adc1_get_raw((adc1_channel_t)ADC1_CHANNEL_0);
-                }
-                adc_batt[1] /= adc_samples;
-
-                printf("Ubat: %d/%d\n", adc_batt[0], adc_batt[1]);
-        */
 
         uint8_t *ptr = (uint8_t *)bufferADC;
         uint8_t *ptr_off = (uint8_t *)bufferADC;  //выключаем источник питания
@@ -243,7 +222,7 @@ void dual_adc(void *arg)
                     };
 
                     //Переполнен буффер!
-                    if (ptr >= (uint8_t *)&bufferADC[DATALEN * 2] - (ADC_BLOCK * 4))
+                    if (ptr >= (uint8_t *)&bufferADC[DATALEN] - (ADC_BLOCK * 4))
                         ptr = ptr - ret_num;
                 };
             }
@@ -284,7 +263,7 @@ void dual_adc(void *arg)
                     triggerChan--;
                 };
             };
-        } while (ptr < (uint8_t *)&bufferADC[DATALEN * 2] - ADC_BLOCK);
+        } while (ptr < (uint8_t *)&bufferADC[DATALEN] - ADC_BLOCK);
 
         gpio_set_level(POWER_PIN, 0);
 
@@ -421,7 +400,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
                 if (adc1 > 4090 || (uint8_t *)p < ptr_0db)
                 {
                     block_measure = 0;
-                };
+                }
 
                 if (block_off >= 0)
                 {
@@ -429,7 +408,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
                         sum_n = 0;
 
                     block_off++;
-                };
+                }
 
                 if (block_measure >= 0)
                 {
@@ -437,7 +416,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
                         sum_n = 0;
 
                     block_measure++;
-                };
+                }
             };
 
             if (sum_n == 0)
