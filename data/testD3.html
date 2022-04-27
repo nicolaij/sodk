@@ -2,7 +2,8 @@
 <html>
 
 <head>
-    <meta charset="utf-8"><script src="/d3.min.js"></script>
+    <meta charset="utf-8">
+    <script src="/d3.min.js"></script>
 </head>
 
 <body>
@@ -10,16 +11,12 @@
 </body>
 
 <script>
-
-// Create data
-    var dann = [[10, 20], [40, 90], [80, 50], [33, 66], [5, 5]]
-
     // Copyright 2021 Observable, Inc.
     // Released under the ISC license.
     // https://observablehq.com/@d3/line-chart
     function LineChart(data, {
-        x = ([x]) => x, // given d in data, returns the (temporal) x-value
-        y = ([, y]) => y, // given d in data, returns the (quantitative) y-value
+        //x = ([x]) => x, // given d in data, returns the (temporal) x-value
+        //y = ([, y]) => y, // given d in data, returns the (quantitative) y-value
         defined, // for gaps in data
         curve = d3.curveLinear, // method of interpolation between points
         marginTop = 20, // top margin, in pixels
@@ -43,15 +40,17 @@
         strokeOpacity = 1, // stroke opacity of line
     } = {}) {
         // Compute values.
-        const X = d3.map(data, x);
-        const Y = d3.map(data, y);
+        const X = d3.map(data, (x) => x.id);
+        const Y1 = d3.map(data, (y) => y.adc0);
+        const Y2 = d3.map(data, (y) => y.adc1);
         const I = d3.range(X.length);
-        if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y[i]);
+        if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y2[i]);
         const D = d3.map(data, defined);
+        console.log(D);
 
         // Compute default domains.
         if (xDomain === undefined) xDomain = d3.extent(X);
-        if (yDomain === undefined) yDomain = [0, d3.max(Y)];
+        if (yDomain === undefined) yDomain = [0, Math.max(d3.max(Y1), d3.max(Y2))];
 
         // Construct scales and axes.
         const xScale = xType(xDomain, xRange);
@@ -60,11 +59,17 @@
         const yAxis = d3.axisLeft(yScale).ticks(height / 40, yFormat);
 
         // Construct a line generator.
-        const line = d3.line()
-            .defined(i => D[i])
+        const line1 = d3.line()
+            //.defined(i => D[i])
             .curve(curve)
             .x(i => xScale(X[i]))
-            .y(i => yScale(Y[i]));
+            .y(i => yScale(Y1[i]));
+
+        const line2 = d3.line()
+            //.defined(i => D[i])
+            .curve(curve)
+            .x(i => xScale(X[i]))
+            .y(i => yScale(Y2[i]));
 
         const svg = d3.create("svg")
             .attr("width", width)
@@ -92,20 +97,34 @@
 
         svg.append("path")
             .attr("fill", "none")
-            .attr("stroke", color)
+            .attr("stroke", "blue")
             .attr("stroke-width", strokeWidth)
             .attr("stroke-linecap", strokeLinecap)
             .attr("stroke-linejoin", strokeLinejoin)
             .attr("stroke-opacity", strokeOpacity)
-            .attr("d", line(I));
+            .attr("d", line1(I));
+
+        svg.append("path")
+            .attr("fill", "none")
+            .attr("stroke", "red")
+            .attr("stroke-width", strokeWidth)
+            .attr("stroke-linecap", strokeLinecap)
+            .attr("stroke-linejoin", strokeLinejoin)
+            .attr("stroke-opacity", strokeOpacity)
+            .attr("d", line2(I));
 
         return svg.node();
     }
-    //var aapl = FileAttachment("ADCdata (1).txt").csv({typed: true})
-    var aapl = d3.csv("/d");
-    var result = Object.keys(aapl).map((key) => [obj["id"], obj["adc0"]]);
-    console.log(result);
-    document.body.appendChild(LineChart(aapl, {}));
+
+    var d1 = d3.csv("/d", function (object) {
+        var o = {};
+        for (let key in object) { o[key.trim()] = Number(object[key]) };
+        return o;
+    });
+
+    d1.then(function (data) {
+        document.body.appendChild(LineChart(data.slice(0, 1000), {}));
+    });
 
 </script>
 
