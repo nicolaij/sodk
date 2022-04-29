@@ -245,17 +245,17 @@ int wifi_init_sta(void)
 static esp_err_t settings_handler(httpd_req_t *req)
 {
     reset_sleep_timeout();
+    /*                       "<script src=\"/d3.min.js\"></script>"*/
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
-                       "<script src=\"/d3.min.js\"></script>"
                        "<title>Settings</title></head><body>";
     const char *sodkstart = "<form><fieldset><legend>СОДК</legend><table>";
     const char *sodkend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
 
     const char *lorastart = "<form><fieldset><legend>LoRa</legend><table>";
     const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
-    const char *tail = "<p><a href=\"/d\">Буфер данных</a></p>"
+    const char *tail = "<p><a href=\"/d?end=10000\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
                        "socket.onopen = function(){socket.send(\"open ws\");};\n"
@@ -575,8 +575,19 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     reset_sleep_timeout();
 
     char line[128];
-    char header[96] = "attachment; filename=\"";
+    int limitADCData = 0;
 
+    if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK)
+        if (httpd_query_key_value(buf, "end", line, 6) == ESP_OK)
+        {
+            limitADCData = atoi(line);
+        }
+
+    //по умолчанию 500 строк
+    if (limitADCData == 0)
+        limitADCData = 500;
+
+    char header[96] = "attachment; filename=\"";
     // strlcat(header, line, sizeof(header));
     strlcat(header, "ADCdata.txt\"", sizeof(header));
 
@@ -610,6 +621,11 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
         if (n % 1000 == 0)
         {
             vTaskDelay(1);
+        }
+
+        if (n > limitADCData)
+        {
+            break;
         }
     }
 
@@ -691,7 +707,8 @@ static const httpd_uri_t lora_set = {
     .handler = settings_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
-    .user_ctx = "Hello World!"};
+    .user_ctx = "Hello World!",
+    .is_websocket = false};
 
 static const httpd_uri_t ws = {
     .uri = "/ws",
@@ -704,13 +721,15 @@ static const httpd_uri_t d3_get = {
     .uri = "/d3",
     .method = HTTP_GET,
     .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/testD3.html", .content = "text/html"})};
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/testD3.html", .content = "text/html"}),
+    .is_websocket = false};
 
 static const httpd_uri_t d3_get_gz = {
     .uri = "/d3.min.js",
     .method = HTTP_GET,
     .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/d3.min.js.gz", .content = "application/javascript"})};
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/d3.min.js.gz", .content = "application/javascript"}),
+    .is_websocket = false};
 
 static httpd_handle_t start_webserver(void)
 {

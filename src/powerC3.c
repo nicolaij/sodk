@@ -15,6 +15,8 @@
 
 #include "main.h"
 
+#include "soc/apb_saradc_reg.h"
+
 // int bufferR[DATALEN];
 // int bufferU[DATALEN];
 
@@ -45,28 +47,55 @@ const measure_t chan_r[] = {
 
 extern menu_t menu[];
 
+void adc_select(int chan)
+{
+    if (chan == 0)
+    {
+        REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, 0x001e30cf);
+    }
+    if (chan == 1)
+    {
+        REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, 0x004e30cf);
+    }
+    // printf("PATT1: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
+    // printf("PATT2: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB2_REG));
+};
+
+void adc_info()
+{
+    printf("APB_SARADC_SAR_PATT_TAB1_REG: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
+    // printf("APB_SARADC_APB_ADC_CLKM_CONF_REG: %8X\n", REG_READ(APB_SARADC_APB_ADC_CLKM_CONF_REG));
+    // printf("APB_SARADC_APB_TSENS_CTRL_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL_REG));
+    // printf("APB_SARADC_APB_TSENS_CTRL2_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL2_REG));
+};
+
 static void continuous_adc_init(int chan)
 {
     esp_err_t ret = ESP_OK;
     assert(ret == ESP_OK);
+    int64_t t1 = esp_timer_get_time();
+    int64_t t2 = 0;
+    int64_t t3 = 0;
 
     // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
         .max_store_buf_size = ADC_BLOCK * 8,
         .conv_num_each_intr = ADC_BLOCK,
-        .adc1_chan_mask = (1 << chan_r[chan].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
+        .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[1].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[2].channel,
     };
 
     ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
+
+    t2 = esp_timer_get_time();
 
     static adc_digi_pattern_table_t adc_pattern[10] = {0};
 
     // Do not set the sampling frequency out of the range between `SOC_ADC_SAMPLE_FREQ_THRES_LOW` and `SOC_ADC_SAMPLE_FREQ_THRES_HIGH`
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
-        .conv_limit_num = 200,
+        .conv_limit_num = 1,
         .sample_freq_hz = 40000,
         .adc_pattern_len = ADC_DMA,
     };
@@ -98,6 +127,8 @@ static void continuous_adc_init(int chan)
 
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_digi_controller_config(&dig_cfg));
+    t3 = esp_timer_get_time();
+    // printf("digi_init: %lld digi_config: %lld\n", t1-t2, t2-t3);
 }
 
 void dual_adc(void *arg)
@@ -137,19 +168,20 @@ void dual_adc(void *arg)
 
         reset_sleep_timeout();
 
-        continuous_adc_init(0);
+        continuous_adc_init(1);
 
         //подаем питание на источник питания
-        ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
-        vTaskDelay(1);
+        // ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
+        // vTaskDelay(1);
 
         //включаем источник питания
-        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+        // ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
 
         uint8_t *ptr = (uint8_t *)bufferADC;
         uint8_t *ptr_off = (uint8_t *)bufferADC;  //выключаем источник питания
         uint8_t *ptr_chan = (uint8_t *)bufferADC; //переключаем канал
         int triggerChan = 1;
+        int blocks = 0;
 
         int64_t timeout = menu[0].val * 1000;
 
@@ -157,14 +189,37 @@ void dual_adc(void *arg)
         int adcU_limit = menu[1].val * 1000 / menu[2].val;
 
         int64_t t1 = esp_timer_get_time();
+        int64_t t2 = 0, t3 = 0, time_off = 0;
         // int64_t time_off = 0;
 
         ESP_ERROR_CHECK(adc_digi_start());
+
+        //подаем питание на источник питания
+        ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
 
         do
         {
             ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, ADC_BLOCK, &ret_num, ADC_MAX_DELAY));
             ptr = ptr + ret_num;
+            blocks++;
+
+            if (blocks == 5)
+            {
+                // adc_info();
+                // ESP_ERROR_CHECK(adc_digi_stop());
+                // ESP_ERROR_CHECK(adc_digi_deinitialize());
+                // continuous_adc_init(0);
+                // ESP_ERROR_CHECK(adc_digi_start());
+                // adc_info();
+                adc_select(0);
+                //включаем источник питания
+                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+            }
+
+            if (blocks <= 5) //пропускаем все проверки
+            {
+                continue;
+            }
 
             /*            adc_digi_output_data_t *p = (void *)ptr;
                         if (p->type2.data > 500)
@@ -217,7 +272,7 @@ void dual_adc(void *arg)
                         //ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
                         ptr_off = ptr;
-                        // time_off = esp_timer_get_time();
+                        time_off = esp_timer_get_time();
                         // printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
                     };
 
@@ -253,13 +308,16 @@ void dual_adc(void *arg)
                         //переключаем
                         ptr_chan = ptr;
                         triggerChan = -1;
-                        ESP_ERROR_CHECK(adc_digi_stop());
-                        ESP_ERROR_CHECK(adc_digi_deinitialize());
-                        continuous_adc_init(1);
-                        ESP_ERROR_CHECK(adc_digi_start());
+                        // ESP_ERROR_CHECK(adc_digi_stop());
+                        // ESP_ERROR_CHECK(adc_digi_deinitialize());
+                        // continuous_adc_init(1);
+                        // ESP_ERROR_CHECK(adc_digi_start());
+                        // ESP_ERROR_CHECK(adc_digi_stop());
+                        adc_select(1);
+                        // ESP_ERROR_CHECK(adc_digi_start());
                     };
-                    int64_t t2 = esp_timer_get_time();
-                    // printf("dt: %lld\n", t2 - t1);
+                    // int64_t t2 = esp_timer_get_time();
+                    //  printf("dt: %lld\n", t2 - t1);
                     triggerChan--;
                 };
             };
@@ -273,6 +331,8 @@ void dual_adc(void *arg)
         processBuffer(ptr, ptr_chan, ptr_off);
 
         xEventGroupSetBits(ready_event_group, END_MEASURE);
+
+        printf("Time:\n3 block: %lld\n3 block off: %lld\noff: %lld\n", t2 - t1, t3 - t2, time_off - t1);
     };
 }
 
@@ -381,7 +441,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
         p = (void *)bufferADC;
     */
     sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4), (ptr_0db - (uint8_t *)bufferADC) / (ADC_DMA * 4));
-    //xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+    // xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
     printf("%s\n", buf);
 
     while ((uint8_t *)p < endptr)
@@ -389,6 +449,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
         if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == 0 && (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == 0 && (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == 3)
         {
             int adc1 = p->type2.data;
+            int adc1ch = p->type2.channel;
             int adc2 = (p + 1)->type2.data;
             int adc3 = (p + 2)->type2.data;
             int adc4 = (p + 3)->type2.data;
@@ -432,7 +493,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off)
             sum_avg_batt += voltBatt(adc3);
             sum_avg_u0 += volt0(adc4);
 
-            if (ptr_0db > (uint8_t *)bufferADC && (uint8_t *)p >= ptr_0db)
+            // if (ptr_0db > (uint8_t *)bufferADC && (uint8_t *)p >= ptr_0db)
+            if (adc1ch == chan_r[1].channel)
             {
                 sum_avg_c += kOm0db(adc2, adc1);
                 // sum_avg_c += current0(adc1);

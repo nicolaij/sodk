@@ -46,7 +46,6 @@
         const I = d3.range(X.length);
         if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y2[i]);
         const D = d3.map(data, defined);
-        console.log(D);
 
         // Compute default domains.
         if (xDomain === undefined) xDomain = d3.extent(X);
@@ -93,7 +92,8 @@
                 .attr("y", 10)
                 .attr("fill", "currentColor")
                 .attr("text-anchor", "start")
-                .text(yLabel));
+                .style('fill', 'red')
+                .text(yLabel))
 
         svg.append("path")
             .attr("fill", "none")
@@ -116,14 +116,15 @@
         return svg.node();
     }
 
-    var d1 = d3.csv("/d", function (object) {
+    const params = new URLSearchParams(location.search);
+    var d1 = d3.csv("/d?end=" + params.get('end'), function (object) {
         var o = {};
         for (let key in object) { o[key.trim()] = Number(object[key]) };
         return o;
     });
 
     d1.then(function (data) {
-        document.body.appendChild(LineChart(data.slice(0, 1000), {}));
+        document.body.appendChild(LineChart(data, { width: window.innerWidth, height: (window.innerWidth / 2), yLabel: "adc0" }));
     });
 
 </script>
