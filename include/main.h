@@ -122,6 +122,6 @@ void reset_sleep_timeout(void);
 
 void cur_time(char *buf);
 
-void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off);
+void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on);
 
 int getADC_Data(char *line, uint8_t **ptr_adc, int *num);
