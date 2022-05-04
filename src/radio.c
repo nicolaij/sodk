@@ -19,6 +19,8 @@ int32_t id = 1;      // ID передатчика
 
 static const char *TAG = "radio";
 
+extern int temp_sensor_val;
+
 /*
 params int32 - список параметров
 return кол-во элементов
@@ -218,7 +220,7 @@ void radio_task(void *arg)
 
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)0))
         {
-            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%d,\"Ub0\":%d,\"U0\":%d}", id, bootCount, result.U, result.R, result.Ubatt1, result.Ubatt0, result.U0);
+            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%d,\"Ub0\":%d,\"U0\":%d,\"T\":%d}", id, bootCount, result.U, result.R, result.Ubatt1, result.Ubatt0, result.U0, temp_sensor_val);
             printf("%s\n", buf);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             if (ver == 0x12)

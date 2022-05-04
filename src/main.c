@@ -18,6 +18,7 @@ RTC_DATA_ATTR int bootCount = 0;
 TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
+int temp_sensor_val = 0;
 
 menu_t menu[] = {
     {.id = "pulse", .name = "Импульс", .val = 100, .min = 1, .max = 10000},
@@ -173,6 +174,7 @@ void app_main()
     temp_sensor_set_config(temp_sensor);
     temp_sensor_start();
     temp_sensor_read_celsius(&tsens_out);
+    temp_sensor_val = tsens_out * 10.0;
     ESP_LOGI(TAG, "Temperature out celsius %f°C", tsens_out);
 #endif
 
