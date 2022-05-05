@@ -456,8 +456,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
             if ((uint8_t *)p >= endptr)
             {
                 // printf("endptr (%d)-------------------------------------\n", num_p);
-                if (sum_n > 0)
-                    break;
+                break;
             }
 
             if ((uint8_t *)p >= ptr_on)
@@ -468,8 +467,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                     if (block_on == 1)
                     {
                         // printf("block_on (%d)-------------------------------------\n", num_p);
-                        if (sum_n > 0)
-                            break;
+                        break;
                     }
                 }
             }
@@ -482,8 +480,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                     if (block_off == 1)
                     {
                         // printf("ptr_off (%d)-------------------------------------\n", num_p);
-                        if (sum_n > 0)
-                            break;
+                        break;
                     }
                 }
 
@@ -495,8 +492,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                         if (block_0db == 1)
                         {
                             // printf("block_0db (%d)-------------------------------------\n", num_p);
-                            if (sum_n > 0)
-                                break;
+                            break;
                         }
                     }
                 }
@@ -508,8 +504,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                 {
                     block_chan = p->type2.channel;
                     // printf("block_channel (%d)-------------------------------------\n", num_p);
-                    if (sum_n > 0)
-                        break;
+                    break;
                 }
 
                 if (p->type2.data > 4090)
@@ -518,8 +513,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                     if (block_overload == 1)
                     {
                         // printf("block_overload 1 (%d)-------------------------------------\n", num_p);
-                        if (sum_n > 0)
-                            break;
+                        break;
                     }
                 }
                 else
@@ -528,8 +522,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                     {
                         block_overload = 0;
                         // printf("block_overload 0 (%d)-------------------------------------\n", num_p);
-                        if (sum_n > 0)
-                            break;
+                        break;
                     }
                 }
 
@@ -583,36 +576,39 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
 
             num_p++;
             p = p + ADC_DMA;
-        }
+        } // end while
 
-        if (block_off >= count_avg) //первый блок после отключения или после ptr_0db
+        if (sum_n > 0)
         {
-            result.adc1 = adc1;
-            result.adc2 = adc2;
-            result.R = sum_avg_c / sum_n;
-            result.U = sum_avg_u / sum_n / 1000;
-            result.U0 = sum_avg_u0 / sum_n / 1000;
-            result.Ubatt1 = batt_min;
-            result.Ubatt0 = sum_avg_batt / sum_n;
-            block_off = -1;
-            // printf("-------------------------------------\n");
-        }
+            if (block_off >= count_avg) //первый блок после отключения или после ptr_0db
+            {
+                result.adc1 = adc1;
+                result.adc2 = adc2;
+                result.R = sum_avg_c / sum_n;
+                result.U = sum_avg_u / sum_n / 1000;
+                result.U0 = sum_avg_u0 / sum_n / 1000;
+                result.Ubatt1 = batt_min;
+                result.Ubatt0 = sum_avg_batt / sum_n;
+                block_off = -1;
+                // printf("-------------------------------------\n");
+            }
 
-        if (block_0db >= count_avg) //первый блок после ptr_0db
-        {
-            //result.adc2 = adc2;
-            //result.U = sum_avg_u / sum_n / 1000;
-            //result.U0 = sum_avg_u0 / sum_n / 1000;
-            result.adc1 = adc1;
-            result.R = sum_avg_c / sum_n;
-            block_0db = -1;
-        }
+            if (block_0db >= count_avg) //первый блок после ptr_0db
+            {
+                // result.adc2 = adc2;
+                // result.U = sum_avg_u / sum_n / 1000;
+                // result.U0 = sum_avg_u0 / sum_n / 1000;
+                result.adc1 = adc1;
+                result.R = sum_avg_c / sum_n;
+                block_0db = -1;
+            }
 
-        sprintf(buf, "%5d(%2d), %4d, %5d, %4d, %5d, %4d, %5d, %4d, %5d", sum_first_p, sum_n, adc1, sum_avg_c / sum_n, adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
-        xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
-        printf("%s\n", buf);
-        // fflush(stdout);
-        sum_n = 0;
+            sprintf(buf, "%5d(%2d), %4d, %5d, %4d, %5d, %4d, %5d, %4d, %5d", sum_first_p, sum_n, adc1, sum_avg_c / sum_n, adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
+            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+            printf("%s\n", buf);
+            // fflush(stdout);
+            sum_n = 0;
+        }
     };
 
     xQueueSend(send_queue, (void *)&result, (portTickType)0);
