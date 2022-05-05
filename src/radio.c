@@ -19,7 +19,7 @@ int32_t id = 1;      // ID передатчика
 
 static const char *TAG = "radio";
 
-extern int temp_sensor_val;
+extern float tsens_out;
 
 /*
 params int32 - список параметров
@@ -210,7 +210,7 @@ void radio_task(void *arg)
                 // fflush(stdout);
             }
 
-            //xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
+            // xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
             lora_receive();
             // lora_idle();
             // vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -220,7 +220,7 @@ void radio_task(void *arg)
 
         if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)0))
         {
-            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%d,\"Ub0\":%d,\"U0\":%d,\"T\":%d}", id, bootCount, result.U, result.R, result.Ubatt1, result.Ubatt0, result.U0, temp_sensor_val);
+            int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f}", id, bootCount, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out);
             printf("%s\n", buf);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             if (ver == 0x12)

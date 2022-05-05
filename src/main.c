@@ -14,13 +14,13 @@
 #endif
 
 RTC_DATA_ATTR int bootCount = 0;
-
 RTC_DATA_ATTR int BattLow = 0; //Признак разряда батареи
+
+float tsens_out = 0;
 
 TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
-int temp_sensor_val = 0;
 
 menu_t menu[] = {
     {.id = "pulse", .name = "Импульс", .val = 100, .min = 1, .max = 10000},
@@ -179,7 +179,6 @@ void app_main()
 #if CONFIG_IDF_TARGET_ESP32C3
     static const char *TAG = "TempSensor";
     //    ESP_LOGI(TAG, "Initializing Temperature sensor");
-    float tsens_out;
     temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
     temp_sensor_get_config(&temp_sensor);
     // ESP_LOGI(TAG, "default dac %d, clk_div %d", temp_sensor.dac_offset, temp_sensor.clk_div);
@@ -187,7 +186,6 @@ void app_main()
     temp_sensor_set_config(temp_sensor);
     temp_sensor_start();
     temp_sensor_read_celsius(&tsens_out);
-    temp_sensor_val = tsens_out * 10.0;
     ESP_LOGI(TAG, "Temperature out celsius %f°C", tsens_out);
 #endif
 
