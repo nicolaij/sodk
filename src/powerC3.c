@@ -47,6 +47,8 @@ const measure_t chan_r[] = {
 
 extern menu_t menu[];
 
+extern int BattLow;
+
 void adc_select(int chan)
 {
     // printf("PATT1: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
@@ -60,12 +62,80 @@ void adc_select(int chan)
     // printf("PATT2: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB2_REG));
 };
 
+int adc_cur_chan()
+{
+    return (REG_READ(APB_SARADC_SAR_PATT_TAB1_REG) >> 20) & 0b111;
+};
+
 void adc_info()
 {
     printf("APB_SARADC_SAR_PATT_TAB1_REG: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
     // printf("APB_SARADC_APB_ADC_CLKM_CONF_REG: %8X\n", REG_READ(APB_SARADC_APB_ADC_CLKM_CONF_REG));
     // printf("APB_SARADC_APB_TSENS_CTRL_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL_REG));
     // printf("APB_SARADC_APB_TSENS_CTRL2_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL2_REG));
+};
+
+int volt(int adc)
+{
+    if (adc < 2)
+        return 0;
+    return ((adc * menu[2].val) + menu[3].val);
+};
+
+int voltBatt(int adc)
+{
+    if (adc < 2)
+        return 0;
+    return ((adc * menu[8].val) + menu[9].val) / 1000;
+};
+
+int volt0(int adc)
+{
+    if (adc < 2)
+        return 0;
+    return ((adc * menu[10].val) + menu[11].val);
+};
+
+int current(int adc)
+{
+    if (adc < 2)
+        return 0;
+    return ((adc * menu[4].val) + menu[5].val);
+};
+
+int kOm(int adc_u, int adc_r)
+{
+    int u = volt(adc_u);
+    int k = menu[4].val;
+    if (adc_r < 10)
+        return chan_r[0].max;
+    if (adc_u < 10)
+        return 0;
+    int r = u * 1000 / (k * adc_r + menu[5].val);
+    if (r > chan_r[0].max || r < 0)
+        return chan_r[0].max;
+    return r;
+};
+
+int current0(int adc)
+{
+    if (adc < 2)
+        return 0;
+    return ((adc * menu[6].val) + menu[7].val);
+};
+
+int kOm0db(int adc_u, int adc_r)
+{
+    int u = volt(adc_u);
+    int k = menu[6].val;
+    if ((adc_r) < 10)
+        return chan_r[1].max;
+    if ((adc_u) < 10)
+        return 0;
+    int r = u * 1000 / (k * adc_r + menu[7].val);
+    if (r > chan_r[1].max || r < 0)
+        return chan_r[1].max;
+    return r;
 };
 
 static void continuous_adc_init(int chan)
@@ -188,13 +258,17 @@ void dual_adc(void *arg)
         //(Лимит напряж - смещение) * коэфф. U
         int adcU_limit = menu[1].val * 1000 / menu[2].val;
 
+        //((adc * menu[8].val) + menu[9].val) / 1000;
+        int adcUbattLow = (menu[12].val * 1000 - menu[9].val) / menu[8].val;
+        int adcUbattEnd = (menu[13].val * 1000 - menu[9].val) / menu[8].val;
+
         int64_t t1 = esp_timer_get_time();
         int64_t t2 = 0, t3 = 0, time_off = 0;
         // int64_t time_off = 0;
 
         ESP_ERROR_CHECK(adc_digi_start());
 
-        //подаем питание на источник питания
+        //подаем питание на источник питания, OpAmp, делитель АЦП батареи
         ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
 
         do
@@ -205,32 +279,13 @@ void dual_adc(void *arg)
 
             if (blocks == 5)
             {
-                // adc_info();
-                // ESP_ERROR_CHECK(adc_digi_stop());
-                // ESP_ERROR_CHECK(adc_digi_deinitialize());
-                // continuous_adc_init(0);
-                // ESP_ERROR_CHECK(adc_digi_start());
-                // adc_info();
+                if (BattLow > 10)
+                    break;
                 adc_select(0);
                 //включаем источник питания
                 ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
                 ptr_on = ptr;
             }
-
-            if (blocks <= 5) //пропускаем все проверки
-            {
-                continue;
-            }
-
-            /*            adc_digi_output_data_t *p = (void *)ptr;
-                        if (p->type2.data > 500)
-                            p->type2.data = p->type2.data - 500;
-                        else
-                            p->type2.data = 0;
-            */
-
-            // memset(ptr, 0, ret_num);
-            // printf("ret_num: %d\n", ret_num);
 
             if (ptr_off == (uint8_t *)bufferADC)
             {
@@ -245,14 +300,22 @@ void dual_adc(void *arg)
                 }
                 else
                 {
-                    //отсечка по току, напряжению
+                    //отсечка по току, напряжению, Ubatt
                     const int count_avg = 4;
                     int sum_avg_c = 0;
                     int sum_avg_u = 0;
+                    int sum_avg_batt = 0;
                     int n = 0;
                     adc_digi_output_data_t *p = (void *)ptr;
                     while (n++ < count_avg)
                     {
+                        // Ubatt
+                        do
+                        {
+                            p--;
+                        } while (p->type2.unit != 0 || p->type2.channel != 0);
+                        sum_avg_batt += p->type2.data;
+
                         //напряжение
                         do
                         {
@@ -264,11 +327,33 @@ void dual_adc(void *arg)
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 0 || p->type2.channel != 1);
+                        } while (p->type2.unit != 0 || (p->type2.channel != chan_r[0].channel && p->type2.channel != chan_r[1].channel));
                         sum_avg_c += p->type2.data;
                     };
 
-                    if (sum_avg_c / count_avg > 4060 || sum_avg_u / count_avg > adcU_limit)
+                    if (sum_avg_batt / count_avg < adcUbattEnd)
+                    {
+                        //прекращаем измерения
+                        //ВЫРУБАЕМ
+                        gpio_set_level(ENABLE_PIN, 1);
+                        printf("UbattEnd: %d(%d)\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg);
+                        BattLow += 100;
+                        break;
+                    }
+                    else if (sum_avg_batt / count_avg < adcUbattLow)
+                    {
+                        BattLow += 1;
+                        if (BattLow > 10)
+                        {
+                            //прекращаем измерения
+                            printf("UbattLow: %d(%d):%d\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg, BattLow);
+                            //ВЫРУБАЕМ
+                            gpio_set_level(ENABLE_PIN, 1);
+                            break;
+                        }
+                    }
+
+                    if ((sum_avg_c / count_avg > 4060 && p->type2.channel != chan_r[0].channel) || sum_avg_u / count_avg > adcU_limit)
                     {
                         //ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
@@ -322,6 +407,7 @@ void dual_adc(void *arg)
                     triggerChan--;
                 };
             };
+
         } while (ptr < (uint8_t *)&bufferADC[DATALEN] - ADC_BLOCK);
 
         gpio_set_level(POWER_PIN, 0);
@@ -333,72 +419,9 @@ void dual_adc(void *arg)
 
         xEventGroupSetBits(ready_event_group, END_MEASURE);
 
-        printf("Time:\n3 block: %lld\n3 block off: %lld\noff: %lld\n", t2 - t1, t3 - t2, time_off - t1);
+        // printf("Time:\n3 block: %lld\n3 block off: %lld\noff: %lld\n", t2 - t1, t3 - t2, time_off - t1);
     };
 }
-
-int volt(int adc)
-{
-    if (adc < 2)
-        return 0;
-    return ((adc * menu[2].val) + menu[3].val);
-};
-
-int voltBatt(int adc)
-{
-    if (adc < 2)
-        return 0;
-    return ((adc * menu[8].val) + menu[9].val) / 1000;
-};
-
-int volt0(int adc)
-{
-    if (adc < 2)
-        return 0;
-    return ((adc * menu[10].val) + menu[11].val);
-};
-
-int current(int adc)
-{
-    if (adc < 2)
-        return 0;
-    return ((adc * menu[4].val) + menu[5].val);
-};
-
-int kOm(int adc_u, int adc_r)
-{
-    int u = volt(adc_u);
-    int k = menu[4].val;
-    if (adc_r < 10)
-        return chan_r[0].max;
-    if (adc_u < 10)
-        return 0;
-    int r = u * 1000 / (k * adc_r + menu[5].val);
-    if (r > chan_r[0].max || r < 0)
-        return chan_r[0].max;
-    return r;
-};
-
-int current0(int adc)
-{
-    if (adc < 2)
-        return 0;
-    return ((adc * menu[6].val) + menu[7].val);
-};
-
-int kOm0db(int adc_u, int adc_r)
-{
-    int u = volt(adc_u);
-    int k = menu[6].val;
-    if ((adc_r) < 10)
-        return chan_r[1].max;
-    if ((adc_u) < 10)
-        return 0;
-    int r = u * 1000 / (k * adc_r + menu[7].val);
-    if (r > chan_r[1].max || r < 0)
-        return chan_r[1].max;
-    return r;
-};
 
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on)
 {
@@ -418,7 +441,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
     int sum_first_p = 0;
 
     int batt_counter = 32;
-    int batt_min = voltBatt(4095);
+    int batt_min = 0;
 
     int block_off = 0;
     int block_on = 0;
@@ -562,6 +585,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                     if (voltBatt(adc3) < batt_min)
                         batt_min = voltBatt(adc3);
 
+                    // printf("(%d) batt_min: %d\n", num_p, voltBatt(adc3));
+
                     batt_counter--;
                 }
             }
@@ -580,7 +605,10 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
 
         if (sum_n > 0)
         {
-            if (block_off >= count_avg) //первый блок после отключения или после ptr_0db
+            if (batt_min == 0)
+                batt_min = sum_avg_batt / sum_n;
+
+            if (block_off >= count_avg) //первый блок после отключения
             {
                 result.adc1 = adc1;
                 result.adc2 = adc2;
@@ -590,6 +618,9 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                 result.Ubatt1 = batt_min;
                 result.Ubatt0 = sum_avg_batt / sum_n;
                 block_off = -1;
+
+                if (ptr_off == (uint8_t *)bufferADC) //последний, если отключения небыло
+                    block_off = 0;
                 // printf("-------------------------------------\n");
             }
 

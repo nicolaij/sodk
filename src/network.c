@@ -72,7 +72,6 @@ extern int sf;
 extern int op;
 extern int id;
 
-const int64_t sleeptimeout = 60 * 1000000;
 int64_t timeout_start;
 
 bool need_ws_send = false;
@@ -309,7 +308,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
             bool param_change = false;
 
-            for (int i = 0; i < 12; i++)
+            for (int i = 0; i < 16; i++)
             {
                 if (httpd_query_key_value(buf, menu[i].id, param, 7) == ESP_OK)
                 {
@@ -417,7 +416,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     //-----------------------------СОДК------------------------------
     httpd_resp_sendstr_chunk(req, sodkstart);
-    for (int i = 0; i < 12; i++)
+    for (int i = 0; i < 16; i++)
     {
         if (i % 2 == 0)
             strlcpy(buf, "\n<tr>", sizeof(buf));
@@ -814,8 +813,6 @@ void wifi_task(void *arg)
     /* Start the server for the first time */
     start_webserver();
 
-    menu[12].val = 1;
-
     reset_sleep_timeout();
 
     while (1)
@@ -833,7 +830,7 @@ void wifi_task(void *arg)
             need_ws_send = false;
         }
 
-        if (esp_timer_get_time() - timeout_start > sleeptimeout)
+        if (esp_timer_get_time() - timeout_start > (int64_t)menu[15].val * 1000000)
         {
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);
         }

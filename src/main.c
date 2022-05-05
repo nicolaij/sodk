@@ -15,6 +15,8 @@
 
 RTC_DATA_ATTR int bootCount = 0;
 
+RTC_DATA_ATTR int BattLow = 0; //Признак разряда батареи
+
 TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
@@ -29,10 +31,14 @@ menu_t menu[] = {
     {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = 60000, .min = -100000, .max = 100000},
     {.id = "kR2", .name = "коэф. R (ch 2)", .val = 67, .min = 1, .max = 100000},
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kUbat", .name = "коэф. U batt", .val = 3970, .min = 1, .max = 10000},
-    {.id = "offsUbat", .name = "смещ. U batt", .val = 0, .min = -100000, .max = 100000},
+    {.id = "kUbat", .name = "коэф. U bat", .val = 3970, .min = 1, .max = 10000},
+    {.id = "offsUbat", .name = "смещ. U bat", .val = 0, .min = -100000, .max = 100000},
     {.id = "kU0", .name = "коэф. U петли", .val = 160, .min = 1, .max = 10000},
     {.id = "offsU0", .name = "смещ. U петли", .val = 0, .min = -100000, .max = 100000},
+    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 9000, .min = 8000, .max = 12000},
+    {.id = "UbatEnd", .name = "U bat отключения", .val = 8400, .min = 8000, .max = 12000},
+    {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
+    {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
     {.id = "", .name = "WiFi", .val = 0, .min = 0, .max = 1},
     {.id = "", .name = "Выход ", .val = 0, .min = 0, .max = 0},
 };
@@ -86,12 +92,19 @@ void go_sleep(void)
         ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(GPIO_NUM_0), ESP_GPIO_WAKEUP_GPIO_HIGH));
     #endif
     */
-    esp_sleep_enable_timer_wakeup(60 * 1000000);
+    if (BattLow > 200)
+    {
+        menu[14].val = 31536000; // 365 days
+    }
+    else if (BattLow > 100)
+    {
+        menu[14].val = 2592000; // 30 days
+    }
 
     printf("Go sleep...\n");
     fflush(stdout);
 
-    esp_deep_sleep_start();
+    esp_deep_sleep(menu[14].val * 1000000);
 }
 
 void app_main()
