@@ -35,8 +35,8 @@ menu_t menu[] = {
     {.id = "offsUbat", .name = "смещ. U bat", .val = 0, .min = -100000, .max = 100000},
     {.id = "kU0", .name = "коэф. U петли", .val = 160, .min = 1, .max = 10000},
     {.id = "offsU0", .name = "смещ. U петли", .val = 0, .min = -100000, .max = 100000},
-    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 9000, .min = 8000, .max = 12000},
-    {.id = "UbatEnd", .name = "U bat отключения", .val = 8400, .min = 8000, .max = 12000},
+    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 8000, .max = 12000},
+    {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 8000, .max = 12000},
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
     {.id = "", .name = "WiFi", .val = 0, .min = 0, .max = 1},
@@ -94,11 +94,11 @@ void go_sleep(void)
     */
     if (BattLow > 200)
     {
-        menu[14].val = 31536000; // 365 days
+        menu[14].val = 60*60*24*365; // 365 days
     }
     else if (BattLow > 100)
     {
-        menu[14].val = 2592000; // 30 days
+        menu[14].val = 60*60*24*30; // 30 days
     }
 
     printf("Go sleep...\n");
@@ -177,16 +177,17 @@ void app_main()
            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
 #if CONFIG_IDF_TARGET_ESP32C3
-    static const char *TAG = "TempSensor";
-    //    ESP_LOGI(TAG, "Initializing Temperature sensor");
+    // ESP_LOGI(TAG, "Initializing Temperature sensor");
+
     temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
-    temp_sensor_get_config(&temp_sensor);
+    // temp_sensor_get_config(&temp_sensor);
     // ESP_LOGI(TAG, "default dac %d, clk_div %d", temp_sensor.dac_offset, temp_sensor.clk_div);
-    temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
-    temp_sensor_set_config(temp_sensor);
-    temp_sensor_start();
-    temp_sensor_read_celsius(&tsens_out);
-    ESP_LOGI(TAG, "Temperature out celsius %f°C", tsens_out);
+    // temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
+    ESP_ERROR_CHECK(temp_sensor_set_config(temp_sensor));
+    ESP_ERROR_CHECK(temp_sensor_start());
+    ESP_ERROR_CHECK(temp_sensor_read_celsius(&tsens_out));
+    ESP_LOGI("TempSensor", "Temperature out celsius %f°C", tsens_out);
+    ESP_ERROR_CHECK(temp_sensor_stop());
 #endif
 
     // go_sleep();
