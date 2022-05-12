@@ -221,6 +221,10 @@ void app_main()
 #ifdef RECEIVER_ONLY
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
     xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
+    while (1)
+    {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    };    
 #else
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 6, NULL);

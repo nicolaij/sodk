@@ -166,7 +166,7 @@ static void continuous_adc_init(int chan)
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
         .conv_limit_num = 1,
-        .sample_freq_hz = 40000,
+        .sample_freq_hz = 60000,
         .adc_pattern_len = ADC_DMA,
     };
 
