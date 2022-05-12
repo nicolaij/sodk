@@ -489,7 +489,7 @@ int lora_received(void)
  */
 int lora_packet_rssi(void)
 {
-    return (lora_read_reg(REG_PKT_RSSI_VALUE) - (__frequency < 868E6 ? 164 : 157));
+    return (lora_read_reg(REG_PKT_RSSI_VALUE) - (__frequency < 862E6 ? 164 : 157));
 }
 
 /**
