@@ -94,11 +94,11 @@ void go_sleep(void)
     */
     if (BattLow > 200)
     {
-        menu[14].val = 60*60*24*365; // 365 days
+        menu[14].val = 60 * 60 * 24 * 365; // 365 days
     }
     else if (BattLow > 100)
     {
-        menu[14].val = 60*60*24*30; // 30 days
+        menu[14].val = 60 * 60 * 24 * 30; // 30 days
     }
 
     printf("Go sleep...\n");
@@ -117,20 +117,20 @@ void app_main()
         printf("Wakeup caused by external signal using RTC_IO\n");
         break;
     case ESP_SLEEP_WAKEUP_EXT1:
-        printf("Wake up from GPIO EXT1\n");
-        /*    {
-                uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-                if (wakeup_pin_mask != 0)
-                {
-                    int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-                    printf("Wake up from GPIO %d\n", pin);
-                }
-                else
-                {
-                    printf("Wake up from GPIO\n");
-                }
-            }*/
+    {
+        uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+        if (wakeup_pin_mask != 0)
+        {
+            int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+            printf("Wake up from GPIO %d\n", pin);
+        }
+        else
+        {
+            printf("Wake up from GPIO\n");
+        }
         break;
+    }
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
     case ESP_SLEEP_WAKEUP_GPIO:
     {
         uint64_t wakeup_pin_mask = esp_sleep_get_gpio_wakeup_status();
@@ -143,8 +143,9 @@ void app_main()
         {
             printf("Wake up from GPIO\n");
         }
+        break;
     }
-    break;
+#endif // SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
     case ESP_SLEEP_WAKEUP_TIMER:
         printf("Wakeup caused by timer\n");
         break;
@@ -217,9 +218,11 @@ void app_main()
 
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
+#ifdef RECEIVER_ONLY
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
-
-#ifndef RECEIVER_ONLY
+    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
+#else
+    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 6, NULL);
 #endif
 
@@ -242,8 +245,8 @@ void app_main()
     {
         xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
 #if CONFIG_IDF_TARGET_ESP32
-        xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
-        xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
+        //xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
+        //xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
 #endif
 
         xEventGroupWaitBits(

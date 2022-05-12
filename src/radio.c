@@ -194,17 +194,16 @@ void radio_task(void *arg)
         {
             x = lora_receive_packet(buf, sizeof(buf));
             buf[x] = 0;
-            int rssi = lora_packet_rssi();
             // printf("Received: \"%s\" Len: %d RSSI: %d\n", buf, x, rssi);
             if (x > 10 && x < 200)
             {
                 if (buf[x - 1] == '}')
                 {
-                    sprintf((char *)&buf[x - 1], ",\"rssi\":%d}", rssi);
+                    sprintf((char *)&buf[x - 1], ",\"rssi\":%d,\"snr\":%.2f}", lora_packet_rssi(), lora_packet_snr());
                 }
                 else
                 {
-                    sprintf((char *)&buf[x], " - RSSI: %d", rssi);
+                    sprintf((char *)&buf[x], " - RSSI:%d; - SNR:%.2f", lora_packet_rssi(), lora_packet_snr());
                 }
                 printf("%s\n", buf);
                 // fflush(stdout);

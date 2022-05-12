@@ -217,8 +217,7 @@ void dual_adc(void *arg)
 
             if (sum_count > 0)
             {
-                result.adc11 = sum_r / sum_count;
-                result.adc12 = 0;
+                result.adc1 = sum_r / sum_count;
 
                 result.adc2 = sum_u / sum_count;
                 result.U = volt(result.adc2);
@@ -226,7 +225,7 @@ void dual_adc(void *arg)
             }
             else
             {
-                result.adc11 = 0;
+                result.adc1 = 0;
                 result.adc2 = 0;
                 result.U = 0;
                 result.R = 0;
@@ -281,16 +280,15 @@ void dual_adc(void *arg)
                     r += kOm(bufferU[offs + i], bufferR[offs + i]);
                 }
 
-                result.adc11 = s1 / avg_count;
-                result.adc12 = 0;
-
+                result.adc1 = s1 / avg_count;
+                
                 result.adc2 = s2 / avg_count;
                 result.U = volt(result.adc2);
                 result.R = r / avg_count;
 
                 xQueueSend(adc1_queue, (void *)&result, (portTickType)0);
 
-                printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%d,%d) buffer:%d\n", result.U, result.adc2, result.R, result.adc11, result.adc12, len);
+                printf("ADC2: U = %d V (%4d), ADC1: R = %d kOm (%d) buffer:%d\n", result.U, result.adc2, result.R, result.adc1, len);
 
                 if (pdTRUE == xQueueReceive(uicmd_queue, &cmd, (1000 - menu[0].val) / portTICK_PERIOD_MS))
                 {                

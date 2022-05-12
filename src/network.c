@@ -597,6 +597,8 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     buf[0] = 0;
     int l = 0;
     int n = 0;
+
+#if CONFIG_IDF_TARGET_ESP32C3
     while (getADC_Data(line, &ptr_adc, &n) > 0)
     {
         l = strlcat(buf, line, sizeof(buf));
@@ -627,6 +629,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
             break;
         }
     }
+#endif    
 
     if (l > 0)
     {
