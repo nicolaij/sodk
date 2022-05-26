@@ -629,7 +629,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
             break;
         }
     }
-#endif    
+#endif
 
     if (l > 0)
     {
@@ -828,7 +828,7 @@ void wifi_task(void *arg)
 
         if (need_ws_send && ws_fd > 0)
         {
-            httpd_queue_work(ws_hd, ws_async_send, msg);
+            httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, msg);
             reset_sleep_timeout();
             need_ws_send = false;
         }
