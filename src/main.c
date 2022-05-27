@@ -92,15 +92,15 @@ void go_sleep(void)
         ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(GPIO_NUM_0), ESP_GPIO_WAKEUP_GPIO_HIGH));
     #endif
     */
-    uint64_t time_in_us = menu[14].val * 1000000;
+    uint64_t time_in_us = menu[14].val * 1000000ULL;
 
     if (BattLow > 200)
     {
-        time_in_us = 60 * 60 * 24 * 365 * 1000000; // 365 days
+        time_in_us = 60 * 60 * 24 * 365 * 1000000ULL; // 365 days
     }
     else if (BattLow > 100)
     {
-        time_in_us = 60 * 60 * 24 * 30 * 1000000; // 30 days
+        time_in_us = 60 * 60 * 24 * 30 * 1000000ULL; // 30 days
     }
 
     printf("Go sleep...\n");
