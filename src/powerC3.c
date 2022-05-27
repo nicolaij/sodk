@@ -37,10 +37,10 @@ typedef struct
 } measure_t;
 
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
     {.channel = ADC1_CHANNEL_4, .k = 1, .max = 29999}, //~х22
     {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},  //Напряжение источника питания
-    {.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
     {.channel = ADC1_CHANNEL_3, .k = 1, .max = 1000},  //Напряжение 0 проводника
 };
 
@@ -314,14 +314,14 @@ void dual_adc(void *arg)
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 0 || p->type2.channel != 0);
+                        } while (p->type2.unit != 0 || p->type2.channel != chan_r[3].channel);
                         sum_avg_batt += p->type2.data;
 
                         //напряжение
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 1 || p->type2.channel != 0);
+                        } while (p->type2.unit != 1 || p->type2.channel != chan_r[2].channel);
                         sum_avg_u += p->type2.data;
 
                         //ток
@@ -384,7 +384,7 @@ void dual_adc(void *arg)
                         do
                         {
                             p--;
-                        } while (p->type2.unit != 0 || p->type2.channel != 1);
+                        } while (p->type2.unit != 0 || p->type2.channel != chan_r[0].channel);
                         sum_avg_c += p->type2.data;
                     };
 
@@ -440,6 +440,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
     int sum_avg_u0 = 0;
     int sum_n = 0;
     int sum_first_p = 0;
+    int sum_adcI = 0;
+    int sum_adcU = 0;
 
     int batt_counter = 32;
     int batt_min = 0;
@@ -523,7 +525,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                 }
             }
 
-            if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == 0 && (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == 0 && (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == 3)
+            if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[2].channel && (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == chan_r[3].channel && (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[4].channel)
             {
                 if (block_chan != p->type2.channel)
                 {
@@ -558,6 +560,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                     sum_avg_batt = 0;
                     sum_avg_u0 = 0;
                     sum_first_p = num_p;
+                    sum_adcI = 0;
+                    sum_adcU = 0;
                 }
 
                 adc1 = p->type2.data;
@@ -567,6 +571,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                 adc4 = (p + 3)->type2.data;
 
                 sum_n++;
+                sum_adcI += adc1;
+                sum_adcU += adc2;
                 sum_avg_u += volt(adc2);
                 sum_avg_batt += voltBatt(adc3);
                 sum_avg_u0 += volt0(adc4);
@@ -613,11 +619,12 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
             if (batt_min == 0)
                 batt_min = sum_avg_batt / sum_n;
 
+            result.adc1 = sum_adcI / sum_n;
+            result.adc2 = sum_adcU / sum_n;
+
             if (block_off >= count_avg * 2) //второй блок после отключения
             {
                 // printf("%d result: %d---------------------------------\n", num_p, block_off);
-                result.adc1 = adc1;
-                result.adc2 = adc2;
                 result.R = sum_avg_c / sum_n;
                 result.U = sum_avg_u / sum_n / 1000;
                 result.U0 = sum_avg_u0 / sum_n / 1000;
@@ -626,8 +633,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                 block_off = -1;
 
                 //перезапускаем результат
-                if (block_overload > 0 ||               //если перегрузка по току
-                    ptr_off == (uint8_t *)bufferADC)    //последний, если отключения небыло
+                if (block_overload > 0 ||            //если перегрузка по току
+                    ptr_off == (uint8_t *)bufferADC) //последний, если отключения небыло
                     block_off = 0;
             }
 
@@ -643,8 +650,9 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
 
             // sprintf(buf, "%5d(%2d)(%2d;%2d), %4d(%d), %5d, %4d, %5d, %4d, %5d, %4d, %5d", sum_first_p, sum_n, block_off, block_0db, adc1, adc1ch, sum_avg_c / sum_n,
             //         adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
-            sprintf(buf, "%5d(%2d), %4d(%d):%5d, %4d:%5d, %4d:%5d, %4d:%5d, (%d)", sum_first_p, sum_n, adc1, adc1ch, sum_avg_c / sum_n,
-                    adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n, block_off);
+
+            sprintf(buf, "%5d(%2d), %4d(%d):%5d, %4d:%5d, %4d:%5d, %4d:%5d, (%d)", sum_first_p, sum_n, result.adc1, adc1ch, sum_avg_c / sum_n,
+                    result.adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n, block_off);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             printf("%s\n", buf);
             // fflush(stdout);
@@ -671,7 +679,7 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
 
     while ((uint8_t *)(p + ADC_DMA) < (uint8_t *)bufferADC + sizeof(bufferADC))
     {
-        if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == 0 && (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == 0 && (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == 3)
+            if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[2].channel && (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == chan_r[3].channel && (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[4].channel)
         {
             sprintf(line, "%5d, %4d, %4d, %4d, %4d, %d\n", (*num), p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, bufferR[(*num)]);
             (*num)++;
