@@ -374,7 +374,7 @@ int lora_init(void)
     /*
      * Check version.
      */
-    uint8_t version;
+    uint8_t version = 0;
     uint8_t i = 0;
     while (i++ < TIMEOUT_RESET)
     {

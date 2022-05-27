@@ -835,6 +835,7 @@ void wifi_task(void *arg)
 
         if (esp_timer_get_time() - timeout_start > (int64_t)menu[15].val * 1000000)
         {
+            esp_wifi_stop();
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);
         }
 
