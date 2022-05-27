@@ -116,6 +116,7 @@ void app_main()
     case ESP_SLEEP_WAKEUP_EXT0:
         printf("Wakeup caused by external signal using RTC_IO\n");
         break;
+#if SOC_PM_SUPPORT_EXT_WAKEUP        
     case ESP_SLEEP_WAKEUP_EXT1:
     {
         uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
@@ -130,6 +131,7 @@ void app_main()
         }
         break;
     }
+#endif
 #if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
     case ESP_SLEEP_WAKEUP_GPIO:
     {
