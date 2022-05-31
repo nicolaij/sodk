@@ -31,18 +31,30 @@ result_t result = {};
 typedef struct
 {
     adc1_channel_t channel;
-    int k;
+    adc_atten_t k;
     int max;
-    int max0db;
 } measure_t;
 
+#define SWAP_ADC1_0 1
+
+#ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC1_CHANNEL_4, .k = 1, .max = 29999}, //~х22
-    {.channel = ADC2_CHANNEL_0, .k = 1, .max = 1000},  //Напряжение источника питания
-    {.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
-    {.channel = ADC1_CHANNEL_3, .k = 1, .max = 1000},  //Напряжение 0 проводника
+    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 2999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 29999}, //~х22
+    //{.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_0, .max = 29999},
+    {.channel = ADC2_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение источника питания
+    {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC1_CHANNEL_3, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение 0 проводника
 };
+#else
+const measure_t chan_r[] = {
+    {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 2999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 29999}, //~х22
+    {.channel = ADC2_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение источника питания
+    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC1_CHANNEL_3, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение 0 проводника
+};
+#endif
 
 #define ADC_DMA 4
 
@@ -55,12 +67,12 @@ void adc_select(int chan)
     // printf("PATT1: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
     // printf("M: %8X\n", ((chan_r[chan].channel << 2) | ADC_ATTEN_DB_11));
 
-    REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, (REG_READ(APB_SARADC_SAR_PATT_TAB1_REG) & ~(0b111111 << 18)) | (((chan_r[chan].channel << 2) | ADC_ATTEN_DB_11) << 18));
+    REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, (REG_READ(APB_SARADC_SAR_PATT_TAB1_REG) & ~(0b111111 << 18)) | (((chan_r[chan].channel << 2) | chan_r[chan].k) << 18));
 
     // REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, 0x001e30cf);
     // REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, 0x004e30cf);
-    // printf("PATT1: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
-    // printf("PATT2: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB2_REG));
+    //printf("PATT1: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
+    //printf("PATT2: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB2_REG));
 };
 
 int adc_cur_chan()
@@ -139,7 +151,7 @@ int kOm0db(int adc_u, int adc_r)
     return r;
 };
 
-static void continuous_adc_init(int chan)
+static void continuous_adc_init()
 {
     esp_err_t ret = ESP_OK;
     assert(ret == ESP_OK);
@@ -170,28 +182,20 @@ static void continuous_adc_init(int chan)
         .adc_pattern_len = ADC_DMA,
     };
 
-    if (chan == 0)
-    {
-        adc_pattern[0].atten = ADC_ATTEN_DB_11;
-        adc_pattern[0].channel = chan_r[0].channel;
-        adc_pattern[0].unit = 0;
-    }
-    else
-    {
-        adc_pattern[0].atten = ADC_ATTEN_DB_11;
-        adc_pattern[0].channel = chan_r[1].channel;
-        adc_pattern[0].unit = 0;
-    }
+    // Note: Все atten при инициализации должны быть одинаковые!!!???
+    adc_pattern[0].atten = ADC_ATTEN_DB_11; // chan_r[0].k;
+    adc_pattern[0].channel = chan_r[0].channel;
+    adc_pattern[0].unit = 0;
 
-    adc_pattern[1].atten = ADC_ATTEN_DB_11;
+    adc_pattern[1].atten = ADC_ATTEN_DB_11; // chan_r[2].k;
     adc_pattern[1].channel = chan_r[2].channel;
     adc_pattern[1].unit = 1;
 
-    adc_pattern[2].atten = ADC_ATTEN_DB_11;
+    adc_pattern[2].atten = ADC_ATTEN_DB_11; // chan_r[3].k;
     adc_pattern[2].channel = chan_r[3].channel;
     adc_pattern[2].unit = 0;
 
-    adc_pattern[3].atten = ADC_ATTEN_DB_11;
+    adc_pattern[3].atten = ADC_ATTEN_DB_11; // chan_r[4].k;
     adc_pattern[3].channel = chan_r[4].channel;
     adc_pattern[3].unit = 0;
 
@@ -229,16 +233,13 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 0));
 
-    // adc1_config_width(ADC_WIDTH_BIT_12);
-    // adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
-
     while (1)
     {
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
         reset_sleep_timeout();
 
-        continuous_adc_init(1);
+        continuous_adc_init();
 
         //подаем питание на источник питания
         // ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
@@ -269,6 +270,8 @@ void dual_adc(void *arg)
 
         ESP_ERROR_CHECK(adc_digi_start());
 
+        adc_select(1);
+
         //подаем питание на источник питания, OpAmp, делитель АЦП батареи
         ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
 
@@ -282,9 +285,13 @@ void dual_adc(void *arg)
             {
                 if (BattLow > 10)
                     break;
+
                 adc_select(0);
-                //включаем источник питания
-                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                if (menu[0].val > 0) //если импульс > 0
+                {
+                    //включаем источник питания
+                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                }
                 ptr_on = ptr;
             }
 
@@ -395,13 +402,7 @@ void dual_adc(void *arg)
                         //переключаем
                         ptr_chan = ptr;
                         triggerChan = -1;
-                        // ESP_ERROR_CHECK(adc_digi_stop());
-                        // ESP_ERROR_CHECK(adc_digi_deinitialize());
-                        // continuous_adc_init(1);
-                        // ESP_ERROR_CHECK(adc_digi_start());
-                        // ESP_ERROR_CHECK(adc_digi_stop());
                         adc_select(1);
-                        // ESP_ERROR_CHECK(adc_digi_start());
                     };
                     // int64_t t2 = esp_timer_get_time();
                     //  printf("dt: %lld\n", t2 - t1);
@@ -424,7 +425,7 @@ void dual_adc(void *arg)
     };
 }
 
-void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on)
+void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t *ptr_on)
 {
     char buf[WS_BUF_LINE];
 
@@ -465,7 +466,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
         };
         p = (void *)bufferADC;
     */
-    sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4), (ptr_0db - (uint8_t *)bufferADC) / (ADC_DMA * 4));
+    sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4), (ptr_chan - (uint8_t *)bufferADC) / (ADC_DMA * 4));
     // xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
     printf("%s\n", buf);
 
@@ -510,7 +511,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                     }
                 }
 
-                if ((uint8_t *)p >= ptr_0db)
+                if ((uint8_t *)p >= ptr_chan)
                 {
                     if (block_0db >= 0)
                     {
@@ -565,7 +566,15 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                 }
 
                 adc1 = p->type2.data;
-                adc1ch = p->type2.channel;
+                if ((uint8_t *)p >= ptr_chan)
+                {
+                    adc1ch = p->type2.channel + 100;
+                }
+                else
+                {
+                    adc1ch = p->type2.channel;
+                }
+
                 adc2 = (p + 1)->type2.data;
                 adc3 = (p + 2)->type2.data;
                 adc4 = (p + 3)->type2.data;
@@ -577,17 +586,17 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
                 sum_avg_batt += voltBatt(adc3);
                 sum_avg_u0 += volt0(adc4);
 
-                if (adc1ch == chan_r[1].channel)
-                {
-                    bufferR[num_p] = kOm0db(adc2, adc1);
-                    sum_avg_c += kOm0db(adc2, adc1);
-                    // sum_avg_c += current0(adc1);
-                }
-                else
+                if (adc1ch == chan_r[0].channel)
                 {
                     bufferR[num_p] = kOm(adc2, adc1);
                     sum_avg_c += kOm(adc2, adc1);
                     // sum_avg_c += current(adc1);
+                }
+                else
+                {
+                    bufferR[num_p] = kOm0db(adc2, adc1);
+                    sum_avg_c += kOm0db(adc2, adc1);
+                    // sum_avg_c += current0(adc1);
                 }
 
                 if ((uint8_t *)p > ptr_on && batt_counter > 0)
@@ -679,7 +688,7 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
 
     while ((uint8_t *)(p + ADC_DMA) < (uint8_t *)bufferADC + sizeof(bufferADC))
     {
-            if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[2].channel && (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == chan_r[3].channel && (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[4].channel)
+        if (p->type2.unit == 0 && (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[2].channel && (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == chan_r[3].channel && (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[4].channel)
         {
             sprintf(line, "%5d, %4d, %4d, %4d, %4d, %d\n", (*num), p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, bufferR[(*num)]);
             (*num)++;

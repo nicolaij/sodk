@@ -23,14 +23,14 @@ TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
 
 menu_t menu[] = {
-    {.id = "pulse", .name = "Импульс", .val = 100, .min = 1, .max = 10000},
-    {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 1, .max = 1000},
+    {.id = "pulse", .name = "Импульс", .val = 100, .min = 0, .max = 10000},
+    {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 0, .max = 1000},
     {.id = "kU", .name = "коэф. U", .val = 162, .min = 1, .max = 10000},
     {.id = "offsU", .name = "смещ. U", .val = -8000, .min = -100000, .max = 100000},
-    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 1440, .min = 1, .max = 10000},
-    {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = 60000, .min = -100000, .max = 100000},
-    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 67, .min = 1, .max = 100000},
-    {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 0, .min = -100000, .max = 100000},
+    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 1562, .min = 1, .max = 10000},
+    {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -30200, .min = -100000, .max = 100000},
+    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 139, .min = 1, .max = 100000},
+    {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 4076, .min = -100000, .max = 100000},
     {.id = "kUbat", .name = "коэф. U bat", .val = 3970, .min = 1, .max = 10000},
     {.id = "offsUbat", .name = "смещ. U bat", .val = 0, .min = -100000, .max = 100000},
     {.id = "kU0", .name = "коэф. U петли", .val = 160, .min = 1, .max = 10000},
