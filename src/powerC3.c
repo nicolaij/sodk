@@ -39,7 +39,7 @@ typedef struct
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 4999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 2999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
     {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 49999}, //~х22
     {.channel = ADC2_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение источника питания
     {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
@@ -445,6 +445,12 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int sum_adcI1 = 0;
     int sum_adcU = 0;
 
+    int result_sum_avg_r0 = 0;
+    int result_sum_avg_r1 = 0;
+    int result_sum_avg_u = 0;
+    int result_count_avg = 6; // 6*32
+    int result_sum_n = 0;
+
     int batt_counter = 32;
     int batt_min = 0;
 
@@ -467,9 +473,9 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
         };
         p = (void *)bufferADC;
     */
-    //sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4), (ptr_chan - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4));
-    // xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
-    //printf("%s\n", buf);
+    // sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4), (ptr_chan - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4));
+    //  xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+    // printf("%s\n", buf);
     printf("off %d\n", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4));
 
     int adc0 = 0;
@@ -630,24 +636,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
 
             result.adc0 = sum_adcI0 / sum_n;
             result.adc1 = sum_adcI1 / sum_n;
-
             result.adc2 = sum_adcU / sum_n;
-
-            if (block_off >= count_avg * 2) //второй блок после отключения
-            {
-                // printf("%d result: %d---------------------------------\n", num_p, block_off);
-                result.R = sum_avg_r0 / sum_n;
-                result.U = sum_avg_u / sum_n / 1000;
-                result.U0 = sum_avg_u0 / sum_n / 1000;
-                result.Ubatt1 = batt_min;
-                result.Ubatt0 = sum_avg_batt / sum_n;
-                block_off = -1;
-
-                //перезапускаем результат
-                if (block_overload > 0 ||            //если перегрузка по току
-                    ptr_off == (uint8_t *)bufferADC) //последний, если отключения небыло
-                    block_off = 0;
-            }
 
             // if (block_0db >= count_avg) //первый блок после ptr_0db
             //{
@@ -662,11 +651,50 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
             // sprintf(buf, "%5d(%2d)(%2d;%2d), %4d(%d), %5d, %4d, %5d, %4d, %5d, %4d, %5d", sum_first_p, sum_n, block_off, block_0db, adc1, adc1ch, sum_avg_c / sum_n,
             //         adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
             //            f_id cnt  adc0:R0  adc1:R1  adc2:U   adc3:Ubat adc4:U0
-            sprintf(buf, "%5d(%2d), %4d:%5d, %4d:%5d, %4d:%5d, %4d:%5d, %4d:%5d, (%d)", sum_first_p, sum_n, result.adc0, sum_avg_r0 / sum_n, result.adc1, sum_avg_r1 / sum_n,
-                    result.adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n, block_off);
+            sprintf(buf, "%5d(%2d), %4d:%5d, %4d:%5d, %4d:%5d, %4d:%5d, %4d:%5d, (%d)", sum_first_p, sum_n, sum_adcI0 / sum_n, sum_avg_r0 / sum_n, sum_adcI1 / sum_n, sum_avg_r1 / sum_n,
+                    sum_adcU / sum_n, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n, block_off);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             printf("%s\n", buf);
-            // fflush(stdout);
+
+            if (block_off >= count_avg * 2) //начиная со второго блока после отключения
+            {
+                if (result_sum_n == 0)
+                {
+                    if (sum_avg_r0 / sum_n < chan_r[0].max)
+                        result.R = sum_avg_r0 / sum_n;
+                    else
+                        result.R = sum_avg_r1 / sum_n;
+
+                    result.U = sum_avg_u / sum_n / 1000;
+                    result.U0 = sum_avg_u0 / sum_n / 1000;
+                    result.Ubatt1 = batt_min;
+                    result.Ubatt0 = sum_avg_batt / sum_n;
+                }
+
+                if (result_sum_n++ < 6)
+                {
+                    result_sum_avg_r0 += sum_avg_r0 / sum_n;
+                    result_sum_avg_r1 += sum_avg_r1 / sum_n;
+
+                    if (result_sum_avg_r0 / result_sum_n < chan_r[0].max)
+                        result.R = result_sum_avg_r0 / result_sum_n;
+                    else
+                        result.R = result_sum_avg_r1 / result_sum_n;
+
+                    //printf("%d result: %d---------------------------------\n", result_sum_n, result.R);
+                }
+                
+                if (result_sum_n == 6)
+                {
+                    block_off = -1;
+                }
+
+                //перезапускаем результат
+                if (block_overload > 0 ||            //если перегрузка по току
+                    ptr_off == (uint8_t *)bufferADC) //последний, если отключения небыло
+                    block_off = 0;
+            }
+
             sum_n = 0;
         }
     };
