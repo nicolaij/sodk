@@ -32,7 +32,7 @@
         yDomain, // [ymin, ymax]
         yRange = [height - marginBottom, marginTop], // [bottom, top]
         yFormat, // a format specifier string for the y-axis
-        yLabel, // a label for the y-axis
+        yLabel = "Напряжение", // a label for the y-axis
         color = "currentColor", // stroke color of line
         strokeLinecap = "round", // stroke line cap of the line
         strokeLinejoin = "round", // stroke line join of the line
@@ -43,13 +43,14 @@
         const X = d3.map(data, (x) => x.id);
         const Y1 = d3.map(data, (y) => y.adc0);
         const Y2 = d3.map(data, (y) => y.adc1);
+        const Y3 = d3.map(data, (y) => y.adc2);
         const I = d3.range(X.length);
         if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y2[i]);
         const D = d3.map(data, defined);
 
         // Compute default domains.
         if (xDomain === undefined) xDomain = d3.extent(X);
-        if (yDomain === undefined) yDomain = [0, Math.max(d3.max(Y1), d3.max(Y2))];
+        if (yDomain === undefined) yDomain = [0, Math.max(d3.max(Y1), d3.max(Y2), d3.max(Y3))];
 
         // Construct scales and axes.
         const xScale = xType(xDomain, xRange);
@@ -69,6 +70,12 @@
             .curve(curve)
             .x(i => xScale(X[i]))
             .y(i => yScale(Y2[i]));
+
+        const line3 = d3.line()
+            //.defined(i => D[i])
+            .curve(curve)
+            .x(i => xScale(X[i]))
+            .y(i => yScale(Y3[i]));
 
         const svg = d3.create("svg")
             .attr("width", width)
@@ -92,7 +99,7 @@
                 .attr("y", 10)
                 .attr("fill", "currentColor")
                 .attr("text-anchor", "start")
-                .style('fill', 'red')
+                .style('fill', 'orange')
                 .text(yLabel))
 
         svg.append("path")
@@ -113,6 +120,15 @@
             .attr("stroke-opacity", strokeOpacity)
             .attr("d", line2(I));
 
+        svg.append("path")
+            .attr("fill", "none")
+            .attr("stroke", "orange")
+            .attr("stroke-width", strokeWidth)
+            .attr("stroke-linecap", strokeLinecap)
+            .attr("stroke-linejoin", strokeLinejoin)
+            .attr("stroke-opacity", strokeOpacity)
+            .attr("d", line3(I));
+
         return svg.node();
     }
 
@@ -124,7 +140,7 @@
     });
 
     d1.then(function (data) {
-        document.body.appendChild(LineChart(data, { width: window.innerWidth, height: (window.innerWidth / 2), yLabel: "adc0" }));
+        document.body.appendChild(LineChart(data, { width: window.innerWidth, height: (window.innerWidth / 2)}));
     });
 
 </script>
