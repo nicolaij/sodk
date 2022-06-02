@@ -17,8 +17,7 @@
 
 #include "soc/apb_saradc_reg.h"
 
-// int bufferR[DATALEN];
-// int bufferU[DATALEN];
+RTC_DATA_ATTR int last_chan = -1;
 
 uint32_t bufferADC[DATALEN];
 uint32_t bufferR[2][DATALEN / 5];
@@ -39,8 +38,8 @@ typedef struct
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 2999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 49999}, //~х22
+    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 4999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 99999}, //
     {.channel = ADC2_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение источника питания
     {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
     {.channel = ADC1_CHANNEL_3, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение 0 проводника
@@ -476,7 +475,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     // sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4), (ptr_chan - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4));
     //  xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
     // printf("%s\n", buf);
-    printf("off %d\n", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4));
+    printf("off %d, last_chan: %d\n", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4), last_chan);
 
     int adc0 = 0;
     int adc1 = 0;
@@ -660,10 +659,25 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
             {
                 if (result_sum_n == 0)
                 {
-                    if (sum_avg_r0 / sum_n < chan_r[0].max)
-                        result.R = sum_avg_r0 / sum_n;
-                    else
+                    //Выбираем канал измерения
+                    if (sum_adcI0 / sum_n < 100) // > 4MOm
+                    {
+                        last_chan = 1;
+                    }
+
+                    if (sum_adcI1 / sum_n > 3500) // < 1MOm
+                    {
+                        last_chan = 0;
+                    }
+
+                    if (last_chan == 1)
+                    {
                         result.R = sum_avg_r1 / sum_n;
+                    }
+                    else
+                    {
+                        result.R = sum_avg_r0 / sum_n;
+                    }
 
                     result.U = sum_avg_u / sum_n / 1000;
                     result.U0 = sum_avg_u0 / sum_n / 1000;
@@ -676,14 +690,14 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     result_sum_avg_r0 += sum_avg_r0 / sum_n;
                     result_sum_avg_r1 += sum_avg_r1 / sum_n;
 
-                    if (result_sum_avg_r0 / result_sum_n < chan_r[0].max)
-                        result.R = result_sum_avg_r0 / result_sum_n;
-                    else
+                    if (last_chan == 1)
                         result.R = result_sum_avg_r1 / result_sum_n;
+                    else
+                        result.R = result_sum_avg_r0 / result_sum_n;
 
-                    //printf("%d result: %d---------------------------------\n", result_sum_n, result.R);
+                    // printf("%d result: %d---------------------------------\n", result_sum_n, result.R);
                 }
-                
+
                 if (result_sum_n == 6)
                 {
                     block_off = -1;
