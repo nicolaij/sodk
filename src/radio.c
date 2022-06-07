@@ -253,5 +253,7 @@ void radio_task(void *arg)
         }
 
         gpio_set_direction(CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
+       
+        vTaskDelay(1);
     }
 }

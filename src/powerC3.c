@@ -17,7 +17,7 @@
 
 #include "soc/apb_saradc_reg.h"
 
-RTC_DATA_ATTR int last_chan = -1;
+RTC_DATA_ATTR int last_chan = 0;
 
 uint32_t bufferADC[DATALEN];
 uint32_t bufferR[2][DATALEN / 5];
@@ -117,12 +117,11 @@ int current(int adc)
 int kOm(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    int k = menu[4].val;
+    if (adc_u < 10 || u < 6)
+        return 0;
     if (adc_r < 10)
         return chan_r[0].max;
-    if (adc_u < 10)
-        return 0;
-    int r = u * 1000 / (k * adc_r + menu[5].val);
+    int r = u * 1000 / (menu[4].val * adc_r + menu[5].val);
     if (r > chan_r[0].max || r < 0)
         return chan_r[0].max;
     return r;
@@ -138,12 +137,11 @@ int current0(int adc)
 int kOm0db(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    int k = menu[6].val;
+    if ((adc_u) < 10 || u < 6)
+        return 0;
     if ((adc_r) < 10)
         return chan_r[1].max;
-    if ((adc_u) < 10)
-        return 0;
-    int r = u * 1000 / (k * adc_r + menu[7].val);
+    int r = u * 1000 / (menu[6].val * adc_r + menu[7].val);
     if (r > chan_r[1].max || r < 0)
         return chan_r[1].max;
     return r;
@@ -282,12 +280,12 @@ void dual_adc(void *arg)
                     break;
 
                 // adc_select(0);
-                if (menu[0].val > 0) //если импульс > 0
+                if ((esp_timer_get_time() - t1) < timeout)
                 {
                     //включаем источник питания
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                    ptr_on = ptr;
                 }
-                ptr_on = ptr;
             }
 
             if (ptr_off == (uint8_t *)bufferADC)
@@ -357,7 +355,7 @@ void dual_adc(void *arg)
                     }
 
                     // "если напряжение > лимита" или "ток в зашкале при напряжении > половины лимита"
-                    if ((sum_avg_c / count_avg > 4060 && sum_avg_u / count_avg > adcU_limit / 2) || sum_avg_u / count_avg > adcU_limit)
+                    if ((sum_avg_c / count_avg > 4060 && sum_avg_u / count_avg > adcU_limit / 3) || sum_avg_u / count_avg > adcU_limit)
                     {
                         //ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
@@ -557,15 +555,6 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                         break;
                     }
                 }
-                else
-                {
-                    if (block_overload > 0)
-                    {
-                        block_overload = 0;
-                        // printf("block_overload 0 (%d)-------------------------------------\n", num_p);
-                        break;
-                    }
-                }
 
                 if (sum_n == 0)
                 {
@@ -683,6 +672,9 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     result.U0 = sum_avg_u0 / sum_n / 1000;
                     result.Ubatt1 = batt_min;
                     result.Ubatt0 = sum_avg_batt / sum_n;
+
+                    result_sum_avg_r0 = 0;
+                    result_sum_avg_r1 = 0;
                 }
 
                 if (result_sum_n++ < 6)
@@ -706,7 +698,10 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 //перезапускаем результат
                 if (block_overload > 0 ||            //если перегрузка по току
                     ptr_off == (uint8_t *)bufferADC) //последний, если отключения небыло
-                    block_off = 0;
+                    {
+                        result_sum_n = 0;
+                        block_overload = 0;
+                    }
             }
 
             sum_n = 0;

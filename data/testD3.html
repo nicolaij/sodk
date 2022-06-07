@@ -40,7 +40,7 @@
         strokeOpacity = 1, // stroke opacity of line
     } = {}) {
         // Compute values.
-        const X = d3.map(data, (x) => x.id);
+        const X = d3.map(data, (x) => x.id / 10);
         const Y1 = d3.map(data, (y) => y.adc0);
         const Y2 = d3.map(data, (y) => y.adc1);
         const Y3 = d3.map(data, (y) => y.adc2);
