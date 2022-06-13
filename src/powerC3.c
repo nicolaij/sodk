@@ -556,7 +556,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     block_overload++;
                     if (block_overload == 1)
                     {
-                        printf("block_overload 1 (%d)-------------------------------------\n", num_p);
+                        // printf("block_overload 1 (%d)-------------------------------------\n", num_p);
                         break;
                     }
                 }
@@ -685,8 +685,9 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     result_sum_avg_r1 = 0;
                 }
 
-                if (result_sum_n++ < 6 && sum_avg_u / sum_n / 1000 > 7)
+                if (result_sum_n < 6 && sum_avg_u / sum_n / 1000 > 7)
                 {
+                    result_sum_n++;
                     result_sum_avg_r0 += sum_avg_r0 / sum_n;
                     result_sum_avg_r1 += sum_avg_r1 / sum_n;
 
@@ -695,15 +696,15 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     else
                         result.R = result_sum_avg_r0 / result_sum_n;
 
-                    printf("%d result: %d---------------------------------\n", result_sum_n, result.R);
-                }
-
-                if (result_sum_n == 6)
-                {
-                    block_off = -1;
+                    if (result_sum_n == 6)
+                    {
+                        block_off = -1;
+                    }
+                    
+                    // printf("%d result: %d---------------------------------\n", result_sum_n, result.R);
                 }
             }
-            
+
             //перезапускаем
             if (block_off < count_avg * 2) //начиная со второго блока после отключения
             {
