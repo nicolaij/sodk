@@ -19,10 +19,11 @@
 
 RTC_DATA_ATTR int last_chan = 0;
 
-uint32_t bufferADC[DATALEN];
-uint32_t bufferR[2][DATALEN / 5];
-
 #define ADC_BLOCK 256
+#define ADC_COUNT_READ 2
+
+uint32_t bufferADC[DATALEN];
+uint32_t bufferR[2][DATALEN / ADC_COUNT_READ];
 
 //результат измерений
 result_t result = {};
@@ -175,29 +176,32 @@ static void continuous_adc_init()
         .conv_limit_en = 0,
         .conv_limit_num = 1,
         .sample_freq_hz = 50000,
-        .adc_pattern_len = sizeof(chan_r) / sizeof(chan_r[0]) // ADC_DMA,
+        .adc_pattern_len = ADC_COUNT_READ // sizeof(chan_r) / sizeof(chan_r[0]) // ADC_DMA,
     };
 
+    int n = 0;
     // Note: Все atten при инициализации должны быть одинаковые!!!???
-    adc_pattern[0].atten = ADC_ATTEN_DB_11;
-    adc_pattern[0].channel = chan_r[0].channel;
-    adc_pattern[0].unit = 0;
-
-    adc_pattern[1].atten = ADC_ATTEN_DB_11;
-    adc_pattern[1].channel = chan_r[1].channel;
-    adc_pattern[1].unit = 0;
-
-    adc_pattern[2].atten = ADC_ATTEN_DB_11;
-    adc_pattern[2].channel = chan_r[2].channel;
-    adc_pattern[2].unit = 1;
-
-    adc_pattern[3].atten = ADC_ATTEN_DB_11;
-    adc_pattern[3].channel = chan_r[3].channel;
-    adc_pattern[3].unit = 0;
-
-    adc_pattern[4].atten = ADC_ATTEN_DB_11;
-    adc_pattern[4].channel = chan_r[4].channel;
-    adc_pattern[4].unit = 0;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[0].channel;
+    adc_pattern[n].unit = 0;
+#if ADC_COUNT_READ != 2
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[1].channel;
+    adc_pattern[n].unit = 0;
+#endif
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[2].channel;
+    adc_pattern[n].unit = 1;
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[3].channel;
+    adc_pattern[n].unit = 0;
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[4].channel;
+    adc_pattern[n].unit = 0;
 
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_digi_controller_config(&dig_cfg));
@@ -310,13 +314,14 @@ void dual_adc(void *arg)
                     adc_digi_output_data_t *p = (void *)ptr;
                     while (n++ < count_avg)
                     {
+#if ADC_COUNT_READ != 2
                         // Ubatt
                         do
                         {
                             p--;
                         } while (p->type2.unit != 0 || p->type2.channel != chan_r[3].channel);
                         sum_avg_batt += p->type2.data;
-
+#endif
                         //напряжение
                         do
                         {
@@ -473,7 +478,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     // sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4), (ptr_chan - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4));
     //  xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
     // printf("%s\n", buf);
-    printf("off %d, last_chan: %d\n", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4), last_chan);
+    printf("off %d, last_chan: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_COUNT_READ * 4), last_chan);
 
     int adc0 = 0;
     int adc1 = 0;
@@ -531,12 +536,16 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 }
                 */
             }
-
+#if ADC_COUNT_READ == 2
+            if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
+                (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[2].channel)
+#elif ADC_COUNT_READ == 5
             if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
                 (p + 1)->type2.unit == 0 && (p + 1)->type2.channel == chan_r[1].channel &&
                 (p + 2)->type2.unit == 1 && (p + 2)->type2.channel == chan_r[2].channel &&
                 (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[3].channel &&
                 (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel)
+#endif
             { /*
               if (block_chan != p->type2.channel)
               {
@@ -571,10 +580,17 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 }
 
                 adc0 = p->type2.data;
+#if ADC_COUNT_READ == 2
+                adc1 = 0;
+                adc2 = (p + 1)->type2.data;
+                adc3 = 0;
+                adc4 = 0;
+#else
                 adc1 = (p + 1)->type2.data;
                 adc2 = (p + 2)->type2.data;
                 adc3 = (p + 3)->type2.data;
                 adc4 = (p + 4)->type2.data;
+#endif
 
                 sum_n++;
                 sum_adcI0 += adc0;
@@ -614,8 +630,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
             };
 
             num_p++;
-            p = p + sizeof(chan_r) / sizeof(chan_r[0]);
-        } // end while
+            p = p + ADC_COUNT_READ; // sizeof(chan_r) / sizeof(chan_r[0]);
+        }                           // end while
 
         if (sum_n > 0)
         {
@@ -648,6 +664,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
             {
                 if (result_sum_n == 0)
                 {
+#if ADC_COUNT_READ != 2
                     //Выбираем канал измерения
                     if (sum_adcI0 / sum_n < 100) // > 4MOm
                     {
@@ -658,7 +675,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     {
                         last_chan = 0;
                     }
-
+#endif
                     if (last_chan == 1)
                     {
                         result.R = sum_avg_r1 / sum_n;
@@ -698,10 +715,10 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 //перезапускаем результат
                 if (block_overload > 0 ||            //если перегрузка по току
                     ptr_off == (uint8_t *)bufferADC) //последний, если отключения небыло
-                    {
-                        result_sum_n = 0;
-                        block_overload = 0;
-                    }
+                {
+                    result_sum_n = 0;
+                    block_overload = 0;
+                }
             }
 
             sum_n = 0;
@@ -721,20 +738,30 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
     {
         p = (void *)bufferADC;
         (*ptr_adc) = (uint8_t *)p;
+#if ADC_COUNT_READ == 2
+        strcpy(line, "id, adc0, adc1, adc2, res0, res1\n");
+#elif ADC_COUNT_READ == 5
         strcpy(line, "id, adc0, adc1, adc2, adc3, adc4, res0, res1\n");
+#endif
         return 2;
     };
 
-    while ((uint8_t *)(p + sizeof(chan_r) / sizeof(chan_r[0])) < (uint8_t *)bufferADC + sizeof(bufferADC))
+    while ((uint8_t *)(p + ADC_COUNT_READ) < (uint8_t *)bufferADC + sizeof(bufferADC))
     {
+#if ADC_COUNT_READ == 2
+        if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
+            (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[2].channel)
+        {
+            sprintf(line, "%5d, %4d, %4d, %5d, %5d\n", (*num), p->type2.data, 0, (p + 1)->type2.data, bufferR[0][(*num)], bufferR[1][(*num)]);
+#elif ADC_COUNT_READ == 5
         if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
             (p + 1)->type2.unit == 0 && (p + 1)->type2.channel == chan_r[1].channel &&
             (p + 2)->type2.unit == 1 && (p + 2)->type2.channel == chan_r[2].channel &&
             (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[3].channel &&
-            (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel)
-        {
+            (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel
             //             id   adc0 adc1 adc2 adc3 adc4
             sprintf(line, "%5d, %4d, %4d, %4d, %4d, %4d, %5d, %5d\n", (*num), p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, (p + 4)->type2.data, bufferR[0][(*num)], bufferR[1][(*num)]);
+#endif
             (*num)++;
             // printf("%s", line);
         }
@@ -744,7 +771,7 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
             continue;
         };
 
-        p = p + sizeof(chan_r) / sizeof(chan_r[0]);
+        p = p + ADC_COUNT_READ;
         (*ptr_adc) = (uint8_t *)p;
         return 1;
     };
