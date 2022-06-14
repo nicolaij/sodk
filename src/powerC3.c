@@ -19,8 +19,9 @@
 
 RTC_DATA_ATTR int last_chan = 0;
 
-#define ADC_BLOCK 256
 #define ADC_COUNT_READ 5
+#define ADC_FREQ 50000
+#define ADC_BLOCK (ADC_FREQ / 1000 * 4) //1 mc
 
 uint32_t bufferADC[DATALEN];
 uint32_t bufferR[2][DATALEN / ADC_COUNT_READ];
@@ -175,7 +176,7 @@ static void continuous_adc_init()
     adc_digi_config_t dig_cfg = {
         .conv_limit_en = 0,
         .conv_limit_num = 1,
-        .sample_freq_hz = 50000,
+        .sample_freq_hz = ADC_FREQ,
         .adc_pattern_len = ADC_COUNT_READ // sizeof(chan_r) / sizeof(chan_r[0]) // ADC_DMA,
     };
 
@@ -251,6 +252,7 @@ void dual_adc(void *arg)
         int blocks = 0;
 
         int64_t timeout = menu[0].val * 1000;
+        int64_t quiet_timeout = 10 * 1000;
 
         //(Лимит напряж - смещение) * коэфф. U
         int adcU_limit = menu[1].val * 1000 / menu[2].val;
@@ -259,8 +261,6 @@ void dual_adc(void *arg)
         int adcUbattLow = (menu[12].val * 1000 - menu[9].val) / menu[8].val;
         int adcUbattEnd = (menu[13].val * 1000 - menu[9].val) / menu[8].val;
 
-        int64_t t1 = esp_timer_get_time();
-        int64_t t2 = 0, t3 = 0, time_off = 0;
         // int64_t time_off = 0;
 
         ESP_ERROR_CHECK(adc_digi_start());
@@ -270,13 +270,16 @@ void dual_adc(void *arg)
         //подаем питание на источник питания, OpAmp, делитель АЦП батареи
         ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
 
+        int64_t t1 = esp_timer_get_time();
+        int64_t t2 = 0, t3 = 0, time_off = 0;
+
         do
         {
             ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, ADC_BLOCK, &ret_num, ADC_MAX_DELAY));
             ptr = ptr + ret_num;
             blocks++;
 
-            if (blocks == 5)
+            if (blocks == 10)
             {
                 if (BattLow > 10)
                     break;
@@ -431,7 +434,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int n = 0;
     int num_p = 0;
 
-    int count_avg = 32;
+    int count_avg = ADC_BLOCK / ADC_COUNT_READ / 4;
+    int result_count_avg = 200 / count_avg; //200ms
 
     int sum_avg_c = 0;
     int sum_avg_r0 = 0;
@@ -448,7 +452,6 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int result_sum_avg_r0 = 0;
     int result_sum_avg_r1 = 0;
     int result_sum_avg_u = 0;
-    int result_count_avg = 6; // 6*32
     int result_sum_n = 0;
 
     int batt_counter = 32;
@@ -685,7 +688,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     result_sum_avg_r1 = 0;
                 }
 
-                if (result_sum_n < 6 && sum_avg_u / sum_n / 1000 > 7)
+                if (result_sum_n < result_count_avg && sum_avg_u / sum_n / 1000 > 7)
                 {
                     result_sum_n++;
                     result_sum_avg_r0 += sum_avg_r0 / sum_n;
@@ -696,11 +699,11 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     else
                         result.R = result_sum_avg_r0 / result_sum_n;
 
-                    if (result_sum_n == 6)
+                    if (result_sum_n == result_count_avg)
                     {
                         block_off = -1;
                     }
-                    
+
                     // printf("%d result: %d---------------------------------\n", result_sum_n, result.R);
                 }
             }
