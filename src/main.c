@@ -33,14 +33,14 @@ menu_t menu[] = {
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 4076, .min = -100000, .max = 100000},
     {.id = "kUbat", .name = "коэф. U bat", .val = 3970, .min = 1, .max = 10000},
     {.id = "offsUbat", .name = "смещ. U bat", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kU0", .name = "коэф. U петли", .val = 160, .min = 1, .max = 10000},
+    {.id = "kU0", .name = "коэф. U петли", .val = 160, .min = 1, .max = 10000}, /*10*/
     {.id = "offsU0", .name = "смещ. U петли", .val = 0, .min = -100000, .max = 100000},
     {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
     {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
-    {.id = "", .name = "WiFi", .val = 0, .min = 0, .max = 1},
-    {.id = "", .name = "Выход ", .val = 0, .min = 0, .max = 0},
+    {.id = "repeat", .name = "Кол-во повт. имп.", .val = 0, .min = 0, .max = 6},
+    {.id = "avgcnt", .name = "Кол-во усредн. результ.", .val = 20, .min = 1, .max = 50},/*17*/
 };
 
 int read_nvs_menu()

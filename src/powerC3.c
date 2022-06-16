@@ -21,7 +21,7 @@ RTC_DATA_ATTR int last_chan = 0;
 
 #define ADC_COUNT_READ 5
 #define ADC_FREQ 50000
-#define ADC_BLOCK (ADC_FREQ / 1000 * 4) //1 mc
+#define ADC_BLOCK (ADC_FREQ / 1000 * 4) // 1 mc
 
 uint32_t bufferADC[DATALEN];
 uint32_t bufferR[2][DATALEN / ADC_COUNT_READ];
@@ -248,7 +248,6 @@ void dual_adc(void *arg)
         uint8_t *ptr_on = (uint8_t *)bufferADC;   //включаем источник питания
         uint8_t *ptr_off = (uint8_t *)bufferADC;  //выключаем источник питания
         uint8_t *ptr_chan = (uint8_t *)bufferADC; //переключаем канал
-        int triggerChan = 1;
         int blocks = 0;
 
         int64_t timeout = menu[0].val * 1000;
@@ -273,13 +272,15 @@ void dual_adc(void *arg)
         int64_t t1 = esp_timer_get_time();
         int64_t t2 = 0, t3 = 0, time_off = 0;
 
+        int repeate_test = menu[16].val;
+
         do
         {
             ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, ADC_BLOCK, &ret_num, ADC_MAX_DELAY));
             ptr = ptr + ret_num;
             blocks++;
 
-            if (blocks == 10)
+            if (blocks == 5)
             {
                 if (BattLow > 10)
                     break;
@@ -291,6 +292,18 @@ void dual_adc(void *arg)
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
                     ptr_on = ptr;
                 }
+            }
+
+            // TEST Start 2
+            //if (blocks == 49 || blocks == 99 || blocks == 149 || blocks == 199)
+            if (repeate_test > 0 && blocks % 50 == 0)
+            {
+                repeate_test--;
+                //включаем источник питания
+                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                t1 = esp_timer_get_time();
+                ptr_on = ptr;
+                ptr_off = (uint8_t *)bufferADC;
             }
 
             if (ptr_off == (uint8_t *)bufferADC)
@@ -435,7 +448,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int num_p = 0;
 
     int count_avg = ADC_BLOCK / ADC_COUNT_READ / 4;
-    int result_count_avg = 200 / count_avg; //200ms
+    int result_count_avg = menu[17].val; //
 
     int sum_avg_c = 0;
     int sum_avg_r0 = 0;
@@ -454,7 +467,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int result_sum_avg_u = 0;
     int result_sum_n = 0;
 
-    int batt_counter = 32;
+    int batt_min_counter = count_avg;
     int batt_min = 0;
 
     int block_off = 0;
@@ -602,14 +615,14 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 sum_avg_r1 += kOm0db(adc1, adc2);
                 // sum_avg_c += current0(adc1);
 
-                if ((uint8_t *)p > ptr_on && batt_counter > 0)
+                if ((uint8_t *)p > ptr_on && batt_min_counter > 0)
                 {
                     if (voltBatt(adc3) < batt_min)
                         batt_min = voltBatt(adc3);
 
                     // printf("(%d) batt_min: %d\n", num_p, voltBatt(adc3));
 
-                    batt_counter--;
+                    batt_min_counter--;
                 }
             }
             else

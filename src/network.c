@@ -308,7 +308,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
             bool param_change = false;
 
-            for (int i = 0; i < 16; i++)
+            for (int i = 0; i < 18; i++)
             {
                 if (httpd_query_key_value(buf, menu[i].id, param, 7) == ESP_OK)
                 {
