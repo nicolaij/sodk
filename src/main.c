@@ -25,22 +25,22 @@ TaskHandle_t xHandleWifi = NULL;
 menu_t menu[] = {
     {.id = "pulse", .name = "Импульс", .val = 100, .min = 0, .max = 10000},
     {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 0, .max = 1000},
-    {.id = "kU", .name = "коэф. U", .val = 162, .min = 1, .max = 10000},
-    {.id = "offsU", .name = "смещ. U", .val = -8000, .min = -100000, .max = 100000},
+    {.id = "kU", .name = "коэф. U", .val = 1650, .min = 1, .max = 10000},
+    {.id = "offsU", .name = "смещ. U", .val = -50000, .min = -100000, .max = 100000},
     {.id = "kR1", .name = "коэф. R (ch 1)", .val = 1562, .min = 1, .max = 10000},
     {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -30200, .min = -100000, .max = 100000},
     {.id = "kR2", .name = "коэф. R (ch 2)", .val = 139, .min = 1, .max = 100000},
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 4076, .min = -100000, .max = 100000},
     {.id = "kUbat", .name = "коэф. U bat", .val = 3970, .min = 1, .max = 10000},
     {.id = "offsUbat", .name = "смещ. U bat", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kU0", .name = "коэф. U петли", .val = 160, .min = 1, .max = 10000}, /*10*/
+    {.id = "kU0", .name = "коэф. U петли", .val = 1600, .min = 1, .max = 10000}, /*10*/
     {.id = "offsU0", .name = "смещ. U петли", .val = 0, .min = -100000, .max = 100000},
     {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
     {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
     {.id = "repeat", .name = "Кол-во повт. имп.", .val = 0, .min = 0, .max = 6},
-    {.id = "avgcnt", .name = "Кол-во усредн. результ.", .val = 20, .min = 1, .max = 50},/*17*/
+    {.id = "avgcnt", .name = "Кол-во усредн. результ.", .val = 20, .min = 1, .max = 300},/*17*/
 };
 
 int read_nvs_menu()

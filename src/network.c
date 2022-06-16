@@ -416,7 +416,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     //-----------------------------СОДК------------------------------
     httpd_resp_sendstr_chunk(req, sodkstart);
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 18; i++)
     {
         if (i % 2 == 0)
             strlcpy(buf, "\n<tr>", sizeof(buf));

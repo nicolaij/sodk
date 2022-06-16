@@ -88,6 +88,7 @@ void adc_info()
     // printf("APB_SARADC_APB_TSENS_CTRL2_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL2_REG));
 };
 
+//return mV*10
 int volt(int adc)
 {
     if (adc < 2)
@@ -95,6 +96,7 @@ int volt(int adc)
     return ((adc * menu[2].val) + menu[3].val);
 };
 
+//return mV
 int voltBatt(int adc)
 {
     if (adc < 2)
@@ -102,6 +104,7 @@ int voltBatt(int adc)
     return ((adc * menu[8].val) + menu[9].val) / 1000;
 };
 
+//return mV*10
 int volt0(int adc)
 {
     if (adc < 2)
@@ -119,11 +122,11 @@ int current(int adc)
 int kOm(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if (adc_u < 10 || u < 6)
+    if (adc_u < 10 || u < 60)
         return 0;
     if (adc_r < 10)
         return chan_r[0].max;
-    int r = u * 1000 / (menu[4].val * adc_r + menu[5].val);
+    int r = u * 100 / (menu[4].val * adc_r + menu[5].val);
     if (r > chan_r[0].max || r < 0)
         return chan_r[0].max;
     return r;
@@ -139,11 +142,11 @@ int current0(int adc)
 int kOm0db(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if ((adc_u) < 10 || u < 6)
+    if ((adc_u) < 10 || u < 60)
         return 0;
     if ((adc_r) < 10)
         return chan_r[2].max;
-    int r = u * 1000 / (menu[6].val * adc_r + menu[7].val);
+    int r = u * 100 / (menu[6].val * adc_r + menu[7].val);
     if (r > chan_r[2].max || r < 0)
         return chan_r[2].max;
     return r;
@@ -661,9 +664,9 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
 
             // sprintf(buf, "%5d(%2d)(%2d;%2d), %4d(%d), %5d, %4d, %5d, %4d, %5d, %4d, %5d", sum_first_p, sum_n, block_off, block_0db, adc1, adc1ch, sum_avg_c / sum_n,
             //         adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
-            //            f_id cnt  adc0:R0  adc1:U  adc2:R1   adc3:Ubat adc4:U0
-            sprintf(buf, "%5d(%2d), %4d:%5d, %4d:%5d, %4d:%5d, %4d:%5d, %4d:%5d, (%d)", sum_first_p, sum_n, sum_adcI0 / sum_n, sum_avg_r0 / sum_n, sum_adcU / sum_n, sum_avg_u / sum_n / 1000,
-                    sum_adcI1 / sum_n, sum_avg_r1 / sum_n, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n, block_off);
+            //            f_id cnt  adc0:R0  adc1:U     adc2:R1  adc3:Ubat adc4:U0
+            sprintf(buf, "%5d(%2d), %4d:%5d, %4d:%5.2f, %4d:%5d, %4d:%5.3f, %4d:%5.2f, (%d)", sum_first_p, sum_n, sum_adcI0 / sum_n, sum_avg_r0 / sum_n, sum_adcU / sum_n, (float) sum_avg_u / sum_n / 10000,
+                    sum_adcI1 / sum_n, sum_avg_r1 / sum_n, adc3, (float)sum_avg_batt / sum_n, adc4, (float)sum_avg_u0 / sum_n / 10000, block_off);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             printf("%s\n", buf);
 
@@ -692,8 +695,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                         result.R = sum_avg_r0 / sum_n;
                     }
 
-                    result.U = sum_avg_u / sum_n / 1000;
-                    result.U0 = sum_avg_u0 / sum_n / 1000;
+                    result.U = sum_avg_u / sum_n / 10000;
+                    result.U0 = sum_avg_u0 / sum_n / 10000;
                     result.Ubatt1 = batt_min;
                     result.Ubatt0 = sum_avg_batt / sum_n;
 
