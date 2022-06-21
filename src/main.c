@@ -26,8 +26,8 @@ menu_t menu[] = {
     {.id = "pulse", .name = "Импульс", .val = 100, .min = 0, .max = 10000},
     {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 0, .max = 1000},
     {.id = "kU", .name = "коэф. U", .val = 1650, .min = 1, .max = 10000},
-    {.id = "offsU", .name = "смещ. U", .val = -50000, .min = -100000, .max = 100000},
-    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 1562, .min = 1, .max = 10000},
+    {.id = "offsU", .name = "смещ. U", .val = -5000, .min = -100000, .max = 100000},
+    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 1562, .min = 1, .max = 100000},
     {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -30200, .min = -100000, .max = 100000},
     {.id = "kR2", .name = "коэф. R (ch 2)", .val = 139, .min = 1, .max = 100000},
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 4076, .min = -100000, .max = 100000},
@@ -40,7 +40,7 @@ menu_t menu[] = {
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
     {.id = "repeat", .name = "Кол-во повт. имп.", .val = 0, .min = 0, .max = 6},
-    {.id = "avgcnt", .name = "Кол-во усредн. результ.", .val = 20, .min = 1, .max = 300},/*17*/
+    {.id = "avgcnt", .name = "Кол-во усредн. результ.", .val = 20, .min = 1, .max = 1000},/*17*/
 };
 
 int read_nvs_menu()

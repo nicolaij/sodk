@@ -36,7 +36,7 @@ typedef struct
     int max;
 } measure_t;
 
-#define SWAP_ADC1_0 1
+//#define SWAP_ADC1_0 1
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
@@ -48,9 +48,9 @@ const measure_t chan_r[] = {
 };
 #else
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 2999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 29999}, //~х22
+    {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 4999}, //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
     {.channel = ADC2_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение источника питания
+    {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 99999}, //~х22
     {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
     {.channel = ADC1_CHANNEL_3, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение 0 проводника
 };
@@ -88,45 +88,45 @@ void adc_info()
     // printf("APB_SARADC_APB_TSENS_CTRL2_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL2_REG));
 };
 
-//return mV*10
+// return mV
 int volt(int adc)
 {
-    if (adc < 2)
+    if (adc < 3)
         return 0;
-    return ((adc * menu[2].val) + menu[3].val);
+    return ((adc * menu[2].val) / 10 + menu[3].val);
 };
 
-//return mV
+// return mV
 int voltBatt(int adc)
 {
-    if (adc < 2)
+    if (adc < 3)
         return 0;
     return ((adc * menu[8].val) + menu[9].val) / 1000;
 };
 
-//return mV*10
+// return mV
 int volt0(int adc)
 {
-    if (adc < 2)
+    if (adc < 3)
         return 0;
-    return ((adc * menu[10].val) + menu[11].val);
+    return ((adc * menu[10].val) / 10 + menu[11].val);
 };
 
 int current(int adc)
 {
-    if (adc < 2)
+    if (adc < 3)
         return 0;
-    return ((adc * menu[4].val) + menu[5].val);
+    return ((adc * menu[4].val) / 10 + menu[5].val);
 };
 
 int kOm(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if (adc_u < 10 || u < 60)
+    if (adc_u < 10 || u / 1000 < 6)
         return 0;
     if (adc_r < 10)
         return chan_r[0].max;
-    int r = u * 100 / (menu[4].val * adc_r + menu[5].val);
+    int r = u * 1000 / ((menu[4].val * adc_r) / 10 + menu[5].val);
     if (r > chan_r[0].max || r < 0)
         return chan_r[0].max;
     return r;
@@ -134,19 +134,19 @@ int kOm(int adc_u, int adc_r)
 
 int current0(int adc)
 {
-    if (adc < 2)
+    if (adc < 3)
         return 0;
-    return ((adc * menu[6].val) + menu[7].val);
+    return ((menu[6].val * adc) / 10 + menu[7].val);
 };
 
 int kOm0db(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if ((adc_u) < 10 || u < 60)
+    if ((adc_u) < 10 || u / 1000 < 6)
         return 0;
     if ((adc_r) < 10)
         return chan_r[2].max;
-    int r = u * 100 / (menu[6].val * adc_r + menu[7].val);
+    int r = u * 1000 / ((menu[6].val * adc_r) / 10 + menu[7].val);
     if (r > chan_r[2].max || r < 0)
         return chan_r[2].max;
     return r;
@@ -257,7 +257,8 @@ void dual_adc(void *arg)
         int64_t quiet_timeout = 10 * 1000;
 
         //(Лимит напряж - смещение) * коэфф. U
-        int adcU_limit = menu[1].val * 1000 / menu[2].val;
+        int adcU_limit = (menu[1].val * 1000 - menu[3].val) * 10 / menu[2].val;
+        // printf("adcU_limit = %d\n", adcU_limit);
 
         //((adc * menu[8].val) + menu[9].val) / 1000;
         int adcUbattLow = (menu[12].val * 1000 - menu[9].val) / menu[8].val;
@@ -295,18 +296,6 @@ void dual_adc(void *arg)
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
                     ptr_on = ptr;
                 }
-            }
-
-            // TEST Start 2
-            //if (blocks == 49 || blocks == 99 || blocks == 149 || blocks == 199)
-            if (repeate_test > 0 && blocks % 50 == 0)
-            {
-                repeate_test--;
-                //включаем источник питания
-                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
-                t1 = esp_timer_get_time();
-                ptr_on = ptr;
-                ptr_off = (uint8_t *)bufferADC;
             }
 
             if (ptr_off == (uint8_t *)bufferADC)
@@ -383,7 +372,7 @@ void dual_adc(void *arg)
                         gpio_set_level(ENABLE_PIN, 1);
                         ptr_off = ptr;
                         time_off = esp_timer_get_time();
-                        // printf("off: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
+                        // printf("off: %d, adcU_limit: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_BLOCK * 4), adcU_limit);
                     };
 
                     //Переполнен буффер!
@@ -427,6 +416,17 @@ void dual_adc(void *arg)
                 };
             };
             */
+
+            // TEST Start 2
+            if (repeate_test > 0 && blocks % 50 == 0)
+            {
+                repeate_test--;
+                //включаем источник питания
+                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                t1 = esp_timer_get_time();
+                ptr_on = ptr;
+                ptr_off = (uint8_t *)bufferADC;
+            }
         } while (ptr < (uint8_t *)&bufferADC[DATALEN] - ADC_BLOCK);
 
         gpio_set_level(POWER_PIN, 0);
@@ -464,6 +464,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int sum_adcI0 = 0;
     int sum_adcI1 = 0;
     int sum_adcU = 0;
+    int sum_n_r0 = 0;
+    int sum_n_r1 = 0;
 
     int result_sum_avg_r0 = 0;
     int result_sum_avg_r1 = 0;
@@ -584,14 +586,17 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 {
                     sum_avg_u = 0;
                     sum_avg_c = 0;
-                    sum_avg_r0 = 0;
-                    sum_avg_r1 = 0;
                     sum_avg_batt = 0;
                     sum_avg_u0 = 0;
                     sum_first_p = num_p;
                     sum_adcI0 = 0;
                     sum_adcI1 = 0;
                     sum_adcU = 0;
+
+                    sum_avg_r0 = 0;
+                    sum_n_r0 = 0;
+                    sum_avg_r1 = 0;
+                    sum_n_r1 = 0;
                 }
 
                 adc0 = p->type2.data;
@@ -610,12 +615,24 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 sum_avg_batt += voltBatt(adc3);
                 sum_avg_u0 += volt0(adc4);
 
-                bufferR[0][num_p] = kOm(adc1, adc0);
-                sum_avg_r0 += kOm(adc1, adc0);
+                //Канал 0
+                int r = kOm(adc1, adc0);
+                if (r != 0 && r != chan_r[0].max)
+                {
+                    sum_avg_r0 += r;
+                    sum_n_r0++;
+                }
+                bufferR[0][num_p] = r;
                 // sum_avg_c += current(adc1);
 
+                //Канал 1
+                r = kOm0db(adc1, adc2);
+                if (r != 0 && r != chan_r[1].max)
+                {
+                    sum_avg_r1 += r;
+                    sum_n_r1++;
+                }
                 bufferR[1][num_p] = kOm0db(adc1, adc2);
-                sum_avg_r1 += kOm0db(adc1, adc2);
                 // sum_avg_c += current0(adc1);
 
                 if ((uint8_t *)p > ptr_on && batt_min_counter > 0)
@@ -646,7 +663,17 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
         if (sum_n > 0)
         {
             if (batt_min == 0)
+            {
                 batt_min = sum_avg_batt / sum_n;
+
+                if (batt_min > 10000) // reset BattLow
+                    BattLow = 0;
+            }
+
+            if (sum_n_r0 == 0)
+                sum_n_r0 = 1;
+            if (sum_n_r1 == 0)
+                sum_n_r1 = 1;
 
             result.adc0 = sum_adcI0 / sum_n;
             result.adc2 = sum_adcI1 / sum_n;
@@ -665,8 +692,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
             // sprintf(buf, "%5d(%2d)(%2d;%2d), %4d(%d), %5d, %4d, %5d, %4d, %5d, %4d, %5d", sum_first_p, sum_n, block_off, block_0db, adc1, adc1ch, sum_avg_c / sum_n,
             //         adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
             //            f_id cnt  adc0:R0  adc1:U     adc2:R1  adc3:Ubat adc4:U0
-            sprintf(buf, "%5d(%2d), %4d:%5d, %4d:%5.2f, %4d:%5d, %4d:%5.3f, %4d:%5.2f, (%d)", sum_first_p, sum_n, sum_adcI0 / sum_n, sum_avg_r0 / sum_n, sum_adcU / sum_n, (float) sum_avg_u / sum_n / 10000,
-                    sum_adcI1 / sum_n, sum_avg_r1 / sum_n, adc3, (float)sum_avg_batt / sum_n, adc4, (float)sum_avg_u0 / sum_n / 10000, block_off);
+            sprintf(buf, "%5d(%2d), %4d:%5d, %4d:%5.2f, %4d:%5d, %4d:%5.3f, %4d:%5.2f, (%d)", sum_first_p, sum_n, sum_adcI0 / sum_n, sum_avg_r0 / sum_n_r0, sum_adcU / sum_n, (float)sum_avg_u / sum_n / 1000,
+                    sum_adcI1 / sum_n, sum_avg_r1 / sum_n_r1, adc3, (float)sum_avg_batt / sum_n / 1000, adc4, (float)sum_avg_u0 / sum_n / 1000, block_off);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             printf("%s\n", buf);
 
@@ -688,15 +715,15 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
 #endif
                     if (last_chan == 1)
                     {
-                        result.R = sum_avg_r1 / sum_n;
+                        result.R = sum_avg_r1 / sum_n_r1;
                     }
                     else
                     {
-                        result.R = sum_avg_r0 / sum_n;
+                        result.R = sum_avg_r0 / sum_n_r0;
                     }
 
-                    result.U = sum_avg_u / sum_n / 10000;
-                    result.U0 = sum_avg_u0 / sum_n / 10000;
+                    result.U = sum_avg_u / sum_n / 1000;
+                    result.U0 = sum_avg_u0 / sum_n / 1000;
                     result.Ubatt1 = batt_min;
                     result.Ubatt0 = sum_avg_batt / sum_n;
 
@@ -704,11 +731,11 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     result_sum_avg_r1 = 0;
                 }
 
-                if (result_sum_n < result_count_avg && sum_avg_u / sum_n / 1000 > 7)
+                if (result_sum_n < result_count_avg && sum_avg_u / sum_n / 1000 > 6)
                 {
                     result_sum_n++;
-                    result_sum_avg_r0 += sum_avg_r0 / sum_n;
-                    result_sum_avg_r1 += sum_avg_r1 / sum_n;
+                    result_sum_avg_r0 += sum_avg_r0 / sum_n_r0;
+                    result_sum_avg_r1 += sum_avg_r1 / sum_n_r1;
 
                     if (last_chan == 1)
                         result.R = result_sum_avg_r1 / result_sum_n;
