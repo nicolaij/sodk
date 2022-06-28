@@ -18,29 +18,31 @@ RTC_DATA_ATTR int BattLow = 0; //Признак разряда батареи
 
 float tsens_out = 0;
 
+uint8_t mac[6];
+
 TaskHandle_t xHandleLora = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
 
 menu_t menu[] = {
-    {.id = "pulse", .name = "Импульс", .val = 100, .min = 0, .max = 10000},
+    {.id = "pulse", .name = "Импульс", .val = 30, .min = 0, .max = 10000},
     {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 0, .max = 1000},
-    {.id = "kU", .name = "коэф. U", .val = 1650, .min = 1, .max = 10000},
-    {.id = "offsU", .name = "смещ. U", .val = -5000, .min = -100000, .max = 100000},
-    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 1562, .min = 1, .max = 100000},
-    {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -30200, .min = -100000, .max = 100000},
-    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 139, .min = 1, .max = 100000},
-    {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = 4076, .min = -100000, .max = 100000},
+    {.id = "kU", .name = "коэф. U", .val = 1630, .min = 1, .max = 10000},
+    {.id = "offsU", .name = "смещ. U", .val = -5100, .min = -100000, .max = 100000},
+    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 15540, .min = 1, .max = 100000},
+    {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -35000, .min = -100000, .max = 100000},
+    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 1380, .min = 1, .max = 100000},
+    {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = -5100, .min = -100000, .max = 100000},
     {.id = "kUbat", .name = "коэф. U bat", .val = 3970, .min = 1, .max = 10000},
     {.id = "offsUbat", .name = "смещ. U bat", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kU0", .name = "коэф. U петли", .val = 1600, .min = 1, .max = 10000}, /*10*/
-    {.id = "offsU0", .name = "смещ. U петли", .val = 0, .min = -100000, .max = 100000},
-    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
-    {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
+    {.id = "kU0", .name = "коэф. U петли", .val = 1620, .min = 1, .max = 10000}, /*10*/
+    {.id = "offsU0", .name = "смещ. U петли", .val = -3000, .min = -100000, .max = 100000},
+    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 9000, .min = 0, .max = 12000},
+    {.id = "UbatEnd", .name = "U bat отключения", .val = 8700, .min = 0, .max = 12000},
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
     {.id = "repeat", .name = "Кол-во повт. имп.", .val = 0, .min = 0, .max = 6},
-    {.id = "avgcnt", .name = "Кол-во усредн. результ.", .val = 20, .min = 1, .max = 1000},/*17*/
+    {.id = "avgcnt", .name = "Кол-во усред. рез.", .val = 20, .min = 1, .max = 1000}, /*17*/
 };
 
 int read_nvs_menu()
@@ -180,6 +182,9 @@ void app_main()
 
     printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+
+    esp_efuse_mac_get_default(mac);
+    printf("mac: %02x-%02x-%02x-%02x-%02x-%02x\n", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
 #if CONFIG_IDF_TARGET_ESP32C3
     // ESP_LOGI(TAG, "Initializing Temperature sensor");

@@ -24,6 +24,7 @@
 #include "esp_spiffs.h"
 
 extern menu_t menu[];
+extern uint8_t mac[6];
 
 #if CONFIG_IDF_TARGET_ESP32
 extern int bufferR[DATALEN];
@@ -249,7 +250,9 @@ static esp_err_t settings_handler(httpd_req_t *req)
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
                        "<title>Settings</title></head><body>";
-    const char *sodkstart = "<form><fieldset><legend>СОДК</legend><table>";
+    const char *sodkstartform1 = "<form><fieldset><legend>"; //СОДК</legend><table>";
+    const char *sodkstartform2 = "</legend><table>";
+
     const char *sodkend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
 
     const char *lorastart = "<form><fieldset><legend>LoRa</legend><table>";
@@ -415,7 +418,12 @@ static esp_err_t settings_handler(httpd_req_t *req)
     httpd_resp_sendstr_chunk(req, head);
 
     //-----------------------------СОДК------------------------------
-    httpd_resp_sendstr_chunk(req, sodkstart);
+    strlcpy(buf, sodkstartform1, sizeof(buf));
+    sprintf(param, "СОДК %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
+    strlcat(buf, param, sizeof(buf));
+    strlcat(buf, sodkstartform2, sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
+
     for (int i = 0; i < 18; i++)
     {
         if (i % 2 == 0)

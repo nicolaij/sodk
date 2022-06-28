@@ -15,6 +15,8 @@
 
 #include "main.h"
 
+#include "esp_log.h"
+
 #include "soc/apb_saradc_reg.h"
 
 RTC_DATA_ATTR int last_chan = 0;
@@ -40,7 +42,7 @@ typedef struct
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 4999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 6999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
     {.channel = ADC2_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение источника питания
     {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 99999}, //
     {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
@@ -48,7 +50,7 @@ const measure_t chan_r[] = {
 };
 #else
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 4999}, //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC1_CHANNEL_1, .k = ADC_ATTEN_DB_11, .max = 6999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
     {.channel = ADC2_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 1000},  //Напряжение источника питания
     {.channel = ADC1_CHANNEL_4, .k = ADC_ATTEN_DB_11, .max = 99999}, //~х22
     {.channel = ADC1_CHANNEL_0, .k = ADC_ATTEN_DB_11, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
@@ -122,7 +124,7 @@ int current(int adc)
 int kOm(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if (adc_u < 10 || u / 1000 < 6)
+    if (adc_u < 10 || u < 6000)
         return 0;
     if (adc_r < 10)
         return chan_r[0].max;
@@ -142,7 +144,7 @@ int current0(int adc)
 int kOm0db(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if ((adc_u) < 10 || u / 1000 < 6)
+    if ((adc_u) < 10 || u < 6000)
         return 0;
     if ((adc_r) < 10)
         return chan_r[2].max;
@@ -151,7 +153,31 @@ int kOm0db(int adc_u, int adc_r)
         return chan_r[2].max;
     return r;
 };
+/*
+static esp_adc_cal_characteristics_t adc1_chars;
+static esp_adc_cal_characteristics_t adc2_chars;
 
+static bool adc_calibration_init(void)
+{
+    esp_err_t ret;
+    bool cali_enable = false;
+
+    ret = esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP);
+    if (ret == ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGW("ADC", "Calibration scheme not supported, skip software calibration");
+    } else if (ret == ESP_ERR_INVALID_VERSION) {
+        ESP_LOGW("ADC", "eFuse not burnt, skip software calibration");
+    } else if (ret == ESP_OK) {
+        cali_enable = true;
+        esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_DEFAULT, 0, &adc1_chars);
+        esp_adc_cal_characterize(ADC_UNIT_2, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_DEFAULT, 0, &adc2_chars);
+    } else {
+        ESP_LOGE("ADC", "Invalid arg");
+    }
+
+    return cali_enable;
+}
+*/
 static void continuous_adc_init()
 {
     esp_err_t ret = ESP_OK;
@@ -213,6 +239,8 @@ static void continuous_adc_init()
 
 void dual_adc(void *arg)
 {
+
+    // bool cali_enable = adc_calibration_init();
 
     // zero-initialize the config structure.
     gpio_config_t io_conf = {};
@@ -298,88 +326,89 @@ void dual_adc(void *arg)
                 }
             }
 
-            if (ptr_off == (uint8_t *)bufferADC)
-            {
-                //отсечка по времени
-                if ((esp_timer_get_time() - t1) > timeout)
+            if (blocks >= 5)
+                if (ptr_off == (uint8_t *)bufferADC)
                 {
-                    //ВЫРУБАЕМ
-                    gpio_set_level(ENABLE_PIN, 1);
-                    ptr_off = ptr;
-                    // time_off = esp_timer_get_time();
-                    // printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
-                }
-                else
-                {
-                    //отсечка по току, напряжению, Ubatt
-                    const int count_avg = 4;
-                    int sum_avg_c = 0;
-                    int sum_avg_u = 0;
-                    int sum_avg_batt = 0;
-                    int n = 0;
-                    adc_digi_output_data_t *p = (void *)ptr;
-                    while (n++ < count_avg)
-                    {
-#if ADC_COUNT_READ > 4
-                        // Ubatt
-                        do
-                        {
-                            p--;
-                        } while (p->type2.unit != 0 || p->type2.channel != chan_r[3].channel);
-                        sum_avg_batt += p->type2.data;
-#endif
-                        //напряжение
-                        do
-                        {
-                            p--;
-                        } while (p->type2.unit != 1 || p->type2.channel != chan_r[1].channel);
-                        sum_avg_u += p->type2.data;
-
-                        //ток
-                        do
-                        {
-                            p--;
-                        } while (p->type2.unit != 0 || p->type2.channel != chan_r[0].channel);
-                        sum_avg_c += p->type2.data;
-                    };
-
-                    if (sum_avg_batt / count_avg < adcUbattEnd)
-                    {
-                        //прекращаем измерения
-                        //ВЫРУБАЕМ
-                        gpio_set_level(ENABLE_PIN, 1);
-                        printf("UbattEnd: %d(%d)\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg);
-                        BattLow += 100;
-                        break;
-                    }
-                    else if (sum_avg_batt / count_avg < adcUbattLow)
-                    {
-                        BattLow += 1;
-                        if (BattLow > 10)
-                        {
-                            //прекращаем измерения
-                            printf("UbattLow: %d(%d):%d\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg, BattLow);
-                            //ВЫРУБАЕМ
-                            gpio_set_level(ENABLE_PIN, 1);
-                            break;
-                        }
-                    }
-
-                    // "если напряжение > лимита" или "ток в зашкале при напряжении > половины лимита"
-                    if ((sum_avg_c / count_avg > 4060 && sum_avg_u / count_avg > adcU_limit / 3) || sum_avg_u / count_avg > adcU_limit)
+                    //отсечка по времени
+                    if ((esp_timer_get_time() - t1) > timeout)
                     {
                         //ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
                         ptr_off = ptr;
-                        time_off = esp_timer_get_time();
-                        // printf("off: %d, adcU_limit: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_BLOCK * 4), adcU_limit);
-                    };
+                        // time_off = esp_timer_get_time();
+                        // printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
+                    }
+                    else
+                    {
+                        //отсечка по току, напряжению, Ubatt
+                        const int count_avg = 4;
+                        int sum_avg_c = 0;
+                        int sum_avg_u = 0;
+                        int sum_avg_batt = 0;
+                        int n = 0;
+                        adc_digi_output_data_t *p = (void *)ptr;
+                        while (n++ < count_avg)
+                        {
+#if ADC_COUNT_READ > 4
+                            // Ubatt
+                            do
+                            {
+                                p--;
+                            } while (p->type2.unit != 0 || p->type2.channel != chan_r[3].channel);
+                            sum_avg_batt += p->type2.data;
+#endif
+                            //напряжение
+                            do
+                            {
+                                p--;
+                            } while (p->type2.unit != 1 || p->type2.channel != chan_r[1].channel);
+                            sum_avg_u += p->type2.data;
 
-                    //Переполнен буффер!
-                    if (ptr >= (uint8_t *)&bufferADC[DATALEN] - (ADC_BLOCK * 4))
-                        ptr = ptr - ret_num;
-                };
-            }
+                            //ток
+                            do
+                            {
+                                p--;
+                            } while (p->type2.unit != 0 || p->type2.channel != chan_r[0].channel);
+                            sum_avg_c += p->type2.data;
+                        };
+
+                        if (sum_avg_batt / count_avg < adcUbattEnd)
+                        {
+                            //прекращаем измерения
+                            //ВЫРУБАЕМ
+                            gpio_set_level(ENABLE_PIN, 1);
+                            printf("UbattEnd: %d(%d)\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg);
+                            BattLow += 100;
+                            break;
+                        }
+                        else if (sum_avg_batt / count_avg < adcUbattLow)
+                        {
+                            BattLow += 1;
+                            if (BattLow > 10)
+                            {
+                                //прекращаем измерения
+                                printf("UbattLow: %d(%d):%d\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg, BattLow);
+                                //ВЫРУБАЕМ
+                                gpio_set_level(ENABLE_PIN, 1);
+                                break;
+                            }
+                        }
+
+                        // "если напряжение > лимита" или "ток в зашкале при напряжении > половины лимита"
+                        if ((sum_avg_c / count_avg > 4060 && sum_avg_u / count_avg > adcU_limit / 3) || sum_avg_u / count_avg > adcU_limit)
+                        {
+                            //ВЫРУБАЕМ
+                            gpio_set_level(ENABLE_PIN, 1);
+                            ptr_off = ptr;
+                            time_off = esp_timer_get_time();
+                            // printf("off: %d, adcU_limit: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_BLOCK * 4), adcU_limit);
+                        };
+
+                        //Переполнен буффер!
+                        if (ptr >= (uint8_t *)&bufferADC[DATALEN] - (ADC_BLOCK * 4))
+                            ptr = ptr - ret_num;
+                    };
+                }
             /*
             else
             //Отключили питание
@@ -481,6 +510,12 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int block_chan = 0;
     int block_overload = 0;
 
+    int sum_n_adc = 0;
+    int sum_full_adc0 = 0;
+    int sum_full_adc1 = 0;
+    int sum_full_adc2 = 0;
+    int sum_full_adc3 = 0;
+    int sum_full_adc4 = 0;
     // int block_measure = 0;
 
     /*    while ((uint8_t *)p < endptr)
@@ -606,6 +641,12 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 adc3 = (p + 3)->type2.data;
                 adc4 = (p + 4)->type2.data;
 #endif
+                sum_n_adc++;
+                sum_full_adc0 += adc0;
+                sum_full_adc1 += adc1;
+                sum_full_adc2 += adc2;
+                sum_full_adc3 += adc3;
+                sum_full_adc4 += adc4;
 
                 sum_n++;
                 sum_adcI0 += adc0;
@@ -703,12 +744,12 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 {
 #if ADC_COUNT_READ > 2
                     //Выбираем канал измерения
-                    if (sum_adcI0 / sum_n < 100) // > 4MOm
+                    if (sum_adcI0 / sum_n < (75000 - menu[5].val) * 10 / menu[4].val) // < 75мкА >6,6MOm
                     {
                         last_chan = 1;
                     }
 
-                    if (sum_adcI1 / sum_n > 3500) // < 1MOm
+                    if (sum_adcI1 / sum_n > (250000 - menu[7].val) * 10 / menu[6].val) // > 250мкА <2MOm
                     {
                         last_chan = 0;
                     }
@@ -771,6 +812,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
 
     xQueueSend(send_queue, (void *)&result, (portTickType)0);
 
+    printf("adc0: %d, adc1: %d, adc2: %d, adc3: %d, adc4: %d\n", sum_full_adc0 / sum_n_adc, sum_full_adc1 / sum_n_adc, sum_full_adc2 / sum_n_adc, sum_full_adc3 / sum_n_adc, sum_full_adc4 / sum_n_adc);
+    
     return;
 }
 
