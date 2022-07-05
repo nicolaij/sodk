@@ -67,10 +67,6 @@ static int s_retry_num = 0;
 char buf[1024];
 size_t buf_len;
 
-extern int fr;
-extern int bw;
-extern int sf;
-extern int op;
 extern int id;
 
 int64_t timeout_start;
@@ -257,6 +253,8 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     const char *lorastart = "<form><fieldset><legend>LoRa</legend><table>";
     const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
+    const char *nbiotstart = "<form><fieldset><legend>NB-IoT</legend><table>";
+    const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *tail = "<p><a href=\"/d?end=10000\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
@@ -350,6 +348,29 @@ static esp_err_t settings_handler(httpd_req_t *req)
                 }
             }
 
+#ifdef NB
+            extern uint16_t port;
+            extern char *apn;
+            extern char *server;
+            if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
+            {
+                int p = atoi(param);
+                if (id != p && p > 0)
+                {
+                    param_change = true;
+                    id = p;
+                }
+            }
+
+            if (param_change)
+            {
+                write_nvs_nbiot(&id, apn, server, &port);
+            };
+#else
+            extern int fr;
+            extern int bw;
+            extern int sf;
+            extern int op;
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
             {
                 int p = atoi(param);
@@ -404,7 +425,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
                     write_nvs_lora("sf", sf);
                 }
             }
-
+#endif
             if (param_change)
             {
                 httpd_resp_set_status(req, "307 Temporary Redirect");
@@ -450,7 +471,19 @@ static esp_err_t settings_handler(httpd_req_t *req)
         httpd_resp_sendstr_chunk(req, buf);
     }
     httpd_resp_sendstr_chunk(req, sodkend);
+#ifdef NB
+    //-----------------------------NB-IoT------------------------------
+    httpd_resp_sendstr_chunk(req, nbiotstart);
 
+    // Generate id
+    strlcpy(buf, lora_set_id[0], sizeof(buf));
+    itoa(id, param, 10);
+    strlcat(buf, param, sizeof(buf));
+    strlcat(buf, lora_set_id[1], sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
+
+    httpd_resp_sendstr_chunk(req, nbiotend);
+#else
     //-----------------------------LoRa------------------------------
     httpd_resp_sendstr_chunk(req, lorastart);
 
@@ -504,6 +537,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     httpd_resp_sendstr_chunk(req, buf);
 
     httpd_resp_sendstr_chunk(req, loraend);
+#endif
 
     httpd_resp_sendstr_chunk(req, tail);
     /* Send empty chunk to signal HTTP response completion */

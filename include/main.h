@@ -114,6 +114,7 @@ int kOm0db(int adc_u, int adc_r);
 
 int read_nvs_lora(int32_t *id, int32_t *fr, int32_t *bw, int32_t *sf, int32_t *op);
 int write_nvs_lora(const char *key, int value);
+int write_nvs_nbiot(int32_t *pid, const char *apn, const char *server, const uint16_t *port);
 
 void go_sleep(void);
 
