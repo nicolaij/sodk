@@ -6,12 +6,11 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_partition.h"
-#include "driver/i2s.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
-#include "esp_rom_sys.h"
 
-#include "driver/ledc.h"
+#include "driver/adc.h"
+
+//#include "esp_adc_cal.h"
+#include "esp_rom_sys.h"
 
 #include "main.h"
 
@@ -38,7 +37,7 @@ typedef struct
     int max;
 } measure_t;
 
-//#define SWAP_ADC1_0 1
+#define SWAP_ADC1_0 1
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
@@ -189,7 +188,7 @@ static void continuous_adc_init()
     // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BLOCK * 8,
+        .max_store_buf_size = ADC_BLOCK * 4,
         .conv_num_each_intr = ADC_BLOCK,
         .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[1].channel,
@@ -198,43 +197,85 @@ static void continuous_adc_init()
     ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
 
     t2 = esp_timer_get_time();
+    /*
+        static adc_digi_pattern_table_t adc_pattern[10] = {0};
 
-    static adc_digi_pattern_table_t adc_pattern[10] = {0};
+        // Do not set the sampling frequency out of the range between `SOC_ADC_SAMPLE_FREQ_THRES_LOW` and `SOC_ADC_SAMPLE_FREQ_THRES_HIGH`
+        adc_digi_config_t dig_cfg = {
+            .conv_limit_en = 0,
+            .conv_limit_num = 1,
+            .sample_freq_hz = ADC_FREQ,
+            .adc_pattern_len = ADC_COUNT_READ // sizeof(chan_r) / sizeof(chan_r[0]) // ADC_DMA,
+        };
 
-    // Do not set the sampling frequency out of the range between `SOC_ADC_SAMPLE_FREQ_THRES_LOW` and `SOC_ADC_SAMPLE_FREQ_THRES_HIGH`
-    adc_digi_config_t dig_cfg = {
-        .conv_limit_en = 0,
-        .conv_limit_num = 1,
+        int n = 0;
+        // Note: Все atten при инициализации должны быть одинаковые!!!???
+        adc_pattern[n].atten = ADC_ATTEN_DB_11;
+        adc_pattern[n].channel = chan_r[0].channel;
+        adc_pattern[n].unit = 0;
+        n++;
+        adc_pattern[n].atten = ADC_ATTEN_DB_11;
+        adc_pattern[n].channel = chan_r[1].channel;
+        adc_pattern[n].unit = 1;
+        n++;
+        adc_pattern[n].atten = ADC_ATTEN_DB_11;
+        adc_pattern[n].channel = chan_r[2].channel;
+        adc_pattern[n].unit = 0;
+        n++;
+        adc_pattern[n].atten = ADC_ATTEN_DB_11;
+        adc_pattern[n].channel = chan_r[3].channel;
+        adc_pattern[n].unit = 0;
+        n++;
+        adc_pattern[n].atten = ADC_ATTEN_DB_11;
+        adc_pattern[n].channel = chan_r[4].channel;
+        adc_pattern[n].unit = 0;
+
+        dig_cfg.adc_pattern = adc_pattern;
+        ESP_ERROR_CHECK(adc_digi_controller_config(&dig_cfg));
+        t3 = esp_timer_get_time();
+        // printf("digi_init: %lld digi_config: %lld\n", t1-t2, t2-t3);
+    */
+    adc_digi_configuration_t dig_cfg = {
+        .conv_limit_en = false,
+        .conv_limit_num = 255,
         .sample_freq_hz = ADC_FREQ,
-        .adc_pattern_len = ADC_COUNT_READ // sizeof(chan_r) / sizeof(chan_r[0]) // ADC_DMA,
+        .conv_mode = ADC_CONV_BOTH_UNIT,
+        .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
     };
 
+    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
     int n = 0;
     // Note: Все atten при инициализации должны быть одинаковые!!!???
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[0].channel;
     adc_pattern[n].unit = 0;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[1].channel;
     adc_pattern[n].unit = 1;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[2].channel;
     adc_pattern[n].unit = 0;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[3].channel;
     adc_pattern[n].unit = 0;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[4].channel;
     adc_pattern[n].unit = 0;
-
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+    n++;
+    
+    dig_cfg.pattern_num = n;
     dig_cfg.adc_pattern = adc_pattern;
-    ESP_ERROR_CHECK(adc_digi_controller_config(&dig_cfg));
+    ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
     t3 = esp_timer_get_time();
-    // printf("digi_init: %lld digi_config: %lld\n", t1-t2, t2-t3);
 }
 
 void dual_adc(void *arg)
@@ -312,7 +353,7 @@ void dual_adc(void *arg)
             ptr = ptr + ret_num;
             blocks++;
 
-            if (blocks == 5)
+            if (blocks == 10)
             {
                 if (BattLow > 10)
                     break;
@@ -326,7 +367,7 @@ void dual_adc(void *arg)
                 }
             }
 
-            if (blocks >= 5)
+            if (blocks >= 10)
                 if (ptr_off == (uint8_t *)bufferADC)
                 {
                     //отсечка по времени
@@ -404,8 +445,8 @@ void dual_adc(void *arg)
                             // printf("off: %d, adcU_limit: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_BLOCK * 4), adcU_limit);
                         };
 
-                        //Переполнен буффер!
-                        if (ptr >= (uint8_t *)&bufferADC[DATALEN] - (ADC_BLOCK * 4))
+                        //Переполнен буффер! 
+                        if (ptr >= (uint8_t *)&bufferADC[DATALEN] - (ADC_BLOCK * (menu[17].val + 1)))
                             ptr = ptr - ret_num;
                     };
                 }
@@ -813,7 +854,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     xQueueSend(send_queue, (void *)&result, (portTickType)0);
 
     printf("adc0: %d, adc1: %d, adc2: %d, adc3: %d, adc4: %d\n", sum_full_adc0 / sum_n_adc, sum_full_adc1 / sum_n_adc, sum_full_adc2 / sum_n_adc, sum_full_adc3 / sum_n_adc, sum_full_adc4 / sum_n_adc);
-    
+
     return;
 }
 

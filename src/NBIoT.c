@@ -151,6 +151,7 @@ void uart_init(void)
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_APB,
     };
+    uart_driver_delete(UART_NUM_1);
     // We won't use a buffer for sending data.
     uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
     uart_param_config(UART_NUM_1, &uart_config);
@@ -163,15 +164,21 @@ int ATcmd(char *cmd, char *resbuf, uint32_t length, TickType_t ticks_to_wait)
     strlcpy(atcmd, cmd, sizeof(atcmd));
     strlcat(atcmd, "\r\n", sizeof(atcmd));
     const int txBytes = uart_write_bytes(UART_NUM_1, atcmd, strlen(atcmd));
-    ESP_LOGI(TAG, "Wrote %d bytes", txBytes);
-    int read = uart_read_bytes(UART_NUM_1, resbuf, length, ticks_to_wait);
-    ESP_LOGI(TAG, "Read: \"%s\"", rx_buf);
-
+    // ESP_LOGI(TAG, "Wrote %d bytes", txBytes);
+    resbuf[0] = 0;
+    int read = uart_read_bytes(UART_NUM_1, resbuf, length, pdMS_TO_TICKS(ticks_to_wait));
     if (read > 0)
-        if (strncmp(resbuf, "\nOK\r", 10) == 0)
-            return 0;
+    {
+        resbuf[read] = 0;
+        ESP_LOGI(TAG, "Read: \"%s\"", rx_buf);
+        char *ptr = strnstr(resbuf, "\nOK\r", read);
+        if (ptr == NULL)
+            return -1;
+        else
+            return (ptr - resbuf);
+    }
 
-    return -1;
+    return -10;
 }
 
 void radio_task(void *arg)
@@ -196,7 +203,8 @@ void radio_task(void *arg)
 
     while (1)
     {
-        // init module
+        ESP_LOGI(TAG, "init module NB-IoT");
+
         while (1)
         {
             gpio_set_level(POWER_GPIO, 1);
@@ -204,14 +212,15 @@ void radio_task(void *arg)
             gpio_set_level(POWER_GPIO, 0);
 
             uart_init();
-            uart_read_bytes(UART_NUM_1, rx_buf, RX_BUF_SIZE, 500 / portTICK_RATE_MS);
+            uart_read_bytes(UART_NUM_1, rx_buf, RX_BUF_SIZE, pdMS_TO_TICKS(500));
 
-            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, pdMS_TO_TICKS(500)) != 0)
+            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, 500) > 0)
                 break;
-            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, pdMS_TO_TICKS(500)) != 0)
+            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, 500) > 0)
                 break;
-            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, pdMS_TO_TICKS(500)) != 0)
+            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, 500) > 0)
                 break;
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
 
         //результат измерений
@@ -309,7 +318,11 @@ void radio_task(void *arg)
 
                     gpio_set_direction(CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
             */
-            ATcmd("ATI", rx_buf, RX_BUF_SIZE, pdMS_TO_TICKS(500));
+            if (ATcmd("ATI", rx_buf, RX_BUF_SIZE, 500) <= 0) break;
+            ATcmd("AT+CFUN?", rx_buf, RX_BUF_SIZE, 500); //Value is 1 (full functionality)
+            ATcmd("AT+CIMI", rx_buf, RX_BUF_SIZE, 500); //Query the IMSI number.
+            ATcmd("AT+CESQ", rx_buf, RX_BUF_SIZE, 500); //Extended Signal Quality
+
             vTaskDelay(pdMS_TO_TICKS(500));
         }
     }

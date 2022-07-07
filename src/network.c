@@ -240,6 +240,17 @@ int wifi_init_sta(void)
 /* An HTTP GET handler */
 static esp_err_t settings_handler(httpd_req_t *req)
 {
+#ifdef NB
+    extern uint16_t port;
+    extern char *apn;
+    extern char *server;
+#else
+    extern int fr;
+    extern int bw;
+    extern int sf;
+    extern int op;
+#endif
+
     reset_sleep_timeout();
     /*                       "<script src=\"/d3.min.js\"></script>"*/
     const char *head = "<!DOCTYPE html><html><head>"
@@ -349,9 +360,6 @@ static esp_err_t settings_handler(httpd_req_t *req)
             }
 
 #ifdef NB
-            extern uint16_t port;
-            extern char *apn;
-            extern char *server;
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
             {
                 int p = atoi(param);
@@ -367,10 +375,6 @@ static esp_err_t settings_handler(httpd_req_t *req)
                 write_nvs_nbiot(&id, apn, server, &port);
             };
 #else
-            extern int fr;
-            extern int bw;
-            extern int sf;
-            extern int op;
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
             {
                 int p = atoi(param);
@@ -704,6 +708,11 @@ static void ws_async_send(char *msg)
 
 static esp_err_t ws_handler(httpd_req_t *req)
 {
+    if (req->method == HTTP_GET)
+    {
+        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        return ESP_OK;
+    }
     uint8_t bf[128] = {0};
     httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
@@ -715,7 +724,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGE(TAGH, "httpd_ws_recv_frame failed with %d", ret);
         return ret;
     }
-    ESP_LOGI(TAGH, "Got packet with message: %s", ws_pkt.payload);
+    ESP_LOGI(TAGH, "Got packet with message: \"%s\"", ws_pkt.payload);
     ESP_LOGI(TAGH, "Packet type: %d", ws_pkt.type);
 
     ws_hd = req->handle;
