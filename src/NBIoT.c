@@ -5,17 +5,29 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 
+#include "esp_log.h"
+#include "esp_check.h"
+
+#include "esp_modem.h"
+#include "esp_modem_netif.h"
+#include "bc26.h"
+
 #include <main.h>
 
-#define TX_GPIO 2
+#define TX_GPIO 6
 #define RX_GPIO 7
-#define POWER_GPIO 6
+#define POWER_GPIO 2
 
-#define RX_BUF_SIZE 1024
+//#define RX_BUF_SIZE 1024
 
-char rx_buf[RX_BUF_SIZE];
+static EventGroupHandle_t event_group = NULL;
 
-uint8_t buf[WS_BUF_LINE];
+//результат измерений
+result_t result;
+
+// char rx_buf[RX_BUF_SIZE];
+
+// uint8_t buf[WS_BUF_LINE];
 
 char apn[32] = {"mogenergo"};
 char server[32] = {"10.179.40.11"};
@@ -141,51 +153,215 @@ int write_nvs_nbiot(int32_t *pid, const char *apn, const char *server, const uin
     return 1;
 };
 
-void uart_init(void)
+esp_err_t esp_modem_dce_handle_cclk(modem_dce_t *dce, const char *line)
 {
-    const uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_APB,
-    };
-    uart_driver_delete(UART_NUM_1);
-    // We won't use a buffer for sending data.
-    uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
-    uart_param_config(UART_NUM_1, &uart_config);
-    uart_set_pin(UART_NUM_1, TX_GPIO, RX_GPIO, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-}
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
-int ATcmd(char *cmd, char *resbuf, uint32_t length, TickType_t ticks_to_wait)
-{
-    char atcmd[32];
-    strlcpy(atcmd, cmd, sizeof(atcmd));
-    strlcat(atcmd, "\r\n", sizeof(atcmd));
-    const int txBytes = uart_write_bytes(UART_NUM_1, atcmd, strlen(atcmd));
-    // ESP_LOGI(TAG, "Wrote %d bytes", txBytes);
-    resbuf[0] = 0;
-    int read = uart_read_bytes(UART_NUM_1, resbuf, length, pdMS_TO_TICKS(ticks_to_wait));
-    if (read > 0)
+    const char *ss = "+CCLK:";
+
+    if (!strncmp(line, ss, strlen(ss)))
     {
-        resbuf[read] = 0;
-        ESP_LOGI(TAG, "Read: \"%s\"", rx_buf);
-        char *ptr = strnstr(resbuf, "\nOK\r", read);
-        if (ptr == NULL)
-            return -1;
-        else
-            return (ptr - resbuf);
+        int32_t *data = esp_dce->priv_resource;
+
+        char *s = strchr(line, ' ');
+        if (s)
+        {
+            // year (two last digits)
+            data[0] = atoi(s + 1);
+            s = strchr(s + 1, '/');
+            if (s)
+            {
+                // month
+                data[1] = atoi(s + 1);
+                s = strchr(s + 1, '/');
+                if (s)
+                {
+                    // day
+                    data[2] = atoi(s + 1);
+                    s = strchr(s + 1, ',');
+                    if (s)
+                    {
+                        // hour
+                        data[3] = atoi(s + 1);
+                        s = strchr(s + 1, ':');
+                        if (s)
+                        {
+                            // minute
+                            data[4] = atoi(s + 1);
+                            s = strchr(s + 1, ':');
+                            if (s)
+                            {
+                                // second
+                                data[5] = atoi(s + 1);
+
+                                // + - timezone
+                                data[6] = 0;
+                                char *tzs = strchr(s + 1, '-');
+                                if (!tzs)
+                                {
+                                    tzs = strchr(s + 1, '+');
+                                }
+
+                                if (tzs)
+                                {
+                                    data[6] = atoi(tzs);
+                                }
+
+                                err = ESP_OK;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
     }
 
-    return -10;
+    return err;
+}
+
+esp_err_t esp_modem_dce_handle_quistate(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+    const char *ss = "+QISTATE:";
+
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    else if (!strncmp(line, ss, strlen(ss)))
+    {
+        // printf("===================================================================");
+        int32_t *data = esp_dce->priv_resource;
+
+        char *s = strchr(line, ' ');
+        if (s)
+        {
+            data[0] = atoi(s + 1);
+            int n = 2;
+            do
+            {
+                s = strchr(s + 1, ',');
+            } while (s && n-- > 0);
+
+            if (s)
+            {
+                data[1] = atoi(s + 1);
+                s = strchr(s + 1, ',');
+                if (s)
+                {
+                    data[2] = atoi(s + 1);
+                    s = strchr(s + 1, ',');
+                    if (s)
+                    {
+                        data[3] = atoi(s + 1);
+                        s = strchr(s + 1, ',');
+                        err = ESP_OK;
+                    }
+                }
+            }
+        }
+    }
+    return err;
+}
+
+esp_err_t esp_modem_dce_handle_response_all(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+    printf("LINE: %s\nRESOURCE: %s\n", line, (const char *)esp_dce->priv_resource);
+
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    else if (!strncmp(line, (const char *)esp_dce->priv_resource, strlen((const char *)esp_dce->priv_resource)))
+    {
+        // err = esp_modem_process_command_done(dce, MODEM_STATE_PROCESSING);
+        // printf("===================================================================");
+        err = ESP_OK;
+    }
+    return err;
+}
+
+esp_err_t esp_modem_dce_handle_response_wait(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+    // printf("LINE: %s\nRESOURCE: %s\n", line, (const char *)esp_dce->priv_resource);
+
+    if (!strncmp(line, (const char *)esp_dce->priv_resource, strlen((const char *)esp_dce->priv_resource)))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = ESP_OK;
+    }
+
+    return err;
+}
+
+static esp_err_t esp_modem_dce_handle_response_print(modem_dce_t *dce, const char *line)
+{
+    char buf[128];
+    esp_err_t err = ESP_FAIL;
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+
+    int len = snprintf(buf, 127, "%s", line);
+
+    if (len > 2)
+    {
+        /* Strip "\r\n" */
+        strip_cr_lf_tail(buf, len);
+        printf("%s\n", buf);
+        err = ESP_OK;
+    }
+
+    return err;
 }
 
 void radio_task(void *arg)
 {
-    int x;
+
+    esp_err_t ret = ESP_OK;
 
     read_nvs_nbiot(&id, apn, server, &port);
+
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    event_group = xEventGroupCreate();
 
     ESP_LOGI(TAG, "start");
 
@@ -201,129 +377,164 @@ void radio_task(void *arg)
     // configure GPIO with the given settings
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
+    /* create dte object */
+    esp_modem_dte_config_t config = ESP_MODEM_DTE_DEFAULT_CONFIG();
+    /* setup UART specific configuration based on kconfig options */
+    config.event_task_priority = 6,
+    config.event_task_stack_size = 2048 * 2;
+    config.tx_io_num = TX_GPIO;
+    config.rx_io_num = RX_GPIO;
+    config.rts_io_num = -1;
+    config.cts_io_num = -1;
+
+    modem_dte_t *dte = esp_modem_dte_init(&config);
+
     while (1)
     {
         ESP_LOGI(TAG, "init module NB-IoT");
 
-        while (1)
+        gpio_set_level(POWER_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(600));
+        gpio_set_level(POWER_GPIO, 0);
+        // vTaskDelay(pdMS_TO_TICKS(400));
+
+        modem_dce_t *dce = NULL;
+        dce = bc26_init(dte);
+
+        if (dce != NULL)
         {
-            gpio_set_level(POWER_GPIO, 1);
-            vTaskDelay(pdMS_TO_TICKS(1100));
-            gpio_set_level(POWER_GPIO, 0);
+            // dce->handle_line = esp_modem_dce_handle_response_default;
+            // dte->send_cmd(dte, "AT+QLEDMODE=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+            // dce->handle_line = esp_modem_dce_handle_response_default;
+            // dte->send_cmd(dte, "AT+CEREG=3\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
 
-            uart_init();
-            uart_read_bytes(UART_NUM_1, rx_buf, RX_BUF_SIZE, pdMS_TO_TICKS(500));
+            /* Print Module ID, Operator, IMEI, IMSI */
+            ESP_LOGI(TAG, "Module: %s", dce->name);
+            ESP_LOGI(TAG, "Operator: %s", dce->oper);
+            ESP_LOGI(TAG, "IMEI: %s", dce->imei);
+            ESP_LOGI(TAG, "IMSI: %s", dce->imsi);
 
-            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, 500) > 0)
-                break;
-            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, 500) > 0)
-                break;
-            if (ATcmd("AT", rx_buf, RX_BUF_SIZE, 500) > 0)
-                break;
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
-
-        //результат измерений
-        result_t result;
-        BaseType_t xResult;
-        uint32_t ulNotifiedValue;
-
-        // work witch module
-        while (1)
-        {
-            /* Ожидание оповещения от прерываний. */
-            xResult = xTaskNotifyWait(pdFALSE,          /* Не очищать биты на входе. */
-                                      ULONG_MAX,        /* На выходе очищаются все биты. */
-                                      &ulNotifiedValue, /* Здесь хранится значение оповещения. */
-                                      (portTickType)2); /* Время таймаута на блокировке. */
-            if (xResult == pdPASS)
+            /* Get signal quality */
+            uint32_t rssi = 0, ber = 0;
+            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_signal_quality(dce, &rssi, &ber));
+            if (rssi == 99 || ber == 99)
             {
-                /* Было получено оповещение. Проверка, какие биты установлены. */
-                if ((ulNotifiedValue & RESET_BIT) != 0)
-                {
-                }
-
-                if ((ulNotifiedValue & SLEEP_BIT) != 0)
-                {
-                    ESP_LOGI(TAG, "lora_sleep");
-                    // lora_sleep();
-                    xEventGroupSetBits(ready_event_group, END_LORA_SLEEP);
-                    vTaskDelay(10000 / portTICK_PERIOD_MS);
-                }
+                ESP_LOGE(TAG, "rssi: Not know, ber: Not know");
             }
+            else
+            {
+                ESP_LOGI(TAG, "rssi: %ddBm, ber: %d", (int)rssi * 2 + -113, ber);
+            }
+
+            /* Get battery voltage */
+            uint32_t voltage = 0, bcs = 0, bcl = 0;
+            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_battery_status(dce, &bcs, &bcl, &voltage));
+            ESP_LOGI(TAG, "Battery voltage: %d mV", voltage);
+
+            // vTaskDelay(pdMS_TO_TICKS(1000));
+
+            // dce->handle_line = esp_modem_dce_handle_response_print;
+            // dte->send_cmd(dte, "AT+CGPADDR\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+            // dce->handle_line = esp_modem_dce_handle_response_print;
+            // dte->send_cmd(dte, "AT+CPSMS?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+            // uint32_t dat[8];
+            // dat[0] = 55;
+            // dce->handle_line = esp_modem_dce_handle_response_default;
+            // dte->send_cmd(dte, "AT+CCLK?\r", 1000);
+
+            // printf("1test: %ld\n", dat[0]);
             /*
-                    lora_receive(); // put into receive mode
-
-                    while (lora_received())
-                    {
-                        x = lora_receive_packet(buf, sizeof(buf));
-                        buf[x] = 0;
-                        // printf("Received: \"%s\" Len: %d RSSI: %d\n", buf, x, rssi);
-                        if (x > 10 && x < 200)
-                        {
-                            if (buf[x - 1] == '}')
-                            {
-                                sprintf((char *)&buf[x - 1], ",\"rssi\":%d,\"snr\":%.2f}", lora_packet_rssi(), lora_packet_snr());
-                            }
-                            else
-                            {
-                                sprintf((char *)&buf[x], " - RSSI:%d; - SNR:%.2f", lora_packet_rssi(), lora_packet_snr());
-                            }
-                            printf("%s\n", buf);
-                            // fflush(stdout);
-                        }
-
-                        // xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
-                        lora_receive();
-                        // lora_idle();
-                        // vTaskDelay(100 / portTICK_PERIOD_MS);
-                        // lora_send_packet((uint8_t *)buf, strlen((char*)buf));
-                        // vTaskDelay(1000 / portTICK_PERIOD_MS);
-                    }
-
-                    if (pdTRUE == xQueueReceive(send_queue, &result, (portTickType)0))
-                    {
-                        int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f}", id, bootCount, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out);
-                        printf("%s\n", buf);
-                        xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
-                        if (ver == 0x12)
-                            lora_send_packet((uint8_t *)buf, l);
-                        xEventGroupSetBits(ready_event_group, END_TRANSMIT);
-                    }
-
-                    gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
-                    gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
-
-                    if (gpio_get_level(BTN_GPIO) == 0)
-                    {
-                        time_t now;
-                        struct tm timeinfo;
-
-                        time(&now);
-                        localtime_r(&now, &timeinfo);
-                        size_t l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
-                        // lora_send_packet((uint8_t *)buf, l);
-                        printf("Press BTN:\"%s\"\n", buf);
-
-                        cmd_t cmd;
-                        cmd.cmd = 10;
-                        cmd.power = 255;
-
-                        xQueueSend(uicmd_queue, &cmd, (portTickType)0);
-
-                        vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-                        // xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
-                    }
-
-                    gpio_set_direction(CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
+                        uint32_t dat[8];
+                        dat[0] = 1;
+                        printf("0test: %ld\n", dat[0]);
+                        esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+                        esp_dce->priv_resource = dat;
+                        printf("1test: %ld\n", dat[0]);
+                        dce->handle_line = esp_modem_dce_handle_cclk;
+                        dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                        //printf("%4d/%2d/%2d,%2d:%2d:%2dGMT%+2d", dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], dt[6]);
             */
-            if (ATcmd("ATI", rx_buf, RX_BUF_SIZE, 500) <= 0) break;
-            ATcmd("AT+CFUN?", rx_buf, RX_BUF_SIZE, 500); //Value is 1 (full functionality)
-            ATcmd("AT+CIMI", rx_buf, RX_BUF_SIZE, 500); //Query the IMSI number.
-            ATcmd("AT+CESQ", rx_buf, RX_BUF_SIZE, 500); //Extended Signal Quality
+            // dce->handle_line = esp_modem_dce_handle_response_print;
+            // dte->send_cmd(dte, "AT+QPING=1,\"10.179.40.11\"\r", 15000);
 
-            vTaskDelay(pdMS_TO_TICKS(500));
+            // ESP_LOGI(TAG, "AT+QISTATE?");
+
+            esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+            char tx_buf[1024];
+
+            // connectID, <local_port>,<socket_state
+            int32_t connectID[4] = {-1, 0, 0, 0};
+
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+            int counter = 10;
+
+            // wait connect
+            do
+            {
+                dce->sync(dce);
+
+                connectID[0] = -1;
+                esp_dce->priv_resource = connectID;
+                dce->handle_line = esp_modem_dce_handle_quistate;
+                dte->send_cmd(dte, "AT+QISTATE?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+                ESP_LOGI(TAG, "connectID: %d, %d, %d, %d\n", connectID[0], connectID[1], connectID[2], connectID[3]);
+
+                if (connectID[0] == -1)
+                {
+                    ESP_LOGI(TAG, "Open port");
+                    esp_dce->priv_resource = "+QIOPEN:";
+                    dce->handle_line = esp_modem_dce_handle_response_wait;
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"UDP\",\"%s\",%d,0,0\r", server, port);
+                    // dte->send_wait(dte, tx_buf, strlen((const char *)dce->priv_resource), (const char *)dce->priv_resource, 60000);
+                    dte->send_cmd(dte, tx_buf, 60000);
+                }
+
+                if (dce->state != MODEM_STATE_SUCCESS)
+                {
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
+                }
+
+            } while (connectID[3] != 2 && counter-- > 0);
+
+            int32_t dt[8];
+            esp_dce->priv_resource = dt;
+            dce->handle_line = esp_modem_dce_handle_cclk;
+            dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+            if (dce->state == MODEM_STATE_SUCCESS)
+            {
+                ESP_LOGI(TAG, "Current date/time: %d.%02d.%04d %2d:%02d:%02d", dt[2], dt[1], dt[0], dt[3] + dt[6], dt[4], dt[5]);
+            }
+
+            char buf[1024];
+            if (pdTRUE == xQueueReceive(send_queue, &result, 3000 / portTICK_PERIOD_MS ))
+            {
+                int l = sprintf((char *)buf, "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f}", id, bootCount, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out);
+                // printf("%s\n", buf);
+                xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+
+                ESP_LOGI(TAG, "Send data");
+                esp_dce->priv_resource = "SEND";
+                dce->handle_line = esp_modem_dce_handle_response_wait;
+                //const char msg[] = "{\"id\":20,\"num\":1,\"U\":539,\"R\":4000,\"Ub1\":11.653,\"Ub0\":12.301,\"U0\":39,\"T\":31.0,\"rssi\":-107,\"snr\":6.00}";
+                snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", l, buf);
+                dte->send_cmd(dte, tx_buf, 10000);
+            }
+
+            xEventGroupSetBits(ready_event_group, END_TRANSMIT);
+            dce->sync(dce);
+
+            ESP_LOGI(TAG, "Power down");
+
+            /* Power down module */
+            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
+
+            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
         }
+        vTaskDelay(pdMS_TO_TICKS(30000));
     }
 }

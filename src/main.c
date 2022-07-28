@@ -235,8 +235,8 @@ void app_main()
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 #else
-    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 6, NULL);
+    xTaskCreate(radio_task, "radio_task", 1024 * 8, NULL, 5, &xHandleLora);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 7, NULL);
 #endif
 
     cmd_t cmd;

@@ -32,7 +32,7 @@ try:
                 client_socket.close()
                 print("client socket closed.")
                 break
-
+                
             print('recv data is: \"%s\"'%data.decode())
 
             # Получить выйти, выключить розетку

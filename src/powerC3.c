@@ -271,7 +271,7 @@ static void continuous_adc_init()
     adc_pattern[n].unit = 0;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
-    
+
     dig_cfg.pattern_num = n;
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
@@ -445,7 +445,7 @@ void dual_adc(void *arg)
                             // printf("off: %d, adcU_limit: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_BLOCK * 4), adcU_limit);
                         };
 
-                        //Переполнен буффер! 
+                        //Переполнен буффер!
                         if (ptr >= (uint8_t *)&bufferADC[DATALEN] - (ADC_BLOCK * (menu[17].val + 1)))
                             ptr = ptr - ret_num;
                     };
@@ -557,6 +557,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int sum_full_adc2 = 0;
     int sum_full_adc3 = 0;
     int sum_full_adc4 = 0;
+
     // int block_measure = 0;
 
     /*    while ((uint8_t *)p < endptr)
@@ -580,6 +581,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int adc2 = 0; //Второй канал
     int adc3 = 0;
     int adc4 = 0;
+
+    int pre_data0 = 0;
 
     while ((uint8_t *)p < endptr)
     {
@@ -615,22 +618,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                         break;
                     }
                 }
-                /*
-                if ((uint8_t *)p >= ptr_chan)
-                {
-                    if (block_0db >= 0)
-                    {
-                        block_0db++;
-                        if (block_0db == 1)
-                        {
-                            block_off = 1; //для пересчета результата
-                            // printf("block_0db (%d)-------------------------------------\n", num_p);
-                            break;
-                        }
-                    }
-                }
-                */
             }
+
             if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
                 (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[1].channel
 #if ADC_COUNT_READ == 5
@@ -654,9 +643,20 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                     if (block_overload == 1)
                     {
                         // printf("block_overload 1 (%d)-------------------------------------\n", num_p);
+                        pre_data0 = p->type2.data;
                         break;
                     }
                 }
+                else
+                {
+                    if (pre_data0 > 4090)
+                    {
+                        pre_data0 = p->type2.data;
+                        break;
+                    }
+                }
+
+                pre_data0 = p->type2.data;
 
                 if (sum_n == 0)
                 {
@@ -785,14 +785,16 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 {
 #if ADC_COUNT_READ > 2
                     //Выбираем канал измерения
-                    if (sum_adcI0 / sum_n < (75000 - menu[5].val) * 10 / menu[4].val) // < 75мкА >6,6MOm
+                    if (last_chan == 0 && sum_adcI0 / sum_n < (75000 - menu[5].val) * 10 / menu[4].val) // < 75мкА >6,6MOm
                     {
                         last_chan = 1;
+                        printf("select chan 1: %d < %d\n", sum_adcI0 / sum_n, (50000 - menu[5].val) * 10 / menu[4].val);
                     }
 
-                    if (sum_adcI1 / sum_n > (250000 - menu[7].val) * 10 / menu[6].val) // > 250мкА <2MOm
+                    if (last_chan == 1 && sum_adcI1 / sum_n > (250000 - menu[7].val) * 10 / menu[6].val) // > 250мкА <2MOm
                     {
                         last_chan = 0;
+                        printf("select chan 0: %d > %d\n", sum_adcI1 / sum_n, (250000 - menu[7].val) * 10 / menu[6].val);
                     }
 #endif
                     if (last_chan == 1)
