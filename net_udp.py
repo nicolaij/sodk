@@ -4,7 +4,7 @@ from socket import *
 
 host = '10.179.40.11'
 port = 48884
-bufferSize  = 1024
+bufferSize = 1024
 
 # Создать сокет сервера
 server_socket = socket(AF_INET, SOCK_DGRAM)
@@ -21,11 +21,8 @@ try:
         message = bytesAddressPair[0]
         address = bytesAddressPair[1]
 
-        clientMsg = "Message from Client:{}".format(message)
-        clientIP  = "Client IP Address:{}".format(address)
-        
+        clientMsg = "Message from {}:{}".format(address, message)
         print(clientMsg)
-        print(clientIP)
 
 except:
     server_socket.close()

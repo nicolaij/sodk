@@ -58,6 +58,19 @@ static EventGroupHandle_t s_wifi_event_group;
 
 #define PAGE_LORA_SET "/"
 
+#ifdef NB
+extern uint16_t port;
+extern char apn[32];
+extern char serverip[17];
+#else
+extern int fr;
+extern int bw;
+extern int sf;
+extern int op;
+#endif
+
+extern int32_t id;
+
 static const char *TAG = "wifi";
 
 static const char *TAGH = "httpd";
@@ -66,8 +79,6 @@ static int s_retry_num = 0;
 
 char buf[1440];
 size_t buf_len;
-
-extern int id;
 
 int64_t timeout_start;
 
@@ -240,18 +251,8 @@ int wifi_init_sta(void)
 /* An HTTP GET handler */
 static esp_err_t settings_handler(httpd_req_t *req)
 {
-#ifdef NB
-    extern uint16_t port;
-    extern char *apn;
-    extern char *server;
-#else
-    extern int fr;
-    extern int bw;
-    extern int sf;
-    extern int op;
-#endif
-
     reset_sleep_timeout();
+
     /*                       "<script src=\"/d3.min.js\"></script>"*/
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
@@ -349,22 +350,24 @@ static esp_err_t settings_handler(httpd_req_t *req)
                         esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
                         if (err != ESP_OK)
                         {
-                            printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+                            ESP_LOGE(TAG, "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
                         }
                         else if (save == true)
                         {
                             // Write
-                            printf("Write: \"%s\" ", menu[i].name);
+                            ESP_LOGD(TAG, "Write: \"%s\" ", menu[i].name);
                             err = nvs_set_i32(my_handle, menu[i].id, menu[i].val);
-                            printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+                            if (err != ESP_OK)
+                                ESP_LOGE(TAG, "Write: \"%s\" - Failed!", menu[i].name);
 
                             // Commit written value.
                             // After setting any values, nvs_commit() must be called to ensure changes are written
                             // to flash storage. Implementations may write to storage at other times,
                             // but this is not guaranteed.
-                            printf("Committing updates in NVS ... ");
+                            ESP_LOGD(TAG, "Committing updates in NVS ... ");
                             err = nvs_commit(my_handle);
-                            printf((err != ESP_OK) ? "Failed!\n" : "Done\n");
+                            if (err != ESP_OK)
+                                ESP_LOGE(TAG, "Committing updates in NVS ... - Failed!");
 
                             // Close
                             nvs_close(my_handle);
@@ -386,10 +389,10 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
             if (httpd_query_key_value(buf, "ip", param, 16) == ESP_OK)
             {
-                if (strncmp(param, server, 16) != 0)
+                if (strncmp(param, serverip, 16) != 0)
                 {
                     param_change = true;
-                    strlcpy(server, param, 16);
+                    strlcpy(serverip, param, 16);
                 }
             }
 
@@ -405,7 +408,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
             if (param_change)
             {
-                write_nvs_nbiot(&id, apn, server, &port);
+                write_nvs_nbiot(&id, apn, serverip, &port);
             };
 #else
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
@@ -477,17 +480,17 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     //-----------------------------СОДК------------------------------
     strlcpy(buf, sodkstartform1, sizeof(buf));
-    sprintf(param, "СОДК %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
+    snprintf(param, sizeof(param), "СОДК %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, sodkstartform2, sizeof(buf));
+
     httpd_resp_sendstr_chunk(req, buf);
+    buf[0] = 0;
 
     for (int i = 0; i < 18; i++)
     {
         if (i % 2 == 0)
-            strlcpy(buf, "\n<tr>", sizeof(buf));
-        else
-            strlcpy(buf, " ", sizeof(buf));
+            strlcat(buf, "\n<tr>", sizeof(buf));
 
         strlcat(buf, "<td><label for=\"", sizeof(buf));
         strlcat(buf, menu[i].id, sizeof(buf));
@@ -505,11 +508,18 @@ static esp_err_t settings_handler(httpd_req_t *req)
         if (i % 2 == 1)
             strlcat(buf, "</tr>", sizeof(buf));
 
-        httpd_resp_sendstr_chunk(req, buf);
+        if (strlen(buf) > sizeof(buf) / 2)
+        {
+            httpd_resp_sendstr_chunk(req, buf);
+            buf[0] = 0;
+        }
     }
-    httpd_resp_sendstr_chunk(req, sodkend);
+    strlcat(buf, sodkend, sizeof(buf));
+    httpd_resp_sendstr_chunk(req, buf);
 #ifdef NB
     //-----------------------------NB-IoT------------------------------
+    // ESP_LOG_BUFFER_HEXDUMP(TAG, serverip, 10, ESP_LOG_INFO);
+
     strlcpy(buf, nbiotstart, sizeof(buf));
 
     // Generate id
@@ -517,25 +527,23 @@ static esp_err_t settings_handler(httpd_req_t *req)
     itoa(id, param, 10);
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, lora_set_id[1], sizeof(buf));
-    //httpd_resp_sendstr_chunk(req, buf);
-/*
+
     // Generate ip
     strlcat(buf, nb_set_ip[0], sizeof(buf));
-    strlcat(buf, server, sizeof(buf));
+    strlcat(buf, serverip, sizeof(buf));
     strlcat(buf, nb_set_ip[1], sizeof(buf));
-    //httpd_resp_sendstr_chunk(req, buf);
 
     // Generate port
     strlcat(buf, nb_set_port[0], sizeof(buf));
     itoa(port, param, 10);
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, nb_set_port[1], sizeof(buf));
-*/    
+
     strlcat(buf, nbiotend, sizeof(buf));
 
     httpd_resp_sendstr_chunk(req, buf);
 
-    //httpd_resp_sendstr_chunk(req, nbiotend);
+    // httpd_resp_sendstr_chunk(req, nbiotend);
 #else
     //-----------------------------LoRa------------------------------
     httpd_resp_sendstr_chunk(req, lorastart);
@@ -657,7 +665,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
 
     /* Close file after sending complete */
     fclose(fd);
-    //ESP_LOGI(TAG, "File sending complete");
+    // ESP_LOGI(TAG, "File sending complete");
 
     httpd_resp_sendstr_chunk(req, NULL);
     return ESP_OK;
@@ -701,7 +709,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
         l = strlcat(buf, line, sizeof(buf));
         if (l > (sizeof(buf) - sizeof(line)))
         {
-            //printf("l: %d, ", l);
+            // printf("l: %d, ", l);
 
             /* Send the buffer contents as HTTP response chunk */
             if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
@@ -718,10 +726,10 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
             l = 0;
         }
 
-        //if (n++ % 100 == 0)
+        // if (n++ % 100 == 0)
         //{
-        //    vTaskDelay(1);
-        //}
+        //     vTaskDelay(1);
+        // }
 
         if (n > limitADCData)
         {
@@ -842,12 +850,12 @@ static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    //config.max_open_sockets = 2;
-    //config.stack_size = 1024 * 10;
+    // config.max_open_sockets = 2;
+    // config.stack_size = 1024 * 10;
     config.lru_purge_enable = true;
-    //config.send_wait_timeout = 30;
-    //config.recv_wait_timeout = 30;
-    //config.task_priority = 6;
+    // config.send_wait_timeout = 30;
+    // config.recv_wait_timeout = 30;
+    // config.task_priority = 6;
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -947,6 +955,6 @@ void wifi_task(void *arg)
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);
         }
 
-        vTaskDelay(1);
+        vTaskDelay(10);
     }
 }

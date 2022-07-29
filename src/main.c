@@ -20,7 +20,7 @@ float tsens_out = 0;
 
 uint8_t mac[6];
 
-TaskHandle_t xHandleLora = NULL;
+TaskHandle_t xHandleRadio = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
 
@@ -52,7 +52,7 @@ int read_nvs_menu()
     esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
     if (err != ESP_OK)
     {
-        ESP_LOGE("storage", "Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+        ESP_LOGE("storage", "Error (%s) opening NVS handle!", esp_err_to_name(err));
     }
     else
     {
@@ -62,13 +62,13 @@ int read_nvs_menu()
             switch (err)
             {
             case ESP_OK:
-                printf("Read \"%s\" = %d\n", menu[i].name, menu[i].val);
+                ESP_LOGD("NVS", "Read \"%s\" = %d", menu[i].name, menu[i].val);
                 break;
             case ESP_ERR_NVS_NOT_FOUND:
-                printf("The value  \"%s\" is not initialized yet!\n", menu[i].name);
+                ESP_LOGD("NVS", "The value  \"%s\" is not initialized yet!", menu[i].name);
                 break;
             default:
-                printf("Error (%s) reading!\n", esp_err_to_name(err));
+                ESP_LOGE("NVS", "Error (%s) reading!", esp_err_to_name(err));
             }
         }
 
@@ -105,7 +105,8 @@ void go_sleep(void)
         time_in_us = 60 * 60 * 24 * 30 * 1000000ULL; // 30 days
     }
 
-    printf("Go sleep...\n");
+    ESP_LOGW("main", "Go sleep...");
+
     fflush(stdout);
 
     esp_deep_sleep(time_in_us);
@@ -118,7 +119,7 @@ void app_main()
     switch (wakeup_reason)
     {
     case ESP_SLEEP_WAKEUP_EXT0:
-        printf("Wakeup caused by external signal using RTC_IO\n");
+        ESP_LOGI("main", "Wakeup caused by external signal using RTC_IO");
         break;
 #if SOC_PM_SUPPORT_EXT_WAKEUP
     case ESP_SLEEP_WAKEUP_EXT1:
@@ -127,11 +128,11 @@ void app_main()
         if (wakeup_pin_mask != 0)
         {
             int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-            printf("Wake up from GPIO %d\n", pin);
+            ESP_LOGI("main", "Wake up from GPIO %d", pin);
         }
         else
         {
-            printf("Wake up from GPIO\n");
+            ESP_LOGI("main", "Wake up from GPIO");
         }
         break;
     }
@@ -143,48 +144,47 @@ void app_main()
         if (wakeup_pin_mask != 0)
         {
             int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-            printf("Wake up from GPIO %d\n", pin);
+            ESP_LOGI("main", "Wake up from GPIO %d", pin);
         }
         else
         {
-            printf("Wake up from GPIO\n");
+            ESP_LOGI("main", "Wake up from GPIO");
         }
         break;
     }
 #endif // SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
     case ESP_SLEEP_WAKEUP_TIMER:
-        printf("Wakeup caused by timer\n");
+        ESP_LOGI("main", "Wakeup caused by timer");
         break;
     case ESP_SLEEP_WAKEUP_TOUCHPAD:
-        printf("Wakeup caused by touchpad\n");
+        ESP_LOGI("main", "Wakeup caused by touchpad");
         break;
     case ESP_SLEEP_WAKEUP_ULP:
-        printf("Wakeup caused by ULP program\n");
+        ESP_LOGI("main", "Wakeup caused by ULP program");
         break;
     default:
-        printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
+        ESP_LOGI("main", "Wakeup was not caused by deep sleep: %d", wakeup_reason);
         break;
     }
 
     ++bootCount;
     //  "Количество загрузок: "
-    printf("Boot number: %d\n", bootCount);
+    ESP_LOGI("main", "Boot number: %d", bootCount);
 
     /* Print chip information */
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
-    printf("This is ESP32 chip with %d CPU cores, WiFi%s%s, ",
-           chip_info.cores,
-           (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
-           (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "");
+    ESP_LOGI("main", "This is ESP32 chip with %d CPU cores, WiFi%s%s, silicon revision %d",
+             chip_info.cores,
+             (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
+             (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "",
+             chip_info.revision);
 
-    printf("silicon revision %d, ", chip_info.revision);
-
-    printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
-           (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+    ESP_LOGI("main", "flash: %dMB %s", spi_flash_get_chip_size() / (1024 * 1024),
+             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
     esp_efuse_mac_get_default(mac);
-    printf("mac: %02x-%02x-%02x-%02x-%02x-%02x\n", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
+    ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
 #if CONFIG_IDF_TARGET_ESP32C3
     // ESP_LOGI(TAG, "Initializing Temperature sensor");
@@ -228,14 +228,14 @@ void app_main()
     // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
 #ifdef RECEIVER_ONLY
-    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleLora);
+    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);
     xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 #else
-    xTaskCreate(radio_task, "radio_task", 1024 * 8, NULL, 5, &xHandleLora);
+    xTaskCreate(radio_task, "radio_task", 1024 * 8, NULL, 5, &xHandleRadio);
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 7, NULL);
 #endif
 
@@ -252,15 +252,11 @@ void app_main()
         END_MEASURE,       /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        portMAX_DELAY);
+        5000 / portTICK_PERIOD_MS);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
         xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
-#if CONFIG_IDF_TARGET_ESP32
-        // xTaskCreate(ui_task, "ui_task", 1024 * 8, NULL, 5, &xHandleUI);
-        // xTaskCreate(clock_task, "clock_task", 1024 * 2, NULL, 5, NULL);
-#endif
 
         xEventGroupWaitBits(
             ready_event_group, /* The event group being tested. */
@@ -275,34 +271,22 @@ void app_main()
         END_TRANSMIT,      /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        portMAX_DELAY);
+        120000 / portTICK_PERIOD_MS);
 
-    xTaskNotify(xHandleLora, SLEEP_BIT, eSetValueWithOverwrite);
+    xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
 
     xEventGroupWaitBits(
         ready_event_group, /* The event group being tested. */
         END_LORA_SLEEP,    /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        10);
-
-    if (xHandleUI)
-    {
-        xTaskNotify(xHandleUI, SLEEP_BIT, eSetValueWithOverwrite);
-
-        xEventGroupWaitBits(
-            ready_event_group, /* The event group being tested. */
-            END_UI_SLEEP,      /* The bits within the event group to wait for. */
-            pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
-            pdTRUE,
-            10);
-    }
+        100 / portTICK_PERIOD_MS);
 
     //засыпаем...
     go_sleep();
 
     while (1)
     {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
     };
 }
