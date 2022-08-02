@@ -25,6 +25,7 @@
 
 extern menu_t menu[];
 extern uint8_t mac[6];
+extern char modem_status[128];
 
 #if CONFIG_IDF_TARGET_ESP32
 extern int bufferR[DATALEN];
@@ -538,6 +539,11 @@ static esp_err_t settings_handler(httpd_req_t *req)
     itoa(port, param, 10);
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, nb_set_port[1], sizeof(buf));
+
+    //status
+    strlcat(buf, "<tr><td>Status:</td><td>", sizeof(buf));
+    strlcat(buf, modem_status, sizeof(buf));
+    strlcat(buf, "</tr>", sizeof(buf));
 
     strlcat(buf, nbiotend, sizeof(buf));
 

@@ -40,6 +40,9 @@ static const char *TAG = "nbiot";
 
 extern float tsens_out;
 
+char modem_status[128];
+uint32_t rssi = 0, ber = 0;
+
 int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
 {
     nvs_handle_t my_handle;
@@ -286,6 +289,50 @@ esp_err_t esp_modem_dce_handle_quistate(modem_dce_t *dce, const char *line)
     return err;
 }
 
+esp_err_t esp_modem_dce_handle_response_cgpaddr(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+    const char *ss = "+CGPADDR:";
+
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    else if (!strncmp(line, ss, strlen(ss)))
+    {
+        int32_t *data = esp_dce->priv_resource;
+
+        char *s = strchr(line, ',');
+        if (s)
+        {
+            data[0] = atoi(s + 1);
+            s = strchr(s + 1, '.');
+            if (s)
+            {
+                data[1] = atoi(s + 1);
+                s = strchr(s + 1, '.');
+                if (s)
+                {
+                    data[2] = atoi(s + 1);
+                    s = strchr(s + 1, '.');
+                    if (s)
+                    {
+                        data[3] = atoi(s + 1);
+                        err = ESP_OK;
+                    }
+                }
+            }
+        }
+    }
+    return err;
+}
+
 esp_err_t esp_modem_dce_handle_response_qisend(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
@@ -403,7 +450,7 @@ void radio_task(void *arg)
     /* create dte object */
     esp_modem_dte_config_t config = ESP_MODEM_DTE_DEFAULT_CONFIG();
     /* setup UART specific configuration based on kconfig options */
-    config.event_task_priority = 5,
+    config.event_task_priority = 6,
     config.event_task_stack_size = 2048 * 2;
     config.tx_io_num = TX_GPIO;
     config.rx_io_num = RX_GPIO;
@@ -415,6 +462,8 @@ void radio_task(void *arg)
     while (1)
     {
         ESP_LOGI(TAG, "init module NB-IoT");
+
+        modem_status[0] = 0;
 
         gpio_set_level(POWER_GPIO, 1);
         vTaskDelay(pdMS_TO_TICKS(600));
@@ -438,7 +487,6 @@ void radio_task(void *arg)
             ESP_LOGI(TAG, "IMSI: %s", dce->imsi);
 
             /* Get signal quality */
-            uint32_t rssi = 0, ber = 0;
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_signal_quality(dce, &rssi, &ber));
             if (rssi == 99 || ber == 99)
             {
@@ -486,6 +534,14 @@ void radio_task(void *arg)
 
             esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
+            // Show PDP Addresses
+            int32_t pdpaddr[4] = {0, 0, 0, 0};
+            esp_dce->priv_resource = pdpaddr;
+            dce->handle_line = esp_modem_dce_handle_response_cgpaddr;
+            dte->send_cmd(dte, "AT+CGPADDR?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+            snprintf(modem_status, sizeof(modem_status), "Operator: %s, IMEI: %s, IMSI: %s, rssi: %ddBm, ber: %d, IP:%d.%d.%d.%d", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3]);
+
             char tx_buf[1024];
 
             char buf[1024];
@@ -527,19 +583,21 @@ void radio_task(void *arg)
 
             } while (connectID[3] != 2 && counter-- > 0);
 
-            int32_t dt[8];
+            int32_t dt[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+            char datetime[22] = "";
             esp_dce->priv_resource = dt;
             dce->handle_line = esp_modem_dce_handle_cclk;
             dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
             if (dce->state == MODEM_STATE_SUCCESS)
             {
-                ESP_LOGI(TAG, "Current date/time: %d.%02d.%04d %2d:%02d:%02d", dt[2], dt[1], dt[0], dt[3] + dt[6], dt[4], dt[5]);
+                snprintf((char *)datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d", dt[0], dt[1], dt[2], dt[3] + dt[6], dt[4], dt[5]);
+                ESP_LOGI(TAG, "Current date/time: %s", datetime);
             }
 
             int len_data = 0;
             if (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
             {
-                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":%d,\"num\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f}", id, bootCount, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out);
+                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":%d,\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f,\"rssi\":%d}", id, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
 
@@ -583,9 +641,9 @@ void radio_task(void *arg)
             ESP_LOGI(TAG, "Power down");
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
 
-            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
-
             vTaskDelay(pdMS_TO_TICKS(300000));
+
+            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

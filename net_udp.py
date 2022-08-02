@@ -21,7 +21,7 @@ try:
         message = bytesAddressPair[0]
         address = bytesAddressPair[1]
 
-        clientMsg = "Message from {}:{}".format(address, message)
+        clientMsg = "{}:{}".format(address, message)
         print(clientMsg)
 
 except:
