@@ -13,6 +13,10 @@
 #include "driver/temp_sensor.h"
 #endif
 
+#if MULTICHAN
+#include "pcf8575.h"
+#endif
+
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR int BattLow = 0; //Признак разряда батареи
 
@@ -45,6 +49,8 @@ menu_t menu[] = {
     {.id = "avgcnt", .name = "Кол-во усред. рез.", .val = 20, .min = 1, .max = 1000}, /*17*/
 };
 
+static i2c_dev_t pcf8575;
+
 int read_nvs_menu()
 {
     // Open
@@ -76,6 +82,18 @@ int read_nvs_menu()
         nvs_close(my_handle);
     }
     return err;
+}
+
+void power_on(int channel)
+{
+    uint16_t port_val = ~(1 << channel);
+    ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
+}
+
+void power_off(void)
+{
+    uint16_t port_val = ~(1 << POWER_BIT);
+    ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
 }
 
 void go_sleep(void)
@@ -214,18 +232,31 @@ void app_main()
 
     read_nvs_menu();
 
-    uicmd_queue = xQueueCreate(2, sizeof(cmd_t));
+#if MULTICHAN
+
+    // Init i2cdev library
+    ESP_ERROR_CHECK(i2cdev_init());
+
+    // Zero device descriptor
+    memset(&pcf8575, 0, sizeof(i2c_dev_t));
+
+    // Init i2c device descriptor
+    ESP_ERROR_CHECK(pcf8575_init_desc(&pcf8575, PCF8575_I2C_ADDR_BASE, 0, I2C_MASTER_SDA_PIN, I2C_MASTER_SCL_PIN));
+
+    power_off();
+
+#endif
+
+    uicmd_queue = xQueueCreate(4, sizeof(cmd_t));
     adc1_queue = xQueueCreate(2, sizeof(result_t));
 
     send_queue = xQueueCreate(2, sizeof(result_t));
 
     ws_send_queue = xQueueCreate(512, WS_BUF_LINE);
 
-    i2c_mux = xSemaphoreCreateMutex();
+    // i2c_mux = xSemaphoreCreateMutex();
 
     ready_event_group = xEventGroupCreate();
-
-    // set_lora_queue = xQueueCreate(2, sizeof(cmd_t));
 
 #ifdef RECEIVER_ONLY
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);
@@ -236,12 +267,18 @@ void app_main()
     };
 #else
     xTaskCreate(radio_task, "radio_task", 1024 * 8, NULL, 5, &xHandleRadio);
+
+    if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
+    {
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+    };
+
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 7, NULL);
 #endif
 
     cmd_t cmd;
     cmd.cmd = 3;
-    cmd.power = 255;
+    cmd.power = 0;
     xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 
     // BIT0 - окончание измерения

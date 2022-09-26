@@ -53,9 +53,17 @@ static esp_err_t esp_modem_dce_handle_csq(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+    /* store value of rssi and ber */
+    uint32_t **csq = esp_dce->priv_resource;
+
+    //printf("csq %d,%d\n", *csq[0], *csq[1]);
+
     if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
     {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+        if (*csq[0] != 0 && *csq[0] != 99)
+            err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+        else
+            err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
     }
     else if (strstr(line, MODEM_RESULT_CODE_ERROR))
     {
@@ -63,8 +71,6 @@ static esp_err_t esp_modem_dce_handle_csq(modem_dce_t *dce, const char *line)
     }
     else if (!strncmp(line, "+CSQ", strlen("+CSQ")))
     {
-        /* store value of rssi and ber */
-        uint32_t **csq = esp_dce->priv_resource;
         /* +CSQ: <rssi>,<ber> */
         sscanf(line, "%*s%d,%d", csq[0], csq[1]);
         err = ESP_OK;
@@ -166,7 +172,7 @@ static esp_err_t esp_modem_dce_handle_cgmm(modem_dce_t *dce, const char *line)
 static esp_err_t esp_modem_dce_handle_cgsn(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
-    //printf("%s\n", line);
+    // printf("%s\n", line);
     if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
     {
         err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
@@ -284,17 +290,17 @@ esp_err_t esp_modem_dce_sync10(modem_dce_t *dce)
     int i = 10;
     modem_dte_t *dte = dce->dte;
     dce->handle_line = esp_modem_dce_handle_response_default;
-    do
+    while (i-- > 0)
     {
-        dte->send_cmd(dte, "AT\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
-        if (dce->state == MODEM_STATE_SUCCESS)
-            break;
-    } while (i-- > 0);
-    if (i > 0)
-    {
-        ESP_LOGI(DCE_TAG, "sync ok(%d)", i);
-        return ESP_OK;
-    }
+        if (dte->send_cmd(dte, "AT\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
+            if (dce->state == MODEM_STATE_SUCCESS)
+            {
+                ESP_LOGI(DCE_TAG, "sync ok(%d)", i);
+                return ESP_OK;
+            }
+
+        vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+    };
     return ESP_FAIL;
 }
 

@@ -1,0 +1,242 @@
+#include <stdio.h>
+#include "driver/gpio.h"
+#include <sys/time.h>
+#include "driver/uart.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+
+#include "esp_check.h"
+
+#include "driver/uart.h"
+
+#include <main.h>
+
+#define TX_GPIO 6
+#define RX_GPIO 7
+#define POWER_GPIO 2
+
+//#define RX_BUF_SIZE 1024
+
+static EventGroupHandle_t event_group = NULL;
+
+//результат измерений
+result_t result;
+
+char apn[32] = {"mogenergo"};
+
+char serverip[17] = {"10.179.40.11"};
+
+uint16_t port = 48884;
+
+int32_t id = 1; // ID передатчика
+
+static const char *TAG = "nbiot";
+
+extern float tsens_out;
+
+char modem_status[128];
+
+#define BUF_SIZE (1024)
+
+uint32_t rssi = 0, ber = 0;
+
+int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
+{
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("nbiot", NVS_READONLY, &my_handle);
+    size_t l;
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+    }
+    else
+    {
+        err = nvs_get_i32(my_handle, "id", pid);
+        switch (err)
+        {
+        case ESP_OK:
+            ESP_LOGD(TAG, "Read \"%s\" = %d", "id", *pid);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "id");
+            break;
+        default:
+            ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
+        }
+
+        err = nvs_get_str(my_handle, "apn", apn, &l);
+        switch (err)
+        {
+        case ESP_OK:
+            ESP_LOGD(TAG, "Read \"%s\" = %s", "apn", apn);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "apn");
+            break;
+        default:
+            ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
+        }
+
+        err = nvs_get_str(my_handle, "server", server, &l);
+        switch (err)
+        {
+        case ESP_OK:
+            ESP_LOGD(TAG, "Read \"%s\" = %s", "server", server);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "server");
+            break;
+        default:
+            ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
+        }
+
+        int32_t i = 0;
+        err = nvs_get_i32(my_handle, "port", &i);
+        switch (err)
+        {
+        case ESP_OK:
+            *port = i;
+            ESP_LOGD(TAG, "Read \"%s\" = %d", "port", *port);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "port");
+            break;
+        default:
+            ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
+        }
+
+        // Close
+        nvs_close(my_handle);
+
+        return 1;
+    }
+    return 0;
+};
+
+int write_nvs_nbiot(int32_t *pid, const char *apn, const char *server, const uint16_t *port)
+{
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("nbiot", NVS_READWRITE, &my_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+    }
+    else
+    {
+        // Write
+        ESP_LOGD(TAG, "Write id: %d ", *pid);
+        err = nvs_set_i32(my_handle, "id", *pid);
+        if (err != ESP_OK)
+            ESP_LOGE(TAG, "Write id: %d - Failed!", *pid);
+
+        ESP_LOGD(TAG, "Write APN: \"%s\" ", apn);
+        err = nvs_set_str(my_handle, "apn", apn);
+        if (err != ESP_OK)
+            ESP_LOGE(TAG, "Write APN: \"%s\" - Failed!", apn);
+
+        ESP_LOGD(TAG, "Write server: \"%s\" ", server);
+        err = nvs_set_str(my_handle, "server", server);
+        if (err != ESP_OK)
+            ESP_LOGE(TAG, "Write server: \"%s\" - Failed!", server);
+
+        ESP_LOGD(TAG, "Write port: %d ", *port);
+        int32_t i = *port;
+        err = nvs_set_i32(my_handle, "port", i);
+        if (err != ESP_OK)
+            ESP_LOGE(TAG, "Write port: %d - Failed!", i);
+
+        // Commit written value.
+        // After setting any values, nvs_commit() must be called to ensure changes are written
+        // to flash storage. Implementations may write to storage at other times,
+        // but this is not guaranteed.
+        ESP_LOGD(TAG, "Committing updates in NVS ... ");
+        err = nvs_commit(my_handle);
+        if (err != ESP_OK)
+            ESP_LOGE(TAG, "Committing updates in NVS ... - Failed!");
+
+        // Close
+        nvs_close(my_handle);
+    }
+    return 1;
+};
+
+
+void radio_task(void *arg)
+{
+
+    BaseType_t xResult;
+    uint32_t ulNotifiedValue;
+
+    esp_err_t ret = ESP_OK;
+
+    read_nvs_nbiot(&id, apn, serverip, &port);
+
+    // ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    event_group = xEventGroupCreate();
+
+    ESP_LOGI(TAG, "start");
+
+    /*
+     * Configure CPU hardware to communicate with the radio chip
+     */
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1 << POWER_GPIO);
+    io_conf.pull_down_en = 0;
+    io_conf.pull_up_en = 0;
+    // configure GPIO with the given settings
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+
+    /* Configure parameters of an UART driver,
+     * communication pins and install the driver */
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
+    int intr_alloc_flags = 0;
+
+    while (1)
+    {
+        ESP_LOGI(TAG, "init module NB-IoT");
+
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, BUF_SIZE * 2, 0, 0, NULL, intr_alloc_flags));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, TX_GPIO, RX_GPIO, -1, -1));
+
+    // Configure a temporary buffer for the incoming data
+    uint8_t *data = (uint8_t *) malloc(BUF_SIZE);
+/*
+    while (1) {
+        // Read data from the UART
+        int len = uart_read_bytes(ECHO_UART_PORT_NUM, data, BUF_SIZE, 20 / portTICK_RATE_MS);
+        // Write data back to the UART
+        uart_write_bytes(ECHO_UART_PORT_NUM, (const char *) data, len);
+    }
+*/
+        modem_status[0] = 0;
+
+        gpio_set_level(POWER_GPIO, 1);
+        vTaskDelay(pdMS_TO_TICKS(600));
+        gpio_set_level(POWER_GPIO, 0);
+        // vTaskDelay(pdMS_TO_TICKS(400));
+
+        int counter = 10;
+        const char sync[] = {"AT\r"};
+        do
+        {
+            uart_write_bytes(UART_NUM_1, (const char *) sync, strlen(sync));
+            uart_read_bytes
+        int len = uart_read_bytes(UART_NUM_1, data, BUF_SIZE, 300 / portTICK_RATE_MS);
+        } while (counter-- > 0);
+        
+
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}

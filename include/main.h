@@ -32,9 +32,18 @@
 
 #elif CONFIG_IDF_TARGET_ESP32C3
 
-#define POWER_PIN 18
 #define ENABLE_PIN 19
-#define BTN_GPIO 9
+
+#if MULTICHAN
+    #define I2C_MASTER_SDA_PIN 8
+    #define I2C_MASTER_SCL_PIN 10
+    #define POWER_BIT 8
+    #define NB_PWR_BIT 9
+    #define PSM_BIT 10
+#else
+    #define POWER_PIN 18
+    #define BTN_GPIO 9
+#endif
 
 #endif
 
@@ -87,7 +96,7 @@ QueueHandle_t set_lora_queue;
 
 QueueHandle_t ws_send_queue;
 
-SemaphoreHandle_t i2c_mux;
+// SemaphoreHandle_t i2c_mux;
 
 EventGroupHandle_t ready_event_group;
 
@@ -127,3 +136,7 @@ void cur_time(char *buf);
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on);
 
 int getADC_Data(char *line, uint8_t **ptr_adc, int *num);
+
+void power_on(int channel);
+void power_off(void);
+

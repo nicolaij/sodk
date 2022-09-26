@@ -302,11 +302,12 @@ void dual_adc(void *arg)
     // configure GPIO with the given settings
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pin_bit_mask = (1 << POWER_PIN);
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
-    ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 0));
+    /*
+        io_conf.mode = GPIO_MODE_OUTPUT;
+        io_conf.pin_bit_mask = (1 << POWER_PIN);
+        ESP_ERROR_CHECK(gpio_config(&io_conf));
+        ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 0));
+    */
 
     while (1)
     {
@@ -335,12 +336,14 @@ void dual_adc(void *arg)
 
         // int64_t time_off = 0;
 
-        ESP_ERROR_CHECK(adc_digi_start());
-
         // adc_select(1);
 
         //подаем питание на источник питания, OpAmp, делитель АЦП батареи
-        ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
+        // ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
+
+        power_on(cmd.power);
+
+        ESP_ERROR_CHECK(adc_digi_start());
 
         int64_t t1 = esp_timer_get_time();
         int64_t t2 = 0, t3 = 0, time_off = 0;
@@ -499,7 +502,8 @@ void dual_adc(void *arg)
             }
         } while (ptr < (uint8_t *)&bufferADC[DATALEN] - ADC_BLOCK);
 
-        gpio_set_level(POWER_PIN, 0);
+        // gpio_set_level(POWER_PIN, 0);
+        power_off();
 
         ESP_ERROR_CHECK(adc_digi_stop());
         ESP_ERROR_CHECK(adc_digi_deinitialize());

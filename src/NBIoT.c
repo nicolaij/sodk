@@ -41,7 +41,6 @@ static const char *TAG = "nbiot";
 extern float tsens_out;
 
 char modem_status[128];
-uint32_t rssi = 0, ber = 0;
 
 int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
 {
@@ -168,16 +167,16 @@ esp_err_t esp_modem_dce_handle_cclk(modem_dce_t *dce, const char *line)
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
-    const char *ss = "+CCLK:";
+    const char *ss = "+CCLK: ";
+
+    int32_t *data = esp_dce->priv_resource;
 
     if (!strncmp(line, ss, strlen(ss)))
     {
-        int32_t *data = esp_dce->priv_resource;
-
         char *s = strchr(line, ' ');
         if (s)
         {
-            // year (two last digits)
+            // year
             data[0] = atoi(s + 1);
             s = strchr(s + 1, '/');
             if (s)
@@ -228,7 +227,10 @@ esp_err_t esp_modem_dce_handle_cclk(modem_dce_t *dce, const char *line)
     }
     else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
     {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+        if (data[0] != 0 && data[1] != 0 && data[2] != 0)
+            err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+        else
+            err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
     }
     else if (strstr(line, MODEM_RESULT_CODE_ERROR))
     {
@@ -243,21 +245,12 @@ esp_err_t esp_modem_dce_handle_quistate(modem_dce_t *dce, const char *line)
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
-    const char *ss = "+QISTATE:";
+    const char *ss = "+QISTATE: ";
 
-    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
-    {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
-    }
-    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
-    {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
-    }
-    else if (!strncmp(line, ss, strlen(ss)))
-    {
-        // printf("===================================================================");
-        int32_t *data = esp_dce->priv_resource;
+    int32_t *data = esp_dce->priv_resource;
 
+    if (!strncmp(line, ss, strlen(ss)))
+    {
         char *s = strchr(line, ' ');
         if (s)
         {
@@ -286,6 +279,15 @@ esp_err_t esp_modem_dce_handle_quistate(modem_dce_t *dce, const char *line)
             }
         }
     }
+    else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+
     return err;
 }
 
@@ -294,20 +296,12 @@ esp_err_t esp_modem_dce_handle_response_cgpaddr(modem_dce_t *dce, const char *li
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
-    const char *ss = "+CGPADDR:";
+    const char *ss = "+CGPADDR: ";
 
-    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
-    {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
-    }
-    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
-    {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
-    }
-    else if (!strncmp(line, ss, strlen(ss)))
-    {
-        int32_t *data = esp_dce->priv_resource;
+    int32_t *data = esp_dce->priv_resource;
 
+    if (!strncmp(line, ss, strlen(ss)))
+    {
         char *s = strchr(line, ',');
         if (s)
         {
@@ -330,6 +324,18 @@ esp_err_t esp_modem_dce_handle_response_cgpaddr(modem_dce_t *dce, const char *li
             }
         }
     }
+    else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        if (data[3] != 0)
+            err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+        else
+            err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+
     return err;
 }
 
@@ -338,20 +344,12 @@ esp_err_t esp_modem_dce_handle_response_qisend(modem_dce_t *dce, const char *lin
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
-    const char *ss = "+QISEND:";
+    const char *ss = "+QISEND: ";
 
-    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
-    {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
-    }
-    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
-    {
-        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
-    }
-    else if (!strncmp(line, ss, strlen(ss)))
-    {
-        int32_t *data = esp_dce->priv_resource;
+    int32_t *data = esp_dce->priv_resource;
 
+    if (!strncmp(line, ss, strlen(ss)))
+    {
         char *s = strchr(line, ' ');
         if (s)
         {
@@ -369,17 +367,7 @@ esp_err_t esp_modem_dce_handle_response_qisend(modem_dce_t *dce, const char *lin
             }
         }
     }
-    return err;
-}
-
-esp_err_t esp_modem_dce_handle_response_all(modem_dce_t *dce, const char *line)
-{
-    esp_err_t err = ESP_FAIL;
-    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
-
-    // printf("LINE: %s\nRESOURCE: %s\n", line, (const char *)esp_dce->priv_resource);
-
-    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
     {
         err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
     }
@@ -387,16 +375,33 @@ esp_err_t esp_modem_dce_handle_response_all(modem_dce_t *dce, const char *line)
     {
         err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
     }
-    else if (!strncmp(line, (const char *)esp_dce->priv_resource, strlen((const char *)esp_dce->priv_resource)))
+
+    return err;
+}
+
+esp_err_t esp_modem_dce_handle_response_all_ok(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+    // printf("LINE: %s\nRESOURCE: %s\n", line, (const char *)esp_dce->priv_resource);
+
+    if (!strncmp(line, (const char *)esp_dce->priv_resource, strlen((const char *)esp_dce->priv_resource)))
     {
-        // err = esp_modem_process_command_done(dce, MODEM_STATE_PROCESSING);
-        // printf("===================================================================");
         err = ESP_OK;
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
     }
     return err;
 }
 
-esp_err_t esp_modem_dce_handle_response_wait(modem_dce_t *dce, const char *line)
+esp_err_t esp_modem_dce_handle_response_ok_wait(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
@@ -438,7 +443,7 @@ void radio_task(void *arg)
     /*
      * Configure CPU hardware to communicate with the radio chip
      */
-    gpio_config_t io_conf = {};
+/*    gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
     io_conf.pin_bit_mask = (1 << POWER_GPIO);
@@ -446,7 +451,7 @@ void radio_task(void *arg)
     io_conf.pull_up_en = 0;
     // configure GPIO with the given settings
     ESP_ERROR_CHECK(gpio_config(&io_conf));
-
+*/
     /* create dte object */
     esp_modem_dte_config_t config = ESP_MODEM_DTE_DEFAULT_CONFIG();
     /* setup UART specific configuration based on kconfig options */
@@ -472,6 +477,7 @@ void radio_task(void *arg)
 
         modem_dce_t *dce = NULL;
         dce = bc26_init(dte);
+        int counter;
 
         if (dce != NULL)
         {
@@ -482,65 +488,52 @@ void radio_task(void *arg)
 
             /* Print Module ID, Operator, IMEI, IMSI */
             ESP_LOGI(TAG, "Module: %s", dce->name);
-            ESP_LOGI(TAG, "Operator: %s", dce->oper);
-            ESP_LOGI(TAG, "IMEI: %s", dce->imei);
-            ESP_LOGI(TAG, "IMSI: %s", dce->imsi);
+            // ESP_LOGI(TAG, "Operator: %s", dce->oper);
+            // ESP_LOGI(TAG, "IMEI: %s", dce->imei);
+            // ESP_LOGI(TAG, "IMSI: %s", dce->imsi);
 
             /* Get signal quality */
-            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_signal_quality(dce, &rssi, &ber));
-            if (rssi == 99 || ber == 99)
+            uint32_t rssi;
+            uint32_t ber;
+            counter = 3;
+            while (counter-- > 0)
             {
-                ESP_LOGE(TAG, "rssi: Not know, ber: Not know");
-            }
-            else
-            {
-                ESP_LOGI(TAG, "rssi: %ddBm, ber: %d", (int)rssi * 2 + -113, ber);
+                rssi = 0;
+                ber = 0;
+                if (dce->get_signal_quality(dce, &rssi, &ber) == ESP_OK)
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        break;
+                    }
+                    
+                vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
 
             /* Get battery voltage */
             uint32_t voltage = 0, bcs = 0, bcl = 0;
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_battery_status(dce, &bcs, &bcl, &voltage));
-            ESP_LOGI(TAG, "Battery voltage: %d mV", voltage);
-
-            // vTaskDelay(pdMS_TO_TICKS(1000));
-
-            // dce->handle_line = esp_modem_dce_handle_response_print;
-            // dte->send_cmd(dte, "AT+CGPADDR\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
-
-            // dce->handle_line = esp_modem_dce_handle_response_print;
-            // dte->send_cmd(dte, "AT+CPSMS?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
-
-            // uint32_t dat[8];
-            // dat[0] = 55;
-            // dce->handle_line = esp_modem_dce_handle_response_default;
-            // dte->send_cmd(dte, "AT+CCLK?\r", 1000);
-
-            // printf("1test: %ld\n", dat[0]);
-            /*
-                        uint32_t dat[8];
-                        dat[0] = 1;
-                        printf("0test: %ld\n", dat[0]);
-                        esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
-                        esp_dce->priv_resource = dat;
-                        printf("1test: %ld\n", dat[0]);
-                        dce->handle_line = esp_modem_dce_handle_cclk;
-                        dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
-                        //printf("%4d/%2d/%2d,%2d:%2d:%2dGMT%+2d", dt[0], dt[1], dt[2], dt[3], dt[4], dt[5], dt[6]);
-            */
-            // dce->handle_line = esp_modem_dce_handle_response_print;
-            // dte->send_cmd(dte, "AT+QPING=1,\"10.179.40.11\"\r", 15000);
-
-            // ESP_LOGI(TAG, "AT+QISTATE?");
+            // ESP_LOGI(TAG, "Battery voltage: %d mV", voltage);
 
             esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
             // Show PDP Addresses
             int32_t pdpaddr[4] = {0, 0, 0, 0};
             esp_dce->priv_resource = pdpaddr;
-            dce->handle_line = esp_modem_dce_handle_response_cgpaddr;
-            dte->send_cmd(dte, "AT+CGPADDR?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+            counter = 3;
+            while (counter-- > 0)
+            {
+                dce->handle_line = esp_modem_dce_handle_response_cgpaddr;
+                if (dte->send_cmd(dte, "AT+CGPADDR?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        break;
+                    }
+                vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+            }
 
-            snprintf(modem_status, sizeof(modem_status), "Operator: %s, IMEI: %s, IMSI: %s, rssi: %ddBm, ber: %d, IP:%d.%d.%d.%d", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3]);
+            snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%d, IP:%d.%d.%d.%d, Voltage:%dmV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
+
+            ESP_LOGI(TAG, "%s", modem_status);
 
             char tx_buf[1024];
 
@@ -551,7 +544,7 @@ void radio_task(void *arg)
 
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
 
-            int counter = 10;
+            counter = 10;
 
             // wait connect
             do
@@ -568,8 +561,8 @@ void radio_task(void *arg)
                 if (connectID[0] == -1)
                 {
                     ESP_LOGI(TAG, "Open port");
-                    esp_dce->priv_resource = "+QIOPEN:";
-                    dce->handle_line = esp_modem_dce_handle_response_wait;
+                    esp_dce->priv_resource = "+QIOPEN: ";
+                    dce->handle_line = esp_modem_dce_handle_response_ok_wait;
                     snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"UDP\",\"%s\",%d,0,0\r", serverip, port);
 
                     // 2. It is recommended to wait for 60 seconds for URC response “+QIOPEN: <connectID>,<err>”.
@@ -578,20 +571,28 @@ void radio_task(void *arg)
 
                 if (dce->state != MODEM_STATE_SUCCESS)
                 {
-                    vTaskDelay(1000 / portTICK_PERIOD_MS);
+                    vTaskDelay(500 / portTICK_PERIOD_MS);
                 }
 
             } while (connectID[3] != 2 && counter-- > 0);
 
+            //запрос времени
             int32_t dt[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-            char datetime[22] = "";
             esp_dce->priv_resource = dt;
-            dce->handle_line = esp_modem_dce_handle_cclk;
-            dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
-            if (dce->state == MODEM_STATE_SUCCESS)
+            char datetime[22] = "";
+            counter = 3;
+            while (counter-- > 0)
             {
-                snprintf((char *)datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d", dt[0], dt[1], dt[2], dt[3] + dt[6], dt[4], dt[5]);
-                ESP_LOGI(TAG, "Current date/time: %s", datetime);
+                dce->handle_line = esp_modem_dce_handle_cclk;
+                if (dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        snprintf((char *)datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d", dt[0], dt[1], dt[2], dt[3] + dt[6], dt[4], dt[5]);
+                        ESP_LOGI(TAG, "Current date/time: %s", datetime);
+                        break;
+                    }
+
+                vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
 
             int len_data = 0;
@@ -604,7 +605,7 @@ void radio_task(void *arg)
                 xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
 
                 esp_dce->priv_resource = "SEND";
-                dce->handle_line = esp_modem_dce_handle_response_wait;
+                dce->handle_line = esp_modem_dce_handle_response_ok_wait;
                 snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", len_data, buf);
                 dte->send_cmd(dte, tx_buf, 60000);
 
