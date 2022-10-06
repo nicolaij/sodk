@@ -15,22 +15,17 @@
 
 #define TX_GPIO 6
 #define RX_GPIO 7
-#define POWER_GPIO 2
 
 //#define RX_BUF_SIZE 1024
 
 static EventGroupHandle_t event_group = NULL;
 
-//результат измерений
-result_t result;
-
 // char rx_buf[RX_BUF_SIZE];
-
 // uint8_t buf[WS_BUF_LINE];
 
 char apn[32] = {"mogenergo"};
 
-char serverip[17] = {"10.179.40.11"};
+char serverip[16] = {"10.179.40.11"};
 
 uint16_t port = 48884;
 
@@ -66,6 +61,7 @@ int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
             ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
         }
 
+        l = 32;
         err = nvs_get_str(my_handle, "apn", apn, &l);
         switch (err)
         {
@@ -79,6 +75,7 @@ int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
             ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
         }
 
+        l = 16;
         err = nvs_get_str(my_handle, "server", server, &l);
         switch (err)
         {
@@ -427,6 +424,9 @@ esp_err_t esp_modem_dce_handle_response_ok_wait(modem_dce_t *dce, const char *li
 void radio_task(void *arg)
 {
 
+    //результат измерений
+    result_t result;
+
     BaseType_t xResult;
     uint32_t ulNotifiedValue;
 
@@ -443,20 +443,20 @@ void radio_task(void *arg)
     /*
      * Configure CPU hardware to communicate with the radio chip
      */
-/*    gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pin_bit_mask = (1 << POWER_GPIO);
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
-    // configure GPIO with the given settings
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
-*/
+    /*    gpio_config_t io_conf = {};
+        io_conf.intr_type = GPIO_INTR_DISABLE;
+        io_conf.mode = GPIO_MODE_OUTPUT;
+        io_conf.pin_bit_mask = (1 << POWER_GPIO);
+        io_conf.pull_down_en = 0;
+        io_conf.pull_up_en = 0;
+        // configure GPIO with the given settings
+        ESP_ERROR_CHECK(gpio_config(&io_conf));
+    */
     /* create dte object */
     esp_modem_dte_config_t config = ESP_MODEM_DTE_DEFAULT_CONFIG();
     /* setup UART specific configuration based on kconfig options */
-    config.event_task_priority = 6,
-    config.event_task_stack_size = 2048 * 2;
+    config.event_task_priority = 6;
+    // config.event_task_stack_size = 1024 * 4;
     config.tx_io_num = TX_GPIO;
     config.rx_io_num = RX_GPIO;
     config.rts_io_num = -1;
@@ -464,16 +464,16 @@ void radio_task(void *arg)
 
     modem_dte_t *dte = esp_modem_dte_init(&config);
 
+    ESP_LOGI(TAG, "init module NB-IoT");
+
+    // gpio_set_level(POWER_GPIO, 1);
+    // vTaskDelay(pdMS_TO_TICKS(600));
+    // gpio_set_level(POWER_GPIO, 0);
+    // vTaskDelay(pdMS_TO_TICKS(400));
+
     while (1)
     {
-        ESP_LOGI(TAG, "init module NB-IoT");
-
         modem_status[0] = 0;
-
-        gpio_set_level(POWER_GPIO, 1);
-        vTaskDelay(pdMS_TO_TICKS(600));
-        gpio_set_level(POWER_GPIO, 0);
-        // vTaskDelay(pdMS_TO_TICKS(400));
 
         modem_dce_t *dce = NULL;
         dce = bc26_init(dte);
@@ -505,7 +505,7 @@ void radio_task(void *arg)
                     {
                         break;
                     }
-                    
+
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
 
@@ -535,9 +535,8 @@ void radio_task(void *arg)
 
             ESP_LOGI(TAG, "%s", modem_status);
 
-            char tx_buf[1024];
-
-            char buf[1024];
+            char tx_buf[WS_BUF_SIZE + 40];
+            char buf[WS_BUF_SIZE];
 
             // connectID, <local_port>,<socket_state
             int32_t connectID[4] = {-1, 0, 0, 0};
@@ -596,11 +595,13 @@ void radio_task(void *arg)
             }
 
             int len_data = 0;
-            if (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
+            while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
             {
-                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":%d,\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f,\"rssi\":%d}", id, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out, (int)rssi * 2 + -113);
+                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%d.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
+
+                //if (len_data > 127) buf[127] = '\0';
 
                 xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
 
@@ -639,13 +640,12 @@ void radio_task(void *arg)
 
             // dce->sync(dce);
 
-            ESP_LOGI(TAG, "Power down");
+            ESP_LOGW(TAG, "Power down");
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
-
-            vTaskDelay(pdMS_TO_TICKS(300000));
-
+            vTaskDelay(pdMS_TO_TICKS(10000));
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
+            vTaskDelay(pdMS_TO_TICKS(600000));
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }

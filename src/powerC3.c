@@ -1,10 +1,8 @@
+#include "main.h"
 #include <stdio.h>
 #include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "esp_spi_flash.h"
 #include "esp_err.h"
-#include "esp_log.h"
 #include "esp_partition.h"
 
 #include "driver/adc.h"
@@ -12,13 +10,9 @@
 //#include "esp_adc_cal.h"
 #include "esp_rom_sys.h"
 
-#include "main.h"
-
-#include "esp_log.h"
-
 #include "soc/apb_saradc_reg.h"
 
-RTC_DATA_ATTR int last_chan = 0;
+// RTC_DATA_ATTR int last_chan;
 
 #define ADC_COUNT_READ 5
 #define ADC_FREQ 50000
@@ -27,9 +21,6 @@ RTC_DATA_ATTR int last_chan = 0;
 uint32_t bufferADC[DATALEN];
 uint32_t bufferR[2][DATALEN / ADC_COUNT_READ];
 
-//результат измерений
-result_t result = {};
-
 typedef struct
 {
     adc1_channel_t channel;
@@ -37,7 +28,7 @@ typedef struct
     int max;
 } measure_t;
 
-#define SWAP_ADC1_0 1
+//#define SWAP_ADC1_0 1
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
@@ -59,7 +50,7 @@ const measure_t chan_r[] = {
 
 //#define ADC_DMA 4
 
-extern menu_t menu[];
+// extern menu_t menu[];
 
 extern int BattLow;
 
@@ -278,6 +269,78 @@ static void continuous_adc_init()
     t3 = esp_timer_get_time();
 }
 
+int terminal_mode = -1;
+void btn_task(void *arg)
+{
+    /*
+    gpio_config_t io_input_conf = {
+        .intr_type = GPIO_PIN_INTR_DISABLE, // disable interrupt
+        .mode = GPIO_MODE_INPUT,            // input mode
+        .pin_bit_mask = (1 << BTN_PIN),     // bit mask of the input pins
+        .pull_down_en = 0,                  // disable pull-down mode
+        .pull_up_en = 0,                    // disable pull-down mode
+    };
+    gpio_config(&io_input_conf);
+*/
+    gpio_reset_pin(BTN_PIN);
+    gpio_set_direction(BTN_PIN, GPIO_MODE_INPUT);
+
+    int old_btn_state = gpio_get_level(BTN_PIN);
+    int new_btn_state = old_btn_state;
+
+    while (1)
+    {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        new_btn_state = gpio_get_level(BTN_PIN);
+
+        if (old_btn_state != new_btn_state)
+        {
+            old_btn_state = new_btn_state;
+            if (new_btn_state == 0)
+            {
+                // ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 1));
+                // pcf8575_set(1 | (1 << NB_PWR_BIT));
+                // ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+            }
+            else
+            {
+                // ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                // pcf8575_set((1 << NB_PWR_BIT));
+                // ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
+                start_measure();
+            }
+        }
+
+        //работа с терминалом
+        int ch = EOF;
+        int cmd = EOF;
+        do
+        {
+            cmd = ch;
+            ch = fgetc(stdin);
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        } while (ch != EOF);
+
+        if (cmd != EOF)
+        {
+            // ESP_LOGI("terminal", "read: %x", cmd);
+            if (cmd == '\n')
+            {
+                if (terminal_mode == -1)
+                {
+                    terminal_mode = 0;
+                    ESP_LOGI("terminal", "Вывод в терминал включен");
+                }
+                else
+                {
+                    terminal_mode = -1;
+                    ESP_LOGW("terminal", "Вывод в терминал отключен");
+                }
+            }
+        }
+    }
+}
+
 void dual_adc(void *arg)
 {
 
@@ -290,7 +353,7 @@ void dual_adc(void *arg)
 
     cmd_t cmd;
     cmd.cmd = 0;
-    cmd.power = 0;
+    cmd.channel = 0;
 
     // disable interrupt
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -302,15 +365,15 @@ void dual_adc(void *arg)
     // configure GPIO with the given settings
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-    /*
-        io_conf.mode = GPIO_MODE_OUTPUT;
-        io_conf.pin_bit_mask = (1 << POWER_PIN);
-        ESP_ERROR_CHECK(gpio_config(&io_conf));
-        ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 0));
-    */
+
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.pin_bit_mask = (1 << LED_PIN);
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
 
     while (1)
     {
+        vTaskDelay(1);
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
         reset_sleep_timeout();
@@ -335,13 +398,11 @@ void dual_adc(void *arg)
         int adcUbattEnd = (menu[13].val * 1000 - menu[9].val) / menu[8].val;
 
         // int64_t time_off = 0;
-
         // adc_select(1);
 
         //подаем питание на источник питания, OpAmp, делитель АЦП батареи
-        // ESP_ERROR_CHECK(gpio_set_level(POWER_PIN, 1));
-
-        power_on(cmd.power);
+        pcf8575_set((1 << (cmd.channel - 1)));// | (1 << NB_PWR_BIT));
+        ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 1));
 
         ESP_ERROR_CHECK(adc_digi_start());
 
@@ -366,6 +427,7 @@ void dual_adc(void *arg)
                 {
                     //включаем источник питания
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                    // printf("on\n");
                     ptr_on = ptr;
                 }
             }
@@ -378,6 +440,7 @@ void dual_adc(void *arg)
                     {
                         //ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
+                        // printf("off 1\n");
                         ptr_off = ptr;
                         // time_off = esp_timer_get_time();
                         // printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
@@ -421,7 +484,9 @@ void dual_adc(void *arg)
                             //прекращаем измерения
                             //ВЫРУБАЕМ
                             gpio_set_level(ENABLE_PIN, 1);
-                            printf("UbattEnd: %d(%d)\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg);
+                            // printf("off 2\n");
+                            if (terminal_mode >= 0)
+                                printf("UbattEnd: %d(%d)\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg);
                             BattLow += 100;
                             break;
                         }
@@ -430,10 +495,12 @@ void dual_adc(void *arg)
                             BattLow += 1;
                             if (BattLow > 10)
                             {
-                                //прекращаем измерения
-                                printf("UbattLow: %d(%d):%d\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg, BattLow);
                                 //ВЫРУБАЕМ
                                 gpio_set_level(ENABLE_PIN, 1);
+                                // printf("off 3\n");
+                                //прекращаем измерения
+                                if (terminal_mode >= 0)
+                                    printf("UbattLow: %d(%d):%d\n", voltBatt(sum_avg_batt / count_avg), sum_avg_batt / count_avg, BattLow);
                                 break;
                             }
                         }
@@ -443,6 +510,7 @@ void dual_adc(void *arg)
                         {
                             //ВЫРУБАЕМ
                             gpio_set_level(ENABLE_PIN, 1);
+                            // printf("off 4\n");
                             ptr_off = ptr;
                             time_off = esp_timer_get_time();
                             // printf("off: %d, adcU_limit: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_BLOCK * 4), adcU_limit);
@@ -496,29 +564,32 @@ void dual_adc(void *arg)
                 repeate_test--;
                 //включаем источник питания
                 ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                // printf("on r\n");
                 t1 = esp_timer_get_time();
                 ptr_on = ptr;
                 ptr_off = (uint8_t *)bufferADC;
             }
         } while (ptr < (uint8_t *)&bufferADC[DATALEN] - ADC_BLOCK);
 
-        // gpio_set_level(POWER_PIN, 0);
-        power_off();
+        //выключаем питание
+        pcf8575_set((1 << POWER_BIT));
+        gpio_set_level(LED_PIN, 0);
 
         ESP_ERROR_CHECK(adc_digi_stop());
         ESP_ERROR_CHECK(adc_digi_deinitialize());
 
-        processBuffer(ptr, ptr_chan, ptr_off, ptr_on);
+        processBuffer(ptr, ptr_chan, ptr_off, ptr_on, cmd.channel);
 
-        xEventGroupSetBits(ready_event_group, END_MEASURE);
+        if (uxQueueMessagesWaiting(uicmd_queue) == 0)
+            xEventGroupSetBits(ready_event_group, END_MEASURE);
 
         // printf("Time:\n3 block: %lld\n3 block off: %lld\noff: %lld\n", t2 - t1, t3 - t2, time_off - t1);
     };
 }
 
-void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t *ptr_on)
+void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t *ptr_on, int channel)
 {
-    char buf[WS_BUF_LINE];
+    char buf[WS_BUF_SIZE];
 
     adc_digi_output_data_t *p = (void *)bufferADC;
     int n = 0;
@@ -562,6 +633,13 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int sum_full_adc3 = 0;
     int sum_full_adc4 = 0;
 
+    int last_chan = 0;
+
+    int skip_data_count = 0;
+
+    //результат измерений
+    result_t result = {.channel = channel};
+
     // int block_measure = 0;
 
     /*    while ((uint8_t *)p < endptr)
@@ -578,7 +656,8 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     // sprintf(buf, "off %d, adc %d", (ptr_off - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4), (ptr_chan - (uint8_t *)bufferADC) / (sizeof(chan_r) / sizeof(chan_r[0]) * 4));
     //  xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
     // printf("%s\n", buf);
-    printf("on: %d, off: %d, last_chan: %d\n", (ptr_on - (uint8_t *)bufferADC) / (ADC_COUNT_READ * 4), (ptr_off - (uint8_t *)bufferADC) / (ADC_COUNT_READ * 4), last_chan);
+    if (terminal_mode >= 0)
+        printf("on: %d, off: %d\n", (ptr_on - (uint8_t *)bufferADC) / (ADC_COUNT_READ * 4), (ptr_off - (uint8_t *)bufferADC) / (ADC_COUNT_READ * 4));
 
     int adc0 = 0; //Первый канал
     int adc1 = 0; //Напряжение
@@ -587,6 +666,9 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
     int adc4 = 0;
 
     int pre_data0 = 0;
+
+    //пропуск 50 значений для среднего АЦП
+    int skip_full_summ = 50;
 
     while ((uint8_t *)p < endptr)
     {
@@ -686,12 +768,15 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 adc3 = (p + 3)->type2.data;
                 adc4 = (p + 4)->type2.data;
 #endif
-                sum_n_adc++;
-                sum_full_adc0 += adc0;
-                sum_full_adc1 += adc1;
-                sum_full_adc2 += adc2;
-                sum_full_adc3 += adc3;
-                sum_full_adc4 += adc4;
+                if (skip_full_summ-- <= 0)
+                {
+                    sum_n_adc++;
+                    sum_full_adc0 += adc0;
+                    sum_full_adc1 += adc1;
+                    sum_full_adc2 += adc2;
+                    sum_full_adc3 += adc3;
+                    sum_full_adc4 += adc4;
+                }
 
                 sum_n++;
                 sum_adcI0 += adc0;
@@ -733,9 +818,11 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
             }
             else
             {
-                printf("skip %d-%d %d-%d %d-%d %d-%d %d-%d\n", p->type2.unit, p->type2.channel,
-                       (p + 1)->type2.unit, (p + 1)->type2.channel, (p + 2)->type2.unit, (p + 2)->type2.channel,
-                       (p + 3)->type2.unit, (p + 3)->type2.channel, (p + 4)->type2.unit, (p + 4)->type2.channel);
+                skip_data_count++;
+                if (terminal_mode >= 0)
+                    printf("skip %d-%d %d-%d %d-%d %d-%d %d-%d\n", p->type2.unit, p->type2.channel,
+                           (p + 1)->type2.unit, (p + 1)->type2.channel, (p + 2)->type2.unit, (p + 2)->type2.channel,
+                           (p + 3)->type2.unit, (p + 3)->type2.channel, (p + 4)->type2.unit, (p + 4)->type2.channel);
                 // fflush(stdout);
                 p++;
                 sum_n = 0;
@@ -778,10 +865,11 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
             // sprintf(buf, "%5d(%2d)(%2d;%2d), %4d(%d), %5d, %4d, %5d, %4d, %5d, %4d, %5d", sum_first_p, sum_n, block_off, block_0db, adc1, adc1ch, sum_avg_c / sum_n,
             //         adc2, sum_avg_u / sum_n / 1000, adc3, sum_avg_batt / sum_n, adc4, sum_avg_u0 / sum_n);
             //            f_id cnt  adc0:R0  adc1:U     adc2:R1  adc3:Ubat adc4:U0
-            sprintf(buf, "%5d(%2d), %4d:%5d, %4d:%5.2f, %4d:%5d, %4d:%5.3f, %4d:%5.2f, (%d)", sum_first_p, sum_n, sum_adcI0 / sum_n, sum_avg_r0 / sum_n_r0, sum_adcU / sum_n, (float)sum_avg_u / sum_n / 1000,
-                    sum_adcI1 / sum_n, sum_avg_r1 / sum_n_r1, adc3, (float)sum_avg_batt / sum_n / 1000, adc4, (float)sum_avg_u0 / sum_n / 1000, block_off);
-            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
-            printf("%s\n", buf);
+            snprintf(buf, sizeof(buf), "%5d(%2d), %4d:%5d, %4d:%5.2f, %4d:%5d, %4d:%5.3f, %4d:%5.2f, (%d)", sum_first_p, sum_n, sum_adcI0 / sum_n, sum_avg_r0 / sum_n_r0, sum_adcU / sum_n, (float)sum_avg_u / sum_n / 1000,
+                     sum_adcI1 / sum_n, sum_avg_r1 / sum_n_r1, adc3, (float)sum_avg_batt / sum_n / 1000, adc4, (float)sum_avg_u0 / sum_n / 1000, block_off);
+            // xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+            if (terminal_mode >= 0)
+                printf("%s\n", buf);
 
             if (block_off > 0)
             {
@@ -789,25 +877,21 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
                 {
 #if ADC_COUNT_READ > 2
                     //Выбираем канал измерения
-                    if (last_chan == 0 && sum_adcI0 / sum_n < (75000 - menu[5].val) * 10 / menu[4].val) // < 75мкА >6,6MOm
+                    if (sum_adcI0 / sum_n < (110000 - menu[5].val) * 10 / menu[4].val) // < 110мкА > 4.5MOm
                     {
                         last_chan = 1;
-                        printf("select chan 1: %d < %d\n", sum_adcI0 / sum_n, (50000 - menu[5].val) * 10 / menu[4].val);
-                    }
-
-                    if (last_chan == 1 && sum_adcI1 / sum_n > (250000 - menu[7].val) * 10 / menu[6].val) // > 250мкА <2MOm
-                    {
-                        last_chan = 0;
-                        printf("select chan 0: %d > %d\n", sum_adcI1 / sum_n, (250000 - menu[7].val) * 10 / menu[6].val);
+                        // printf("select chan 1: %d < %d\n", sum_adcI0 / sum_n, (50000 - menu[5].val) * 10 / menu[4].val);
                     }
 #endif
                     if (last_chan == 1)
                     {
                         result.R = sum_avg_r1 / sum_n_r1;
+                        // ESP_LOGI("processBuffer", "Chan: %d Result R:%d", last_chan, result.R);
                     }
                     else
                     {
                         result.R = sum_avg_r0 / sum_n_r0;
+                        // ESP_LOGI("processBuffer", "Chan: %d Result R:%d", last_chan, result.R);
                     }
 
                     result.U = sum_avg_u / sum_n / 1000;
@@ -859,7 +943,11 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_chan, uint8_t *ptr_off, uint8_t
 
     xQueueSend(send_queue, (void *)&result, (portTickType)0);
 
-    printf("adc0: %d, adc1: %d, adc2: %d, adc3: %d, adc4: %d\n", sum_full_adc0 / sum_n_adc, sum_full_adc1 / sum_n_adc, sum_full_adc2 / sum_n_adc, sum_full_adc3 / sum_n_adc, sum_full_adc4 / sum_n_adc);
+    printf("adc0: %d, adc1: %d, adc2: %d, adc3: %d, adc4: %d, skip error: %d\n", sum_full_adc0 / sum_n_adc, sum_full_adc1 / sum_n_adc, sum_full_adc2 / sum_n_adc, sum_full_adc3 / sum_n_adc, sum_full_adc4 / sum_n_adc, skip_data_count);
+
+    snprintf((char *)buf, sizeof(buf), "\"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d", result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0);
+    xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+    printf("Result: %s\n", buf);
 
     return;
 }

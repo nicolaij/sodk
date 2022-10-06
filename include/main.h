@@ -1,6 +1,10 @@
-#pragma once
+#ifndef MAIN_H_
+#define MAIN_H_
 
 #include <string.h>
+
+//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG - не работает 
+#include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -8,12 +12,7 @@
 #include "freertos/semphr.h"
 #include "freertos/event_groups.h"
 
-#include "esp_log.h"
-
 #define DATALEN 20000
-
-#define I2C_MASTER_NUM 0          //  I2C port number for master dev
-#define I2C_MASTER_FREQ_HZ 400000 //  I2C master clock frequency
 
 #define RESET_BIT 0x1
 #define SLEEP_BIT 0x2
@@ -33,26 +32,25 @@
 #elif CONFIG_IDF_TARGET_ESP32C3
 
 #define ENABLE_PIN 19
+#define LED_PIN 18
+#define BTN_PIN GPIO_NUM_9
 
 #if MULTICHAN
-    #define I2C_MASTER_SDA_PIN 8
-    #define I2C_MASTER_SCL_PIN 10
-    #define POWER_BIT 8
-    #define NB_PWR_BIT 9
-    #define PSM_BIT 10
-#else
-    #define POWER_PIN 18
-    #define BTN_GPIO 9
+#define I2C_MASTER_SDA_PIN 8
+#define I2C_MASTER_SCL_PIN 10
+#define POWER_BIT 8
+#define NB_PWR_BIT 9
+#define PSM_BIT 10
 #endif
 
 #endif
 
-#define WS_BUF_LINE 128
+#define WS_BUF_SIZE 160
 
 typedef struct
 {
     int cmd;
-    int power;
+    int channel; //оптопара
 } cmd_t;
 
 typedef struct
@@ -65,6 +63,7 @@ typedef struct
     int Ubatt0;
     int Ubatt1;
     int U0;
+    int channel;
 } result_t;
 
 #define PWM_MIN 0
@@ -83,11 +82,13 @@ typedef enum
 typedef struct
 {
     const char id[10];
-    const char name[32];
+    const char name[48];
     int32_t val;
     int32_t min;
     int32_t max;
 } menu_t;
+
+extern menu_t menu[20];
 
 QueueHandle_t uicmd_queue;
 QueueHandle_t adc1_queue;
@@ -108,6 +109,7 @@ EventGroupHandle_t ready_event_group;
 #define END_UI_SLEEP BIT4
 
 extern RTC_DATA_ATTR int bootCount;
+extern int terminal_mode;
 
 void ui_task(void *arg);
 void dual_adc(void *arg);
@@ -115,6 +117,8 @@ void btn_task(void *arg);
 void clock_task(void *arg);
 void wifi_task(void *arg);
 void radio_task(void *arg);
+
+void btn_task(void *arg);
 
 int current(int adc);
 int volt(int adc);
@@ -133,10 +137,13 @@ void reset_sleep_timeout(void);
 
 void cur_time(char *buf);
 
-void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on);
+void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on, int channel);
 
 int getADC_Data(char *line, uint8_t **ptr_adc, int *num);
 
-void power_on(int channel);
-void power_off(void);
+// void power_on(int channel_mask);
+// void power_off(void);
+void pcf8575_set(uint16_t channel_mask);
 
+void start_measure(void);
+#endif

@@ -192,10 +192,10 @@ void radio_task(void *arg)
 
         while (lora_received())
         {
-            x = lora_receive_packet(buf, sizeof(buf));
+            x = lora_receive_packet(buf, sizeof(buf) - 28);
             buf[x] = 0;
             // printf("Received: \"%s\" Len: %d RSSI: %d\n", buf, x, rssi);
-            if (x > 10 && x < 200)
+            if (x > 10 && x < sizeof(buf))
             {
                 if (buf[x - 1] == '}')
                 {

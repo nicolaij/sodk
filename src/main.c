@@ -1,3 +1,5 @@
+#include "main.h"
+
 #include <stdio.h>
 #include "esp_system.h"
 #include "esp_spi_flash.h"
@@ -5,7 +7,6 @@
 #include "driver/gpio.h"
 #include "esp_sleep.h"
 
-#include "main.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
@@ -28,28 +29,32 @@ TaskHandle_t xHandleRadio = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
 
+int i2c_err = 1;
+
+static i2c_dev_t pcf8575;
+
 menu_t menu[] = {
-    {.id = "pulse", .name = "Импульс", .val = 30, .min = 0, .max = 10000},
+    {.id = "pulse", .name = "Время импульса", .val = 100, .min = 0, .max = 10000},
     {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 0, .max = 1000},
-    {.id = "kU", .name = "коэф. U", .val = 1630, .min = 1, .max = 10000},
-    {.id = "offsU", .name = "смещ. U", .val = -5100, .min = -100000, .max = 100000},
-    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 15540, .min = 1, .max = 100000},
-    {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -35000, .min = -100000, .max = 100000},
-    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 1380, .min = 1, .max = 100000},
-    {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = -5100, .min = -100000, .max = 100000},
-    {.id = "kUbat", .name = "коэф. U bat", .val = 3970, .min = 1, .max = 10000},
-    {.id = "offsUbat", .name = "смещ. U bat", .val = 0, .min = -100000, .max = 100000},
-    {.id = "kU0", .name = "коэф. U петли", .val = 1620, .min = 1, .max = 10000}, /*10*/
-    {.id = "offsU0", .name = "смещ. U петли", .val = -3000, .min = -100000, .max = 100000},
-    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 9000, .min = 0, .max = 12000},
-    {.id = "UbatEnd", .name = "U bat отключения", .val = 8700, .min = 0, .max = 12000},
+    {.id = "kU", .name = "коэф. U", .val = 1690, .min = 1, .max = 10000},
+    {.id = "offsU", .name = "смещ. U", .val = -7794, .min = -100000, .max = 100000},
+    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 15000, .min = 1, .max = 100000},
+    {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -7925, .min = -100000, .max = 100000},
+    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 319, .min = 1, .max = 100000},
+    {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = -1729, .min = -100000, .max = 100000},
+    {.id = "kUbat", .name = "коэф. U bat", .val = 5005, .min = 1, .max = 10000},
+    {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -100000, .max = 100000},
+    {.id = "kU0", .name = "коэф. U петли", .val = 1611, .min = 1, .max = 10000}, /*10*/
+    {.id = "offsU0", .name = "смещ. U петли", .val = -539, .min = -100000, .max = 100000},
+    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
+    {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
     {.id = "repeat", .name = "Кол-во повт. имп.", .val = 0, .min = 0, .max = 6},
     {.id = "avgcnt", .name = "Кол-во усред. рез.", .val = 20, .min = 1, .max = 1000}, /*17*/
+    {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 9999},
+    {.id = "test", .name = " ", .val = 1, .min = 0, .max = 1},
 };
-
-static i2c_dev_t pcf8575;
 
 int read_nvs_menu()
 {
@@ -62,7 +67,7 @@ int read_nvs_menu()
     }
     else
     {
-        for (int i = 0; i < sizeof(menu) / sizeof(menu[0]); i++)
+        for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
         {
             err = nvs_get_i32(my_handle, menu[i].id, &menu[i].val);
             switch (err)
@@ -83,17 +88,31 @@ int read_nvs_menu()
     }
     return err;
 }
-
-void power_on(int channel)
+/*
+void power_on(int channel_mask)
 {
-    uint16_t port_val = ~(1 << channel);
-    ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
+    if (i2c_err)
+        return;
+    uint16_t port_val = ~(channel_mask | (1 << NB_PWR_BIT));
+    // ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
+    pcf8575_port_write(&pcf8575, port_val);
 }
 
 void power_off(void)
 {
-    uint16_t port_val = ~(1 << POWER_BIT);
-    ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
+    if (i2c_err)
+        return;
+    uint16_t port_val = ~((1 << POWER_BIT) | (1 << NB_PWR_BIT));
+    // ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
+    pcf8575_port_write(&pcf8575, port_val);
+}
+*/
+void pcf8575_set(uint16_t channel_mask)
+{
+    if (i2c_err)
+        return;
+    uint16_t port_val = ~(channel_mask);
+    pcf8575_port_write(&pcf8575, port_val);
 }
 
 void go_sleep(void)
@@ -128,6 +147,27 @@ void go_sleep(void)
     fflush(stdout);
 
     esp_deep_sleep(time_in_us);
+}
+
+void start_measure()
+{
+    cmd_t cmd;
+    cmd.cmd = 3;
+    cmd.channel = 1;
+
+#if MULTICHAN
+    int pos = 1000;
+    while (pos > 0)
+    {
+        cmd.channel = (menu[18].val % (pos * 10)) / pos;
+        if (cmd.channel > 0)
+            xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+
+        pos /= 10;
+    }
+#else
+    xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+#endif
 }
 
 void app_main()
@@ -234,6 +274,27 @@ void app_main()
 
 #if MULTICHAN
 
+    gpio_config_t io_conf = {};
+
+    // disable interrupt
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    // set as output mode
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = (1 << I2C_MASTER_SDA_PIN) | (1 << I2C_MASTER_SCL_PIN);
+    io_conf.pull_down_en = 0;
+    io_conf.pull_up_en = 0;
+    // configure GPIO with the given settings
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+
+    if (gpio_get_level(I2C_MASTER_SDA_PIN) == 1 && gpio_get_level(I2C_MASTER_SCL_PIN) == 1)
+    {
+        i2c_err = 0;
+    }
+    else
+    {
+        ESP_LOGE("i2c", "pcf8575 not found!");
+    }
+
     // Init i2cdev library
     ESP_ERROR_CHECK(i2cdev_init());
 
@@ -243,16 +304,17 @@ void app_main()
     // Init i2c device descriptor
     ESP_ERROR_CHECK(pcf8575_init_desc(&pcf8575, PCF8575_I2C_ADDR_BASE, 0, I2C_MASTER_SDA_PIN, I2C_MASTER_SCL_PIN));
 
-    power_off();
+    //отключаем питание АЦП, включаем NBIOT
+    pcf8575_set((1 << POWER_BIT) | (1 << NB_PWR_BIT));
 
 #endif
 
     uicmd_queue = xQueueCreate(4, sizeof(cmd_t));
     adc1_queue = xQueueCreate(2, sizeof(result_t));
 
-    send_queue = xQueueCreate(2, sizeof(result_t));
+    send_queue = xQueueCreate(4, sizeof(result_t));
 
-    ws_send_queue = xQueueCreate(512, WS_BUF_LINE);
+    ws_send_queue = xQueueCreate(8, WS_BUF_SIZE);
 
     // i2c_mux = xSemaphoreCreateMutex();
 
@@ -266,20 +328,24 @@ void app_main()
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 #else
-    xTaskCreate(radio_task, "radio_task", 1024 * 8, NULL, 5, &xHandleRadio);
+
+    //ждем включения NBIOT модуля
+    // vTaskDelay(600 / portTICK_PERIOD_MS);
+    // pcf8575_set((1 << POWER_BIT) | (1 << NB_PWR_BIT));
+
+    xTaskCreate(radio_task, "radio_task", 1024 * 6, NULL, 5, &xHandleRadio);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
+        vTaskDelay(4000 / portTICK_PERIOD_MS);
     };
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 7, NULL);
 #endif
 
-    cmd_t cmd;
-    cmd.cmd = 3;
-    cmd.power = 0;
-    xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+    xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
+
+    start_measure();
 
     // BIT0 - окончание измерения
     // BIT1 - окончание передачи
@@ -289,7 +355,7 @@ void app_main()
         END_MEASURE,       /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        5000 / portTICK_PERIOD_MS);
+        20000 / portTICK_PERIOD_MS);
 
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {

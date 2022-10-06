@@ -8,11 +8,9 @@
 */
 #include "main.h"
 
-#include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
-#include "esp_log.h"
 #include "nvs_flash.h"
 
 #include "lwip/err.h"
@@ -23,7 +21,9 @@
 
 #include "esp_spiffs.h"
 
-extern menu_t menu[];
+#include "driver/uart.h"
+
+// extern menu_t menu[];
 extern uint8_t mac[6];
 extern char modem_status[128];
 
@@ -292,7 +292,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
         "<tr><td><label for='bw'>Signal bandwidth:</label></td><td><select name='bw' id='bw'>",
         "</select></td></tr>"};
 
-    const char *lora_set_bw_options[10][3] = {
+    const char *lora_set_bw_options[][3] = {
         {"<option value=", "0", ">7.8 kHz</option>"},
         {"<option value=", "1", ">10.4 kHz</option>"},
         {"<option value=", "2", ">15.6 kHz</option>"},
@@ -318,13 +318,12 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     char param[32];
 
-    /* Read URL query string length and allocate memory for length + 1,
-     * extra byte for null termination */
-    buf_len = httpd_req_get_url_query_len(req) + 1;
+    /* Read URL query string length */
+    buf_len = httpd_req_get_url_query_len(req);
+
     if (buf_len > 1 && buf_len < sizeof(buf))
     {
-        // buf = malloc(buf_len);
-        if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
+        if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK)
         {
             ESP_LOGI(TAGH, "Found URL query => %s", buf);
 
@@ -336,7 +335,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
                 save = true;
             }
 
-            for (int i = 0; i < 18; i++)
+            for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
             {
                 if (httpd_query_key_value(buf, menu[i].id, param, 7) == ESP_OK)
                 {
@@ -476,6 +475,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
             //}
         }
     }
+
     // httpd_resp_set_hdr(req, "Connection", "close");
     httpd_resp_sendstr_chunk(req, head);
 
@@ -486,9 +486,9 @@ static esp_err_t settings_handler(httpd_req_t *req)
     strlcat(buf, sodkstartform2, sizeof(buf));
 
     httpd_resp_sendstr_chunk(req, buf);
-    buf[0] = 0;
+    buf[0] = '\0';
 
-    for (int i = 0; i < 18; i++)
+    for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
     {
         if (i % 2 == 0)
             strlcat(buf, "\n<tr>", sizeof(buf));
@@ -512,7 +512,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
         if (strlen(buf) > sizeof(buf) / 2)
         {
             httpd_resp_sendstr_chunk(req, buf);
-            buf[0] = 0;
+            buf[0] = '\0';
         }
     }
     strlcat(buf, sodkend, sizeof(buf));
@@ -540,7 +540,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, nb_set_port[1], sizeof(buf));
 
-    //status
+    // status
     strlcat(buf, "<tr><td>Status:</td><td>", sizeof(buf));
     strlcat(buf, modem_status, sizeof(buf));
     strlcat(buf, "</tr>", sizeof(buf));
@@ -777,11 +777,11 @@ static esp_err_t ws_handler(httpd_req_t *req)
 {
     if (req->method == HTTP_GET)
     {
-        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
+        ESP_LOGI(TAG, "WS handshake done, the new connection was opened");
         return ESP_OK;
     }
 
-    uint8_t bf[128] = {0};
+    uint8_t bf[WS_BUF_SIZE] = {0};
     httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
     ws_pkt.payload = bf;
@@ -886,7 +886,7 @@ static httpd_handle_t start_webserver(void)
 
 void wifi_task(void *arg)
 {
-    char msg[256];
+    char msg[WS_BUF_SIZE];
 
     ESP_LOGI("SPIFFS", "Initializing SPIFFS");
     esp_vfs_spiffs_conf_t conf = {
@@ -942,7 +942,15 @@ void wifi_task(void *arg)
 
     while (1)
     {
-
+        if (ws_fd > 0)
+        {
+            if (pdTRUE == xQueueReceive(ws_send_queue, msg, 0))
+            {
+                httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, msg);
+                reset_sleep_timeout();
+            }
+        }
+        /*
         if (pdTRUE == xQueueReceive(ws_send_queue, msg, 1000 / portTICK_PERIOD_MS))
         {
             need_ws_send = true;
@@ -954,13 +962,13 @@ void wifi_task(void *arg)
             reset_sleep_timeout();
             need_ws_send = false;
         }
-
+        */
         if (esp_timer_get_time() - timeout_start > (int64_t)menu[15].val * 1000000)
         {
             esp_wifi_stop();
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);
         }
 
-        vTaskDelay(10);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }

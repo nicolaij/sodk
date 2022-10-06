@@ -35,7 +35,7 @@ measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_7, .k = 1750, .max = 20000},
 };
 
-extern menu_t menu[];
+//extern menu_t menu[];
 
 /**
  * @brief debug buffer data

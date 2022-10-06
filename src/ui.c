@@ -19,7 +19,7 @@
 
 static const char *TAG = "ui";
 
-extern menu_t menu[];
+//extern menu_t menu[];
 
 #define MENU_LINES sizeof(menu) / sizeof(menu[0])
 
