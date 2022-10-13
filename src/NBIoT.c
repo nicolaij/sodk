@@ -18,7 +18,7 @@
 
 //#define RX_BUF_SIZE 1024
 
-static EventGroupHandle_t event_group = NULL;
+// static EventGroupHandle_t event_group = NULL;
 
 // char rx_buf[RX_BUF_SIZE];
 // uint8_t buf[WS_BUF_LINE];
@@ -436,7 +436,7 @@ void radio_task(void *arg)
 
     // ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    event_group = xEventGroupCreate();
+    // event_group = xEventGroupCreate();
 
     ESP_LOGI(TAG, "start");
 
@@ -586,7 +586,13 @@ void radio_task(void *arg)
                 if (dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
                     if (dce->state == MODEM_STATE_SUCCESS)
                     {
-                        snprintf((char *)datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d", dt[0], dt[1], dt[2], dt[3] + dt[6], dt[4], dt[5]);
+                        //Прибавляем часам часовой пояс
+                        dt[3] = dt[3] + dt[6];
+                        if (dt[3] > 23)
+                            dt[3] = dt[3] - 24;
+                        if (dt[3] < 0)
+                            dt[3] = dt[3] + 24;
+                        snprintf((char *)datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d", dt[0], dt[1], dt[2], dt[3], dt[4], dt[5]);
                         ESP_LOGI(TAG, "Current date/time: %s", datetime);
                         break;
                     }
@@ -601,32 +607,22 @@ void radio_task(void *arg)
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
 
-                //if (len_data > 127) buf[127] = '\0';
+                // if (len_data > 127) buf[127] = '\0';
+                //xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
 
-                xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
-
-                esp_dce->priv_resource = "SEND";
-                dce->handle_line = esp_modem_dce_handle_response_ok_wait;
-                snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", len_data, buf);
-                dte->send_cmd(dte, tx_buf, 60000);
-
-                /*
-                                //ждем окончания передачи
-                                counter = 10;
-                                while (counter--)
-                                {
-                                    int32_t bytes_len[3] = {-1, 0, 0};
-                                    esp_dce->priv_resource = bytes_len;
-                                    dce->handle_line = esp_modem_dce_handle_response_qisend;
-                                    dte->send_cmd(dte, "AT+QISEND=0,0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
-
-                                    if (bytes_len[0] == bytes_len[2])
-                                    {
-                                        ESP_LOGI(TAG, "Send data OK");
-                                        break;
-                                    }
-                                }
-                */
+                counter = 3;
+                while (counter-- > 0)
+                {
+                    esp_dce->priv_resource = "SEND";
+                    dce->handle_line = esp_modem_dce_handle_response_ok_wait;
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", len_data, buf);
+                    if (dte->send_cmd(dte, tx_buf, 60000) == ESP_OK)
+                        if (dce->state == MODEM_STATE_SUCCESS)
+                        {
+                            break;
+                        };
+                    vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+                }
             }
 
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);

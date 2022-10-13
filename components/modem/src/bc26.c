@@ -146,6 +146,27 @@ err:
     return ESP_FAIL;
 }
 
+esp_err_t esp_modem_dce_handle_response_all_ok1(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+    printf("LINE: %s\nRESOURCE: %s\n", line, (const char *)esp_dce->priv_resource);
+
+    if (!strncmp(line, (const char *)esp_dce->priv_resource, strlen((const char *)esp_dce->priv_resource)))
+    {
+        //err = ESP_OK;
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        //err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        //err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    return err;
+}
 /**
  * @brief Power down
  *
@@ -211,6 +232,19 @@ static esp_err_t esp_modem_dce_handle_response_print(modem_dce_t *dce, const cha
     return err;
 }
 
+static esp_err_t bc26_netlight(modem_dce_t *dce)
+{
+    modem_dte_t *dte = dce->dte;
+    dce->handle_line = esp_modem_dce_handle_response_default;
+    DCE_CHECK(dte->send_cmd(dte, "AT+QLEDMODE=1\r", MODEM_COMMAND_TIMEOUT_POWEROFF) == ESP_OK, "send command failed", err);
+    DCE_CHECK(dce->state == MODEM_STATE_SUCCESS, "power down failed", err);
+    ESP_LOGD(DCE_TAG, "power down ok");
+    return ESP_OK;
+err:
+    return ESP_FAIL;
+}
+
+
 modem_dce_t *bc26_init(modem_dte_t *dte)
 {
     DCE_CHECK(dte, "DCE should bind with a DTE", err);
@@ -240,6 +274,8 @@ modem_dce_t *bc26_init(modem_dte_t *dte)
     DCE_CHECK(esp_modem_dce_echo(&(esp_modem_dce->parent), false) == ESP_OK, "close echo mode failed", err_io);
     /* Get Module name */
     DCE_CHECK(esp_modem_dce_get_module_name(&(esp_modem_dce->parent)) == ESP_OK, "get module name failed", err_io);
+
+    DCE_CHECK(bc26_netlight(&(esp_modem_dce->parent)) == ESP_OK, "netlight failed", err_io);
 
     //ждем регистрации в сети
     uint32_t n = 0;

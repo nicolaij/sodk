@@ -31,7 +31,8 @@ extern char modem_status[128];
 extern int bufferR[DATALEN];
 extern int bufferU[DATALEN];
 #elif CONFIG_IDF_TARGET_ESP32C3
-extern int bufferADC[DATALEN];
+extern uint32_t bufferADC[DATALEN];
+extern uint32_t bufferRb[3][DATALEN * 4 / ADC_BUFFER];
 #endif
 
 /* The examples use WiFi configuration that you can set via project configuration menu
@@ -268,7 +269,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *nbiotstart = "<form><fieldset><legend>NB-IoT</legend><table>";
     const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
-    const char *tail = "<p><a href=\"/d?end=10000\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a></p>"
+    const char *tail = "<p><a href=\"/d?end=10000\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=2\">График R</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
                        "socket.onopen = function(){socket.send(\"open ws\");};\n"
@@ -337,7 +338,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
             for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
             {
-                if (httpd_query_key_value(buf, menu[i].id, param, 7) == ESP_OK)
+                if (httpd_query_key_value(buf, menu[i].id, param, 10) == ESP_OK)
                 {
                     int p = atoi(param);
                     if (menu[i].val != p && p >= menu[i].min && p <= menu[i].max)
@@ -345,6 +346,8 @@ static esp_err_t settings_handler(httpd_req_t *req)
                         param_change = true;
 
                         menu[i].val = p;
+
+                        // printf("Param %s = %d\n", menu[i].id, menu[i].val);
 
                         nvs_handle_t my_handle;
                         esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
@@ -683,21 +686,38 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     reset_sleep_timeout();
 
     char line[128];
-    int limitADCData = 0;
+    int limitData = 0;
+    int mode = 0;
 
     if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK)
+    {
         if (httpd_query_key_value(buf, "end", line, 6) == ESP_OK)
         {
-            limitADCData = atoi(line);
+            limitData = atoi(line);
         }
+        if (httpd_query_key_value(buf, "mode", line, 6) == ESP_OK)
+        {
+            mode = atoi(line);
+        }
+    }
 
-    //по умолчанию 500 строк
-    if (limitADCData == 0)
-        limitADCData = 500;
+    if (mode == 2)
+    {
+        if (limitData <= 0 || limitData >= (DATALEN * 4 / ADC_BUFFER))
+            limitData = (DATALEN * 4 / ADC_BUFFER) - 1;
+    }
+    else
+    {
+        //по умолчанию 500 строк
+        if (limitData == 0)
+            limitData = 500;
+    }
 
     char header[96] = "attachment; filename=\"";
-    // strlcat(header, line, sizeof(header));
-    strlcat(header, "ADCdata.txt\"", sizeof(header));
+    if (mode == 2)
+        strlcat(header, "SODKdata.txt\"", sizeof(header));
+    else
+        strlcat(header, "ADCdata.txt\"", sizeof(header));
 
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_set_hdr(req, "Content-Disposition", header);
@@ -709,40 +729,68 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     int l = 0;
     int n = 0;
 
-#if CONFIG_IDF_TARGET_ESP32C3
-    while (getADC_Data(line, &ptr_adc, &n) > 0)
+    if (mode == 2)
     {
-        l = strlcat(buf, line, sizeof(buf));
-        if (l > (sizeof(buf) - sizeof(line)))
+        strlcpy(buf, "id, adc0, adc1, adc2\n", sizeof(buf));
+        while (n++ < limitData)
         {
-            // printf("l: %d, ", l);
-
-            /* Send the buffer contents as HTTP response chunk */
-            if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
+            snprintf(line, sizeof(line), "%d,%d,%d,%d\n", n, bufferRb[0][n], bufferRb[2][n], bufferRb[1][n]);
+            l = strlcat(buf, line, sizeof(buf));
+            if (l > (sizeof(buf) - sizeof(line)))
             {
-                ESP_LOGE(TAG, "File sending failed!");
-                /* Abort sending file */
-                httpd_resp_sendstr_chunk(req, NULL);
-                /* Respond with 500 Internal Server Error */
-                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
-                return ESP_FAIL;
+                // printf("l: %d, ", l);
+
+                /* Send the buffer contents as HTTP response chunk */
+                if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
+                {
+                    ESP_LOGE(TAG, "File sending failed!");
+                    /* Abort sending file */
+                    httpd_resp_sendstr_chunk(req, NULL);
+                    /* Respond with 500 Internal Server Error */
+                    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+                    return ESP_FAIL;
+                }
+
+                buf[0] = 0;
+                l = 0;
             }
-
-            buf[0] = 0;
-            l = 0;
-        }
-
-        // if (n++ % 100 == 0)
-        //{
-        //     vTaskDelay(1);
-        // }
-
-        if (n > limitADCData)
-        {
-            break;
         }
     }
-#endif
+    else
+    {
+        while (getADC_Data(line, &ptr_adc, &n) > 0)
+        {
+            l = strlcat(buf, line, sizeof(buf));
+            if (l > (sizeof(buf) - sizeof(line)))
+            {
+                // printf("l: %d, ", l);
+
+                /* Send the buffer contents as HTTP response chunk */
+                if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
+                {
+                    ESP_LOGE(TAG, "File sending failed!");
+                    /* Abort sending file */
+                    httpd_resp_sendstr_chunk(req, NULL);
+                    /* Respond with 500 Internal Server Error */
+                    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+                    return ESP_FAIL;
+                }
+
+                buf[0] = 0;
+                l = 0;
+            }
+
+            // if (n++ % 100 == 0)
+            //{
+            //     vTaskDelay(1);
+            // }
+
+            if (n > limitData)
+            {
+                break;
+            }
+        }
+    }
 
     if (l > 0)
     {
@@ -814,14 +862,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
     return ret;
 }
 
-/* URI handler for getting uploaded files */
-static const httpd_uri_t file_download = {
-    .uri = "/d",
-    .method = HTTP_GET,
-    .handler = download_ADCdata_handler,
-    .is_websocket = false,
-};
-
 static const httpd_uri_t lora_set = {
     .uri = PAGE_LORA_SET,
     .method = HTTP_GET,
@@ -837,6 +877,13 @@ static const httpd_uri_t ws = {
     .handler = ws_handler,
     .user_ctx = NULL,
     .is_websocket = true};
+
+static const httpd_uri_t file_download = {
+    .uri = "/d",
+    .method = HTTP_GET,
+    .handler = download_ADCdata_handler,
+    .is_websocket = false,
+};
 
 static const httpd_uri_t d3_get = {
     .uri = "/d3",

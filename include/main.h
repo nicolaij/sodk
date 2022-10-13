@@ -13,6 +13,9 @@
 #include "freertos/event_groups.h"
 
 #define DATALEN 20000
+#define ADC_COUNT_READ 5
+#define ADC_FREQ 50000
+#define ADC_BUFFER (ADC_FREQ / 1000 * 4) // размер буфера данных для выборки 1 mc
 
 #define RESET_BIT 0x1
 #define SLEEP_BIT 0x2
@@ -91,10 +94,8 @@ typedef struct
 extern menu_t menu[20];
 
 QueueHandle_t uicmd_queue;
-QueueHandle_t adc1_queue;
 QueueHandle_t send_queue;
 QueueHandle_t set_lora_queue;
-
 QueueHandle_t ws_send_queue;
 
 // SemaphoreHandle_t i2c_mux;

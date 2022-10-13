@@ -52,7 +52,7 @@ menu_t menu[] = {
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
     {.id = "repeat", .name = "Кол-во повт. имп.", .val = 0, .min = 0, .max = 6},
     {.id = "avgcnt", .name = "Кол-во усред. рез.", .val = 20, .min = 1, .max = 1000}, /*17*/
-    {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 9999},
+    {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999},
     {.id = "test", .name = " ", .val = 1, .min = 0, .max = 1},
 };
 
@@ -156,7 +156,7 @@ void start_measure()
     cmd.channel = 1;
 
 #if MULTICHAN
-    int pos = 1000;
+    int pos = 100000000;
     while (pos > 0)
     {
         cmd.channel = (menu[18].val % (pos * 10)) / pos;
@@ -305,16 +305,16 @@ void app_main()
     ESP_ERROR_CHECK(pcf8575_init_desc(&pcf8575, PCF8575_I2C_ADDR_BASE, 0, I2C_MASTER_SDA_PIN, I2C_MASTER_SCL_PIN));
 
     //отключаем питание АЦП, включаем NBIOT
-    pcf8575_set((1 << POWER_BIT) | (1 << NB_PWR_BIT));
+    pcf8575_set((1 << POWER_BIT));
 
 #endif
 
-    uicmd_queue = xQueueCreate(4, sizeof(cmd_t));
-    adc1_queue = xQueueCreate(2, sizeof(result_t));
+    uicmd_queue = xQueueCreate(10, sizeof(cmd_t));
+    //adc1_queue = xQueueCreate(2, sizeof(result_t));
 
-    send_queue = xQueueCreate(4, sizeof(result_t));
+    send_queue = xQueueCreate(10, sizeof(result_t));
 
-    ws_send_queue = xQueueCreate(8, WS_BUF_SIZE);
+    ws_send_queue = xQueueCreate(10, WS_BUF_SIZE);
 
     // i2c_mux = xSemaphoreCreateMutex();
 
@@ -330,20 +330,19 @@ void app_main()
 #else
 
     //ждем включения NBIOT модуля
-    // vTaskDelay(600 / portTICK_PERIOD_MS);
-    // pcf8575_set((1 << POWER_BIT) | (1 << NB_PWR_BIT));
+    vTaskDelay(600 / portTICK_PERIOD_MS);
 
     xTaskCreate(radio_task, "radio_task", 1024 * 6, NULL, 5, &xHandleRadio);
-
+    
     if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
     {
         vTaskDelay(4000 / portTICK_PERIOD_MS);
     };
 
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 7, NULL);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 5, NULL, 7, NULL);
 #endif
 
-    xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, 5, NULL);
+    xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, NULL);
 
     start_measure();
 
@@ -374,7 +373,7 @@ void app_main()
         END_TRANSMIT,      /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        120000 / portTICK_PERIOD_MS);
+        90000 / portTICK_PERIOD_MS);
 
     xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
 
