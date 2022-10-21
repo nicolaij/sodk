@@ -438,8 +438,6 @@ void radio_task(void *arg)
 
     // event_group = xEventGroupCreate();
 
-    ESP_LOGI(TAG, "start");
-
     /*
      * Configure CPU hardware to communicate with the radio chip
      */
@@ -465,7 +463,8 @@ void radio_task(void *arg)
     modem_dte_t *dte = esp_modem_dte_init(&config);
 
     ESP_LOGI(TAG, "init module NB-IoT");
-
+    
+    //vTaskDelay(pdMS_TO_TICKS(600));
     // gpio_set_level(POWER_GPIO, 1);
     // vTaskDelay(pdMS_TO_TICKS(600));
     // gpio_set_level(POWER_GPIO, 0);
@@ -601,9 +600,9 @@ void radio_task(void *arg)
             }
 
             int len_data = 0;
-            while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
+            while (pdTRUE == xQueueReceive(send_queue, &result, 10000 / portTICK_PERIOD_MS))
             {
-                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%d.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, tsens_out, (int)rssi * 2 + -113);
+                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%d.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
 
@@ -627,19 +626,12 @@ void radio_task(void *arg)
 
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);
 
-            /*
-                        xResult = xTaskNotifyWait(pdFALSE,
-                                                  ULONG_MAX,
-                                                  &ulNotifiedValue,
-                                                  (portTickType)1000 / portTICK_PERIOD_MS);
-            */
-
-            // dce->sync(dce);
-
             ESP_LOGW(TAG, "Power down");
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
-            vTaskDelay(pdMS_TO_TICKS(10000));
+            vTaskDelay(pdMS_TO_TICKS(1020)); //Turn-Off Timing by AT Command
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
+            xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
+
             vTaskDelay(pdMS_TO_TICKS(600000));
         }
         vTaskDelay(pdMS_TO_TICKS(10000));

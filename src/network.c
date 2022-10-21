@@ -31,8 +31,8 @@ extern char modem_status[128];
 extern int bufferR[DATALEN];
 extern int bufferU[DATALEN];
 #elif CONFIG_IDF_TARGET_ESP32C3
-extern uint32_t bufferADC[DATALEN];
-extern uint32_t bufferRb[3][DATALEN * 4 / ADC_BUFFER];
+// extern uint32_t bufferADC[DATALEN];
+// extern uint32_t bufferRb[3][DATALEN * 4 / ADC_BUFFER];
 #endif
 
 /* The examples use WiFi configuration that you can set via project configuration menu
@@ -79,7 +79,7 @@ static const char *TAGH = "httpd";
 
 static int s_retry_num = 0;
 
-char buf[1440];
+char buf[CONFIG_LWIP_TCP_MSS];
 size_t buf_len;
 
 int64_t timeout_start;
@@ -269,7 +269,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *nbiotstart = "<form><fieldset><legend>NB-IoT</legend><table>";
     const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
-    const char *tail = "<p><a href=\"/d?end=10000\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=2\">График R</a></p>"
+    const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=2&end=500\">График R</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
                        "socket.onopen = function(){socket.send(\"open ws\");};\n"
@@ -703,8 +703,8 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
 
     if (mode == 2)
     {
-        if (limitData <= 0 || limitData >= (DATALEN * 4 / ADC_BUFFER))
-            limitData = (DATALEN * 4 / ADC_BUFFER) - 1;
+        if (limitData <= 0 || limitData >= DATALEN)
+            limitData = DATALEN;
     }
     else
     {
@@ -725,18 +725,18 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
 
     uint8_t *ptr_adc = 0;
 
-    buf[0] = 0;
     int l = 0;
+    int ll = 0;
     int n = 0;
+    buf[0] ='\0';
 
     if (mode == 2)
     {
-        strlcpy(buf, "id, adc0, adc1, adc2\n", sizeof(buf));
-        while (n++ < limitData)
+        while (n < limitData)
         {
-            snprintf(line, sizeof(line), "%d,%d,%d,%d\n", n, bufferRb[0][n], bufferRb[2][n], bufferRb[1][n]);
-            l = strlcat(buf, line, sizeof(buf));
-            if (l > (sizeof(buf) - sizeof(line)))
+            ll = getResult_Data(&buf[l], n);
+            l = l + ll;
+            if (l > (sizeof(buf) - 128))
             {
                 // printf("l: %d, ", l);
 
@@ -751,9 +751,9 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
                     return ESP_FAIL;
                 }
 
-                buf[0] = 0;
                 l = 0;
             }
+            n++;
         }
     }
     else
@@ -779,11 +779,6 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
                 buf[0] = 0;
                 l = 0;
             }
-
-            // if (n++ % 100 == 0)
-            //{
-            //     vTaskDelay(1);
-            // }
 
             if (n > limitData)
             {

@@ -8,7 +8,7 @@
 
 #include <main.h>
 
-uint8_t buf[WS_BUF_LINE];
+uint8_t buf[WS_BUF_SIZE];
 
 // 4. Передача разрешена только в полосах 865,6-865,8 МГц, 866,2-866,4 МГц, 866,8-867,0 МГц и 867,4-867,6 МГц.
 int32_t fr = 867500; // frequency kHz
@@ -161,13 +161,15 @@ void radio_task(void *arg)
     BaseType_t xResult;
     uint32_t ulNotifiedValue;
 
+    lora_receive(); // put into receive mode
+
     while (1)
     {
         /* Ожидание оповещения от прерываний. */
         xResult = xTaskNotifyWait(pdFALSE,          /* Не очищать биты на входе. */
                                   ULONG_MAX,        /* На выходе очищаются все биты. */
                                   &ulNotifiedValue, /* Здесь хранится значение оповещения. */
-                                  (portTickType)2); /* Время таймаута на блокировке. */
+                                  (portTickType)0); /* Время таймаута на блокировке. */
         if (xResult == pdPASS)
         {
             /* Было получено оповещение. Проверка, какие биты установлены. */
@@ -177,18 +179,18 @@ void radio_task(void *arg)
                 lora_set_bandwidth_n(bw);
                 lora_set_spreading_factor(sf);
                 lora_set_tx_power(op);
+                
+                lora_receive(); // put into receive mode
             }
 
             if ((ulNotifiedValue & SLEEP_BIT) != 0)
             {
                 ESP_LOGI(TAG, "lora_sleep");
                 lora_sleep();
-                xEventGroupSetBits(ready_event_group, END_LORA_SLEEP);
+                xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
                 vTaskDelay(10000 / portTICK_PERIOD_MS);
             }
         }
-
-        lora_receive(); // put into receive mode
 
         while (lora_received())
         {
@@ -224,36 +226,11 @@ void radio_task(void *arg)
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
             if (ver == 0x12)
                 lora_send_packet((uint8_t *)buf, l);
+                
+            lora_receive(); // put into receive mode
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);
         }
-
-        gpio_set_pull_mode(BTN_GPIO, GPIO_PULLUP_ONLY);
-        gpio_set_direction(BTN_GPIO, GPIO_MODE_INPUT);
-
-        if (gpio_get_level(BTN_GPIO) == 0)
-        {
-            time_t now;
-            struct tm timeinfo;
-
-            time(&now);
-            localtime_r(&now, &timeinfo);
-            size_t l = strftime((char *)buf, sizeof(buf), "%c", &timeinfo);
-            // lora_send_packet((uint8_t *)buf, l);
-            printf("Press BTN:\"%s\"\n", buf);
-
-            cmd_t cmd;
-            cmd.cmd = 10;
-            cmd.power = 255;
-
-            xQueueSend(uicmd_queue, &cmd, (portTickType)0);
-
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-            // xQueueSend(ws_send_queue, "Проверка связи...", (portTickType)0);
-        }
-
-        gpio_set_direction(CONFIG_CS_GPIO, GPIO_MODE_OUTPUT);
        
-        vTaskDelay(1);
+        vTaskDelay(10);
     }
 }

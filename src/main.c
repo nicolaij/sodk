@@ -14,12 +14,10 @@
 #include "driver/temp_sensor.h"
 #endif
 
-#if MULTICHAN
 #include "pcf8575.h"
-#endif
 
 RTC_DATA_ATTR int bootCount = 0;
-RTC_DATA_ATTR int BattLow = 0; //Признак разряда батареи
+RTC_DATA_ATTR int BattLow = 0; //Счетчик разряда батареи
 
 float tsens_out = 0;
 
@@ -50,8 +48,8 @@ menu_t menu[] = {
     {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
-    {.id = "repeat", .name = "Кол-во повт. имп.", .val = 0, .min = 0, .max = 6},
-    {.id = "avgcnt", .name = "Кол-во усред. рез.", .val = 20, .min = 1, .max = 1000}, /*17*/
+    {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 10, .min = 1, .max = 1000},
+    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 10, .min = 1, .max = 1000}, /*17*/
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999},
     {.id = "test", .name = " ", .val = 1, .min = 0, .max = 1},
 };
@@ -107,6 +105,20 @@ void power_off(void)
     pcf8575_port_write(&pcf8575, port_val);
 }
 */
+
+int pcf8575_read(uint16_t bit)
+{
+    if (i2c_err)
+        return 0;
+
+    uint16_t port_val = UINT16_MAX;
+    pcf8575_port_read(&pcf8575, &port_val);
+    // return port_val;
+    if ((port_val & BIT(bit)) == 0)
+        return 1;
+    return 0;
+}
+
 void pcf8575_set(uint16_t channel_mask)
 {
     if (i2c_err)
@@ -121,16 +133,11 @@ void go_sleep(void)
 #if CONFIG_IDF_TARGET_ESP32
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
 #endif
-    /*
-    #if CONFIG_IDF_TARGET_ESP32C3
-        const gpio_config_t config = {
-            .pin_bit_mask = BIT64(GPIO_NUM_0),
-            .mode = GPIO_MODE_INPUT,
-        };
-        ESP_ERROR_CHECK(gpio_config(&config));
-        ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(GPIO_NUM_0), ESP_GPIO_WAKEUP_GPIO_HIGH));
-    #endif
-    */
+
+#if MULTICHAN
+    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
+#endif
+
     uint64_t time_in_us = menu[14].val * 1000000ULL;
 
     if (BattLow > 200)
@@ -149,11 +156,9 @@ void go_sleep(void)
     esp_deep_sleep(time_in_us);
 }
 
-void start_measure()
+void start_measure(int reasone)
 {
     cmd_t cmd;
-    cmd.cmd = 3;
-    cmd.channel = 1;
 
 #if MULTICHAN
     int pos = 100000000;
@@ -161,11 +166,19 @@ void start_measure()
     {
         cmd.channel = (menu[18].val % (pos * 10)) / pos;
         if (cmd.channel > 0)
-            xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+        {
+            if (cmd.channel == 1)
+                cmd.cmd = reasone;
+            else
+                cmd.cmd = 0;
 
+            xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+        }
         pos /= 10;
     }
 #else
+    cmd.channel = 1;
+    cmd.cmd = reasone;
     xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 #endif
 }
@@ -289,28 +302,28 @@ void app_main()
     if (gpio_get_level(I2C_MASTER_SDA_PIN) == 1 && gpio_get_level(I2C_MASTER_SCL_PIN) == 1)
     {
         i2c_err = 0;
+
+        // Init i2cdev library
+        ESP_ERROR_CHECK(i2cdev_init());
+
+        // Zero device descriptor
+        memset(&pcf8575, 0, sizeof(i2c_dev_t));
+
+        // Init i2c device descriptor
+        ESP_ERROR_CHECK(pcf8575_init_desc(&pcf8575, PCF8575_I2C_ADDR_BASE, 0, I2C_MASTER_SDA_PIN, I2C_MASTER_SCL_PIN));
+
+        //отключаем питание АЦП, включаем NBIOT
+        pcf8575_set(BIT(POWER_BIT));
     }
     else
     {
-        ESP_LOGE("i2c", "pcf8575 not found!");
+        ESP_LOGE("i2c", "i2c bus error state!");
     }
-
-    // Init i2cdev library
-    ESP_ERROR_CHECK(i2cdev_init());
-
-    // Zero device descriptor
-    memset(&pcf8575, 0, sizeof(i2c_dev_t));
-
-    // Init i2c device descriptor
-    ESP_ERROR_CHECK(pcf8575_init_desc(&pcf8575, PCF8575_I2C_ADDR_BASE, 0, I2C_MASTER_SDA_PIN, I2C_MASTER_SCL_PIN));
-
-    //отключаем питание АЦП, включаем NBIOT
-    pcf8575_set((1 << POWER_BIT));
 
 #endif
 
     uicmd_queue = xQueueCreate(10, sizeof(cmd_t));
-    //adc1_queue = xQueueCreate(2, sizeof(result_t));
+    // adc1_queue = xQueueCreate(2, sizeof(result_t));
 
     send_queue = xQueueCreate(10, sizeof(result_t));
 
@@ -333,18 +346,22 @@ void app_main()
     vTaskDelay(600 / portTICK_PERIOD_MS);
 
     xTaskCreate(radio_task, "radio_task", 1024 * 6, NULL, 5, &xHandleRadio);
-    
-    if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
+
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
     {
         vTaskDelay(4000 / portTICK_PERIOD_MS);
     };
 
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 5, NULL, 7, NULL);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 5, NULL, 10, NULL);
+
+    int reasone = 0;
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_GPIO)
+        reasone = 2;
+    start_measure(reasone);
+
 #endif
 
     xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, NULL);
-
-    start_measure();
 
     // BIT0 - окончание измерения
     // BIT1 - окончание передачи
@@ -356,7 +373,7 @@ void app_main()
         pdTRUE,
         20000 / portTICK_PERIOD_MS);
 
-    if (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER)
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
     {
         xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
 
@@ -373,16 +390,16 @@ void app_main()
         END_TRANSMIT,      /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        90000 / portTICK_PERIOD_MS);
+        60000 / portTICK_PERIOD_MS);
 
     xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
 
     xEventGroupWaitBits(
         ready_event_group, /* The event group being tested. */
-        END_LORA_SLEEP,    /* The bits within the event group to wait for. */
+        END_RADIO_SLEEP,    /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        100 / portTICK_PERIOD_MS);
+        1200 / portTICK_PERIOD_MS);
 
     //засыпаем...
     go_sleep();

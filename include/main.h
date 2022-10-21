@@ -12,7 +12,7 @@
 #include "freertos/semphr.h"
 #include "freertos/event_groups.h"
 
-#define DATALEN 20000
+#define DATALEN 2000
 #define ADC_COUNT_READ 5
 #define ADC_FREQ 50000
 #define ADC_BUFFER (ADC_FREQ / 1000 * 4) // размер буфера данных для выборки 1 mc
@@ -20,23 +20,10 @@
 #define RESET_BIT 0x1
 #define SLEEP_BIT 0x2
 
-#if CONFIG_IDF_TARGET_ESP32
-
-#define PIN_SDA 22
-#define PIN_SCL 23
-
-#define PIN_ENCODER_A 19
-#define PIN_ENCODER_B 18
-#define PIN_ENCODER_BTN 21
-
-#define POWER_PIN 32
-#define BTN_GPIO 0
-
-#elif CONFIG_IDF_TARGET_ESP32C3
-
 #define ENABLE_PIN 19
 #define LED_PIN 18
 #define BTN_PIN GPIO_NUM_9
+#define INT_PIN GPIO_NUM_2
 
 #if MULTICHAN
 #define I2C_MASTER_SDA_PIN 8
@@ -44,29 +31,38 @@
 #define POWER_BIT 8
 #define NB_PWR_BIT 9
 #define PSM_BIT 10
-#endif
-
+#define IN1_BIT 15
 #endif
 
 #define WS_BUF_SIZE 160
 
 typedef struct
 {
-    int cmd;
-    int channel; //оптопара
+    int cmd;     //причина измерения 1 - кнопка, 2 - внешний вход
+    int channel; //канал измерения
 } cmd_t;
 
 typedef struct
 {
+    int R1;
+    int R2;
+    int U;
+    int Ubatt;
+    int U0;
+} calcdata_t;
+
+typedef struct
+{
+    int channel; //канал измерения
     int adc0;
     int adc1;
-    int R;
     int adc2;
+    int R;
     int U;
     int Ubatt0;
     int Ubatt1;
     int U0;
-    int channel;
+    int input; //состояние внешнего входа 0 - нет, 1-сработал, 2-проснулись от сработки
 } result_t;
 
 #define PWM_MIN 0
@@ -106,7 +102,7 @@ EventGroupHandle_t ready_event_group;
 #define END_MEASURE BIT0
 #define END_TRANSMIT BIT1
 #define END_WIFI_TIMEOUT BIT2
-#define END_LORA_SLEEP BIT3
+#define END_RADIO_SLEEP BIT3
 #define END_UI_SLEEP BIT4
 
 extern RTC_DATA_ATTR int bootCount;
@@ -124,7 +120,7 @@ void btn_task(void *arg);
 int current(int adc);
 int volt(int adc);
 int kOm(int adc_u, int adc_r);
-int kOm0db(int adc_u, int adc_r);
+int kOm2chan(int adc_u, int adc_r);
 
 int read_nvs_lora(int32_t *id, int32_t *fr, int32_t *bw, int32_t *sf, int32_t *op);
 int write_nvs_lora(const char *key, int value);
@@ -145,6 +141,10 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num);
 // void power_on(int channel_mask);
 // void power_off(void);
 void pcf8575_set(uint16_t channel_mask);
+int pcf8575_read(uint16_t bit);
 
-void start_measure(void);
+void start_measure(int reasone);
+
+int getResult_Data(char *line, int data_pos);
+
 #endif

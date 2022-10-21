@@ -12,8 +12,6 @@
 #include "esp_adc_cal.h"
 #include "esp_rom_sys.h"
 
-#include <driver/dac.h>
-
 #include "driver/ledc.h"
 
 #include "main.h"
@@ -21,7 +19,7 @@
 #define LED_GPIO 2
 
 int bufferR[DATALEN];
-int bufferU[DATALEN];
+//int bufferU[DATALEN];
 
 typedef struct
 {
