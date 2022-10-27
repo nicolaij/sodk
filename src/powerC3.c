@@ -309,7 +309,7 @@ void btn_task(void *arg)
                         (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel)
                     {
                         printf("%4d %4d %4d %4d %4d %4d\t", n, (p + 0)->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, (p + 4)->type2.data);
-                        printf("%4d %6d %6d %6d\n", n, kOm((p + 1)->type2.data, (p + 0)->type2.data), volt((p + 1)->type2.data), kOm2chan((p + 1)->type2.data, (p + 2)->type2.data));
+                        printf("=%6d %6d %6d\n", kOm((p + 1)->type2.data, (p + 0)->type2.data), volt((p + 1)->type2.data), kOm2chan((p + 1)->type2.data, (p + 2)->type2.data));
 
                         p = p + 5;
                         cnt = 0;
