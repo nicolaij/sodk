@@ -214,7 +214,7 @@ void radio_task(void *arg)
             // xQueueSend(ws_send_queue, (char *)buf, (portTickType)1);
             lora_receive();
             // lora_idle();
-            // vTaskDelay(100 / portTICK_PERIOD_MS);
+            vTaskDelay(10 / portTICK_PERIOD_MS);
             // lora_send_packet((uint8_t *)buf, strlen((char*)buf));
             // vTaskDelay(1000 / portTICK_PERIOD_MS);
         }

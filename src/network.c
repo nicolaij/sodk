@@ -86,6 +86,8 @@ int64_t timeout_start;
 
 bool need_ws_send = false;
 
+bool restart = false;
+
 typedef struct
 {
     char filepath[32];
@@ -271,6 +273,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=2&end=500\">График R</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
+                       "<a href=\"?restart=true\">Restart</a>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
                        "socket.onopen = function(){socket.send(\"open ws\");};\n"
                        "socket.onmessage = function(e){document.getElementById(\"text\").value += e.data + \"\\n\";}"
@@ -330,6 +333,11 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
             bool param_change = false;
             bool save = false;
+
+            if (httpd_query_key_value(buf, "restart", param, 7) == ESP_OK)
+            {
+                restart = true;
+            }
 
             if (httpd_query_key_value(buf, "save", param, 7) == ESP_OK)
             {
@@ -728,7 +736,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     int l = 0;
     int ll = 0;
     int n = 0;
-    buf[0] ='\0';
+    buf[0] = '\0';
 
     if (mode == 2)
     {
@@ -1009,6 +1017,13 @@ void wifi_task(void *arg)
         {
             esp_wifi_stop();
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);
+        }
+
+        if (restart == true)
+        {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            esp_wifi_stop();
+            esp_restart();
         }
 
         vTaskDelay(100 / portTICK_PERIOD_MS);

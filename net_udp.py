@@ -45,12 +45,12 @@ while True:
                 n = csvfile.read(1)
         except:
             with open(csvFilename, 'w', newline='') as csvfile:
-                csvfile.write('Datetime,Counter,U,R,U0,Ub0,Ub1,T,RSSI\n')
+                csvfile.write('Datetime,Counter,U,R,U0,Ub0,Ub1,T,RSSI,in\n')
             pass
         
         try:
             with open(csvFilename, 'a', newline='') as csvfile:
-                csvfile.write('{},{},{},{},{},{},{},{},{}\n'.format(js["dt"], js["num"], js["U"], js["R"], js["U0"], js["Ub0"], js["Ub1"], js["T"], js["rssi"]))
+                csvfile.write('{},{},{},{},{},{},{},{},{},{}\n'.format(js["dt"], js["num"], js["U"], js["R"], js["U0"], js["Ub0"], js["Ub1"], js["T"], js["rssi"], js["in"]))
         except Exception as e:
             print('CSV file error! {}'.format(e))
             pass
@@ -70,6 +70,7 @@ while True:
             f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(id, time_and_date, js["Ub1"]))
             f.write("Sodk_ZRTS{}_Tcpu,0,{},0,{},192\n".format(id, time_and_date, js["T"]))
             f.write("Sodk_ZRTS{}_rssi,0,{},0,{},192\n".format(id, time_and_date, js["rssi"]))
+            f.write("Sodk_ZRTS{}_in,0,{},0,{},192\n".format(id, time_and_date, js["in"]))
         
         #IntouchFilename = '{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(id, datetime.datetime.now())
         #with open(IntouchFilename, 'w', encoding="latin-1") as f:

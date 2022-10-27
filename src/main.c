@@ -1,4 +1,5 @@
 #include "main.h"
+#include <sys/time.h>
 
 #include <stdio.h>
 #include "esp_system.h"
@@ -138,6 +139,9 @@ void go_sleep(void)
     ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
 #endif
 
+    ESP_LOGW("main", "Go sleep...");
+    fflush(stdout);
+
     uint64_t time_in_us = menu[14].val * 1000000ULL;
 
     if (BattLow > 200)
@@ -149,9 +153,8 @@ void go_sleep(void)
         time_in_us = 60 * 60 * 24 * 30 * 1000000ULL; // 30 days
     }
 
-    ESP_LOGW("main", "Go sleep...");
-
-    fflush(stdout);
+    //коррекция на время работы
+    time_in_us = time_in_us - (esp_timer_get_time() % (menu[14].val * 1000000ULL));
 
     esp_deep_sleep(time_in_us);
 }
@@ -341,7 +344,30 @@ void app_main()
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 #else
+/*
+    struct tm tm;
+    tm.tm_year = 2022 - 1900;
+    tm.tm_mon = 10 - 1;
+    tm.tm_mday = 25;
+    tm.tm_hour = 12;
+    tm.tm_min = 0;
+    tm.tm_sec = 0;
 
+    time_t t = mktime(&tm) + 3 * 3600; // add timezone offset
+    printf("Setting time: %s", asctime(&tm));
+    struct timeval now = {.tv_sec = t};
+    settimeofday(&now, NULL);
+
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+    char datetime[22];
+    time_t n = time(0);
+    // Convert now to tm struct for local timezone
+    struct tm *localtm = localtime(&n);
+    printf("The local date and time is: %s", asctime(localtm));
+    strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", localtm);
+    printf("The local date and time is: %s", datetime);
+*/
     //ждем включения NBIOT модуля
     vTaskDelay(600 / portTICK_PERIOD_MS);
 
@@ -373,7 +399,7 @@ void app_main()
         pdTRUE,
         20000 / portTICK_PERIOD_MS);
 
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
         xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
 
@@ -396,7 +422,7 @@ void app_main()
 
     xEventGroupWaitBits(
         ready_event_group, /* The event group being tested. */
-        END_RADIO_SLEEP,    /* The bits within the event group to wait for. */
+        END_RADIO_SLEEP,   /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
         1200 / portTICK_PERIOD_MS);

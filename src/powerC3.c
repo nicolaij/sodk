@@ -155,7 +155,7 @@ static void continuous_adc_init()
     // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BUFFER * 200,
+        .max_store_buf_size = ADC_BUFFER * 400,
         .conv_num_each_intr = ADC_BUFFER,
         .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[1].channel,
@@ -211,12 +211,15 @@ static void continuous_adc_init()
 int terminal_mode = -1;
 void btn_task(void *arg)
 {
-
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
     // set as output mode
     io_conf.mode = GPIO_MODE_INPUT;
+#if MULTICHAN
     io_conf.pin_bit_mask = BIT64(BTN_PIN) | BIT64(INT_PIN);
+#else
+    io_conf.pin_bit_mask = BIT64(BTN_PIN);
+#endif
     io_conf.pull_down_en = 0;
     io_conf.pull_up_en = 0;
 
@@ -233,12 +236,21 @@ void btn_task(void *arg)
     {
         vTaskDelay(pdMS_TO_TICKS(100));
 
+#if MULTICHAN
         new_int_state = gpio_get_level(INT_PIN);
         if (old_int_state != new_int_state)
         {
             ESP_LOGI("pcf8575", "!INT: %d", new_int_state);
             old_int_state = new_int_state;
+            if (new_int_state == 0)
+            {
+                char buf[10];
+                int r = pcf8575_read(IN1_BIT);
+                snprintf((char *)buf, sizeof(buf), "IN: %d", r);
+                xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+            }
         }
+#endif
 
         new_btn_state = gpio_get_level(BTN_PIN);
         if (old_btn_state != new_btn_state)
@@ -384,11 +396,12 @@ void dual_adc(void *arg)
         int blocks = 0;
         int block_power_on = 0;
         int block_power_off = 0;
-        int block_avg = 0;
+        int start_new_avg = 0;
+        int end_new_avg = 0;
         int block_result = 0;
-        int block_max = 0;
-        int r1_max = 0;
-        int r2_max = 0;
+        int block_pre_result = 0;
+        int next_block_result = 0;
+
         int u_max = 0;
 
         int overcurrent_counter = 50;
@@ -649,19 +662,43 @@ void dual_adc(void *arg)
                         compare_counter = menu[16].val;
                     }
 
-                    if (compare_counter == 0)
+                    if (block_power_off == 0)
                     {
-                        if (block_power_off == 0)
+                        if (compare_counter == 0)
                         {
                             //ВЫРУБАЕМ
                             gpio_set_level(ENABLE_PIN, 1);
                             block_power_off = blocks;
+                            block_pre_result = blocks;
+
+                            if (sum_adc[0] / n < 4000) ///НЕТ ПЕРЕГРУЗКИ
+                                block_result = blocks;
+                        }
+                    }
+                    else
+                    {
+                        if (block_result == 0) //была перегрузка.
+                        {
+                            if (sum_adc[0] / n < 4000)
+                            {
+                                r1 = bufferR[blocks].R1;
+                                r2 = bufferR[blocks].R2;
+                                u = bufferR[blocks].U;
+                                u0 = bufferR[blocks].U0;
+
+                                if (block_pre_result + 1 == blocks)
+                                {
+                                    block_result = blocks;
+                                }
+                                else
+                                    block_pre_result = blocks;
+                            }
                         }
                     }
 
-                    if (block_power_off == blocks)
+                    //запоминаем результат
+                    if (block_result == blocks || block_pre_result == blocks)
                     {
-                        block_result = blocks;
                         result.adc0 = sum_adc[0] / n;
                         result.adc1 = sum_adc[1] / n;
                         result.adc2 = sum_adc[2] / n;
@@ -679,35 +716,14 @@ void dual_adc(void *arg)
                         result.Ubatt1 = (bufferR[ON_BLOCK + 1].Ubatt + bufferR[ON_BLOCK + 2].Ubatt + bufferR[ON_BLOCK + 3].Ubatt) / 3;
                         result.Ubatt0 = (bufferR[ON_BLOCK - 1].Ubatt + bufferR[ON_BLOCK - 2].Ubatt + bufferR[ON_BLOCK - 3].Ubatt) / 3;
 
-                        xQueueSend(send_queue, (void *)&result, (portTickType)0);
+                        if (block_result == blocks)
+                            xQueueSend(send_queue, (void *)&result, (portTickType)0);
                     }
 
-                    //Ищем максимум после отключения напряжения и до половины напряжения от максимума
-                    /*
-                    if (block_result == 0 && block_power_off > 0 && (blocks - block_power_off) > avg_len && u > bufferR[0][block_power_off] / 2)
-                    {
-                        if (r1 < 4200)
-                        {
-                            if (r1 > r1_max)
-                            {
-                                r1_max = r1;
-                                block_max = blocks;
-                            }
-                        }
-                        else
-                        {
-                            if (r2 > r2_max)
-                            {
-                                r2_max = r2;
-                                block_max = blocks;
-                            }
-                        }
-                    }
-                    */
-
+                    //копируем данные АЦП в буфер АЦП
                     static int nb;
                     static int cb;
-                    if (block_power_off == blocks)
+                    if (block_result == blocks)
                     {
                         nb = blocks;
                         cb = sizeof(buffer_ADC_copy) / ADC_BUFFER;
@@ -744,13 +760,9 @@ void dual_adc(void *arg)
         //РЕЗУЛЬТАТ
 
         char buf[WS_BUF_SIZE];
-        snprintf((char *)buf, sizeof(buf), "\"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
+        snprintf((char *)buf, sizeof(buf), "(on:%3d off:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_power_off, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
         xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
-
-        printf("(on:%3d off:%3d err:%3d) Result: %s\n", block_power_on, block_power_off, data_errors, buf);
-
-        snprintf((char *)buf, sizeof(buf), "Result: on:%d off:%d err:%d", block_power_on, block_power_off, ws_send_queue);
-        xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+        printf("%s\n", buf);
 
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
             xEventGroupSetBits(ready_event_group, END_MEASURE);

@@ -463,12 +463,12 @@ void radio_task(void *arg)
     modem_dte_t *dte = esp_modem_dte_init(&config);
 
     ESP_LOGI(TAG, "init module NB-IoT");
-    
-    //vTaskDelay(pdMS_TO_TICKS(600));
-    // gpio_set_level(POWER_GPIO, 1);
+
     // vTaskDelay(pdMS_TO_TICKS(600));
-    // gpio_set_level(POWER_GPIO, 0);
-    // vTaskDelay(pdMS_TO_TICKS(400));
+    //  gpio_set_level(POWER_GPIO, 1);
+    //  vTaskDelay(pdMS_TO_TICKS(600));
+    //  gpio_set_level(POWER_GPIO, 0);
+    //  vTaskDelay(pdMS_TO_TICKS(400));
 
     while (1)
     {
@@ -578,36 +578,49 @@ void radio_task(void *arg)
             int32_t dt[8] = {0, 0, 0, 0, 0, 0, 0, 0};
             esp_dce->priv_resource = dt;
             char datetime[22] = "";
-            counter = 3;
+            counter = 1;
             while (counter-- > 0)
             {
                 dce->handle_line = esp_modem_dce_handle_cclk;
                 if (dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
                     if (dce->state == MODEM_STATE_SUCCESS)
                     {
-                        //Прибавляем часам часовой пояс
-                        dt[3] = dt[3] + dt[6];
-                        if (dt[3] > 23)
-                            dt[3] = dt[3] - 24;
-                        if (dt[3] < 0)
-                            dt[3] = dt[3] + 24;
-                        snprintf((char *)datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d", dt[0], dt[1], dt[2], dt[3], dt[4], dt[5]);
-                        ESP_LOGI(TAG, "Current date/time: %s", datetime);
+                        struct tm tm;
+                        tm.tm_year = dt[0] - 1900;
+                        tm.tm_mon = dt[1] - 1;
+                        tm.tm_mday = dt[2];
+                        tm.tm_hour = dt[3];
+                        tm.tm_min = dt[4];
+                        tm.tm_sec = dt[5];
+
+                        time_t t = mktime(&tm) + dt[6] * 3600; // UNIX time + timezone offset
+                        //printf("Setting time: %s", asctime(&tm));
+                        struct timeval now = {.tv_sec = t};
+                        settimeofday(&now, NULL);
+                        // printf("The local date and time is: %s", asctime(&tm));
                         break;
                     }
 
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
 
+            time_t n = time(0);
+            struct tm *localtm = localtime(&n);
+            strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", localtm);
+            ESP_LOGI(TAG, "Current date/time: %s", datetime);
+
             int len_data = 0;
             while (pdTRUE == xQueueReceive(send_queue, &result, 10000 / portTICK_PERIOD_MS))
             {
+                time_t n = time(0);
+                struct tm *localtm = localtime(&n);
+                strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", localtm);
                 len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%d.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
 
                 // if (len_data > 127) buf[127] = '\0';
-                //xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+                // xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
 
                 counter = 3;
                 while (counter-- > 0)
@@ -628,7 +641,7 @@ void radio_task(void *arg)
 
             ESP_LOGW(TAG, "Power down");
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
-            vTaskDelay(pdMS_TO_TICKS(1020)); //Turn-Off Timing by AT Command
+            vTaskDelay(pdMS_TO_TICKS(1020)); // Turn-Off Timing by AT Command
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
             xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
 
