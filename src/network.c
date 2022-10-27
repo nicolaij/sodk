@@ -27,14 +27,6 @@
 extern uint8_t mac[6];
 extern char modem_status[128];
 
-#if CONFIG_IDF_TARGET_ESP32
-extern int bufferR[DATALEN];
-extern int bufferU[DATALEN];
-#elif CONFIG_IDF_TARGET_ESP32C3
-// extern uint32_t bufferADC[DATALEN];
-// extern uint32_t bufferRb[3][DATALEN * 4 / ADC_BUFFER];
-#endif
-
 /* The examples use WiFi configuration that you can set via project configuration menu
 
    If you'd rather not, just change the below entries to strings with
@@ -271,7 +263,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *nbiotstart = "<form><fieldset><legend>NB-IoT</legend><table>";
     const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
-    const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3?end=500\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=2&end=500\">График R</a></p>"
+    const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=2\">График R</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<a href=\"?restart=true\">Restart</a>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
@@ -694,31 +686,15 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     reset_sleep_timeout();
 
     char line[128];
-    int limitData = 0;
+    int limitData = DATALEN;
     int mode = 0;
 
     if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK)
     {
-        if (httpd_query_key_value(buf, "end", line, 6) == ESP_OK)
-        {
-            limitData = atoi(line);
-        }
         if (httpd_query_key_value(buf, "mode", line, 6) == ESP_OK)
         {
             mode = atoi(line);
         }
-    }
-
-    if (mode == 2)
-    {
-        if (limitData <= 0 || limitData >= DATALEN)
-            limitData = DATALEN;
-    }
-    else
-    {
-        //по умолчанию 500 строк
-        if (limitData == 0)
-            limitData = 500;
     }
 
     char header[96] = "attachment; filename=\"";
@@ -743,6 +719,10 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
         while (n < limitData)
         {
             ll = getResult_Data(&buf[l], n);
+            
+            if (ll == 0) //data end
+                limitData = 0;
+
             l = l + ll;
             if (l > (sizeof(buf) - 128))
             {

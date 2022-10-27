@@ -22,6 +22,7 @@ calcdata_t bufferR[DATALEN];
 uint32_t buffer[3][DATALEN];
 uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
 uint8_t buffer_ADC_copy[ADC_BUFFER * 5];
+int block_buffer_end = 0;
 
 result_t result = {};
 
@@ -231,7 +232,7 @@ void btn_task(void *arg)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
 #if MULTICHAN
-    //result.input = pcf8575_read(IN1_BIT);
+    // result.input = pcf8575_read(IN1_BIT);
 
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
     io_conf.pin_bit_mask = BIT64(INT_PIN);
@@ -399,15 +400,8 @@ void dual_adc(void *arg)
         int blocks = 0;
         int block_power_on = 0;
         int block_power_off = 0;
-        int start_new_avg = 0;
-        int end_new_avg = 0;
         int block_result = 0;
         int block_pre_result = 0;
-        int next_block_result = 0;
-
-        int u_max = 0;
-
-        int overcurrent_counter = 50;
 
         int64_t timeout = menu[0].val * 1000LL;
         // int64_t quiet_timeout = 10 * 1000;
@@ -737,10 +731,12 @@ void dual_adc(void *arg)
                     if (blocks >= nb && cb-- > 0)
                     {
                         memcpy(&buffer_ADC_copy[ADC_BUFFER * (blocks - nb)], ptre - ADC_BUFFER, ADC_BUFFER);
-                        
+
                         //после копирования буфера заканчиваем измерение
                         if (cb == 0)
+                        {
                             break;
+                        }
                     }
                 }
             }
@@ -750,6 +746,8 @@ void dual_adc(void *arg)
                 blocks = DATALEN * 3 / 4;
 
         } while (++blocks < DATALEN);
+
+        block_buffer_end = blocks;
 
         ESP_ERROR_CHECK(adc_digi_stop());
 
@@ -791,6 +789,11 @@ int getResult_Data(char *line, int data_pos)
         strcpy(line, header);
         l = strlen(header);
         pos = line + l;
+    }
+    
+    if (data_pos > block_buffer_end)
+    {
+
     }
     l += sprintf(pos, "%d,%d,%d,%d\n", data_pos, bufferR[data_pos].R1, bufferR[data_pos].U, bufferR[data_pos].R2);
     return l;
