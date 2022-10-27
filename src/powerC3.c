@@ -23,6 +23,8 @@ uint32_t buffer[3][DATALEN];
 uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
 uint8_t buffer_ADC_copy[ADC_BUFFER * 5];
 
+result_t result = {};
+
 #define ON_BLOCK 10
 
 typedef struct
@@ -229,6 +231,8 @@ void btn_task(void *arg)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
 #if MULTICHAN
+    //result.input = pcf8575_read(IN1_BIT);
+
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
     io_conf.pin_bit_mask = BIT64(INT_PIN);
     ESP_ERROR_CHECK(gpio_config(&io_conf));
@@ -252,8 +256,8 @@ void btn_task(void *arg)
         if (xQueueReceive(gpio_evt_queue, &io_num, 100 / portTICK_PERIOD_MS) == pdTRUE)
         {
             char buf[10];
-            int r = pcf8575_read(IN1_BIT);
-            snprintf((char *)buf, sizeof(buf), "IN: %d", r);
+            result.input = pcf8575_read(IN1_BIT);
+            snprintf((char *)buf, sizeof(buf), "IN: %d", result.input);
             ESP_LOGI("pcf8575", "%s", buf);
             xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
         }
@@ -349,8 +353,6 @@ void btn_task(void *arg)
 void dual_adc(void *arg)
 {
 
-    result_t result = {};
-
     cmd_t cmd = {};
 
     // zero-initialize the config structure.
@@ -382,19 +384,9 @@ void dual_adc(void *arg)
         //подаем питание на источник питания, OpAmp, делитель АЦП батареи
         //включаем канал
 
-#ifdef MULTICHAN
         result.channel = cmd.channel;
 
-        //для первого канала читаем вход
-        if (cmd.cmd == 2) //сработал внешний вход
-        {
-            result.input = 2;
-        }
-        else
-        {
-            result.input = pcf8575_read(IN1_BIT);
-        }
-
+#ifdef MULTICHAN
         pcf8575_set(pcf_output[cmd.channel] | BIT(NB_PWR_BIT));
 #endif
 #ifndef NODEBUG
@@ -728,7 +720,9 @@ void dual_adc(void *arg)
                         result.Ubatt0 = (bufferR[ON_BLOCK - 1].Ubatt + bufferR[ON_BLOCK - 2].Ubatt + bufferR[ON_BLOCK - 3].Ubatt) / 3;
 
                         if (block_result == blocks)
+                        {
                             xQueueSend(send_queue, (void *)&result, (portTickType)0);
+                        }
                     }
 
                     //копируем данные АЦП в буфер АЦП
@@ -739,9 +733,14 @@ void dual_adc(void *arg)
                         nb = blocks;
                         cb = sizeof(buffer_ADC_copy) / ADC_BUFFER;
                     }
+
                     if (blocks >= nb && cb-- > 0)
                     {
                         memcpy(&buffer_ADC_copy[ADC_BUFFER * (blocks - nb)], ptre - ADC_BUFFER, ADC_BUFFER);
+                        
+                        //после копирования буфера заканчиваем измерение
+                        if (cb == 0)
+                            break;
                     }
                 }
             }
@@ -762,8 +761,6 @@ void dual_adc(void *arg)
         {
 #ifdef MULTICHAN
             pcf8575_set(BIT(POWER_BIT) | BIT(NB_PWR_BIT));
-
-            // int a = pcf8575_read(INT_PIN); //сброс INT
 #endif
 #ifndef NODEBUG
             ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
@@ -771,7 +768,6 @@ void dual_adc(void *arg)
         }
 
         //РЕЗУЛЬТАТ
-
         char buf[WS_BUF_SIZE];
         snprintf((char *)buf, sizeof(buf), "(on:%3d off:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_power_off, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
         xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);

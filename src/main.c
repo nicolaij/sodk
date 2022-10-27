@@ -349,6 +349,8 @@ void app_main()
     //ждем включения NBIOT модуля
     vTaskDelay(600 / portTICK_PERIOD_MS);
 
+    xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, NULL);
+
     xTaskCreate(radio_task, "radio_task", 1024 * 6, NULL, 5, &xHandleRadio);
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
@@ -364,8 +366,6 @@ void app_main()
     start_measure(reasone);
 
 #endif
-
-    xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, NULL);
 
     // BIT0 - окончание измерения
     // BIT1 - окончание передачи
