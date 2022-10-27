@@ -168,8 +168,11 @@ esp_err_t esp_modem_dce_handle_cclk(modem_dce_t *dce, const char *line)
 
     int32_t *data = esp_dce->priv_resource;
 
+    //printf("%s\n",line);
+
     if (!strncmp(line, ss, strlen(ss)))
     {
+        //+CCLK: 2022/10/27,08:22:30GMT+3
         char *s = strchr(line, ' ');
         if (s)
         {
@@ -575,6 +578,7 @@ void radio_task(void *arg)
             } while (connectID[3] != 2 && counter-- > 0);
 
             //запрос времени
+            //+CCLK: 2022/10/27,08:18:29GMT+3
             int32_t dt[8] = {0, 0, 0, 0, 0, 0, 0, 0};
             esp_dce->priv_resource = dt;
             char datetime[22] = "";
@@ -606,7 +610,7 @@ void radio_task(void *arg)
 
             time_t n = time(0);
             struct tm *localtm = localtime(&n);
-            strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", localtm);
+            strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
             ESP_LOGI(TAG, "Current date/time: %s", datetime);
 
             int len_data = 0;
@@ -614,7 +618,7 @@ void radio_task(void *arg)
             {
                 time_t n = time(0);
                 struct tm *localtm = localtime(&n);
-                strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", localtm);
+                strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
                 len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%d.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);

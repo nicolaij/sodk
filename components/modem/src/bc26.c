@@ -274,9 +274,10 @@ modem_dce_t *bc26_init(modem_dte_t *dte)
     DCE_CHECK(esp_modem_dce_echo(&(esp_modem_dce->parent), false) == ESP_OK, "close echo mode failed", err_io);
     /* Get Module name */
     DCE_CHECK(esp_modem_dce_get_module_name(&(esp_modem_dce->parent)) == ESP_OK, "get module name failed", err_io);
-
+#ifndef NODEBUG
+    /*Blink LED Netstatus */
     DCE_CHECK(bc26_netlight(&(esp_modem_dce->parent)) == ESP_OK, "netlight failed", err_io);
-
+#endif
     //ждем регистрации в сети
     uint32_t n = 0;
     uint32_t stat = 0;

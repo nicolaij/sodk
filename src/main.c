@@ -142,21 +142,22 @@ void go_sleep(void)
     ESP_LOGW("main", "Go sleep...");
     fflush(stdout);
 
-    uint64_t time_in_us = menu[14].val * 1000000ULL;
+    uint64_t time_in_us = StoUS(menu[14].val);
 
     if (BattLow > 200)
     {
-        time_in_us = 60 * 60 * 24 * 365 * 1000000ULL; // 365 days
+        time_in_us = StoUS(60 * 60 * 24 * 365); // 365 days
     }
     else if (BattLow > 100)
     {
-        time_in_us = 60 * 60 * 24 * 30 * 1000000ULL; // 30 days
+        time_in_us = StoUS(60 * 60 * 24 * 30); // 30 days
     }
 
     //коррекция на время работы
-    time_in_us = time_in_us - (esp_timer_get_time() % (menu[14].val * 1000000ULL));
+    time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[14].val)) + 300000LL;
 
-    esp_deep_sleep(time_in_us);
+    esp_sleep_enable_timer_wakeup(time_in_us);
+    esp_deep_sleep_start();
 }
 
 void start_measure(int reasone)
@@ -344,30 +345,7 @@ void app_main()
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 #else
-/*
-    struct tm tm;
-    tm.tm_year = 2022 - 1900;
-    tm.tm_mon = 10 - 1;
-    tm.tm_mday = 25;
-    tm.tm_hour = 12;
-    tm.tm_min = 0;
-    tm.tm_sec = 0;
 
-    time_t t = mktime(&tm) + 3 * 3600; // add timezone offset
-    printf("Setting time: %s", asctime(&tm));
-    struct timeval now = {.tv_sec = t};
-    settimeofday(&now, NULL);
-
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
-
-    char datetime[22];
-    time_t n = time(0);
-    // Convert now to tm struct for local timezone
-    struct tm *localtm = localtime(&n);
-    printf("The local date and time is: %s", asctime(localtm));
-    strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", localtm);
-    printf("The local date and time is: %s", datetime);
-*/
     //ждем включения NBIOT модуля
     vTaskDelay(600 / portTICK_PERIOD_MS);
 

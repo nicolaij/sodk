@@ -82,7 +82,7 @@ static int s_retry_num = 0;
 char buf[CONFIG_LWIP_TCP_MSS];
 size_t buf_len;
 
-int64_t timeout_start;
+int64_t timeout_begin;
 
 bool need_ws_send = false;
 
@@ -96,7 +96,7 @@ typedef struct
 
 void reset_sleep_timeout()
 {
-    timeout_start = esp_timer_get_time();
+    timeout_begin = esp_timer_get_time();
 }
 
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
@@ -1013,7 +1013,7 @@ void wifi_task(void *arg)
             need_ws_send = false;
         }
         */
-        if (esp_timer_get_time() - timeout_start > (int64_t)menu[15].val * 1000000)
+        if (esp_timer_get_time() - timeout_begin > StoUS(menu[15].val))
         {
             esp_wifi_stop();
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);

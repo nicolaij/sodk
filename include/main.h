@@ -36,6 +36,8 @@
 
 #define WS_BUF_SIZE 160
 
+#define StoUS(ms) ((ms)*1000000LL)
+
 typedef struct
 {
     int cmd;     //причина измерения 1 - кнопка, 2 - внешний вход
@@ -64,9 +66,6 @@ typedef struct
     int U0;
     int input; //состояние внешнего входа 0 - нет, 1-сработал, 2-проснулись от сработки
 } result_t;
-
-#define PWM_MIN 0
-#define PWM_MAX 255
 
 typedef enum
 {
