@@ -18,7 +18,7 @@
     function LineChart(data, {
         //x = ([x]) => x, // given d in data, returns the (temporal) x-value
         //y = ([, y]) => y, // given d in data, returns the (quantitative) y-value
-        x = (x) => x.id / 10,
+        x = (x) => x.id,
         y1 = (y) => y.adc0,
         y2 = (y) => y.adc1,
         y3 = (y) => y.adc2,
@@ -50,7 +50,7 @@
         const Y1 = d3.map(data, y1);
         const Y2 = d3.map(data, y2);
         const Y3 = d3.map(data, y3);
-        var I = d3.range(X.length);
+        const I = d3.range(X.length);
         if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y2[i]);
         const D = d3.map(data, defined);
 
@@ -61,39 +61,27 @@
         if (yDomain === undefined) yDomain = [0, y_max];
 
         // Construct scales and axes.
-        var xScale = xType(xDomain, xRange); //d3.scaleLinear .domain[0.500] .range([marginLeft, width - marginRight]) 40..1890
-        var yScale = yType(yDomain, yRange); //d3.scaleLinear
+        const xScale = xType(xDomain, xRange); //d3.scaleLinear .domain[0,500] .range([marginLeft, width - marginRight]) 40..1890
+        const yScale = yType(yDomain, yRange); //d3.scaleLinear
         //const xAxis = d3.axisBottom(xScale).ticks(width / 80).tickSizeOuter(0);
 
-        const xAxis = d3.axisBottom(xScale)
-            .ticks(width / 80)
-            .tickSizeOuter(0);
+        const xAxis = (g, x) => g
+            .call(d3.axisBottom(x).ticks(width / 80).tickSizeOuter(0));
 
-        const yAxis = d3.axisLeft(yScale).ticks(height / 40, yFormat);
+        const yAxis = (g, y) => g
+            .call(d3.axisLeft(y).ticks(height / 40));
 
         // Construct a line generator.
-        var line1 = d3.line()
-            //.defined(i => D[i])
+        const line1 = (ydata, xscale, yscale) => d3.line()
             .curve(curve)
-            .x(i => xScale(X[i]))
-            .y(i => yScale(Y1[i]));
-
-        const line2 = d3.line()
-            //.defined(i => D[i])
-            .curve(curve)
-            .x(i => xScale(X[i]))
-            .y(i => yScale(Y2[i]));
-
-        const line3 = d3.line()
-            //.defined(i => D[i])
-            .curve(curve)
-            .x(i => xScale(X[i]))
-            .y(i => yScale(Y3[i]));
+            .x(d => xscale(d.id))
+            .y(d => yscale(d[ydata]))
+            (data);
 
         const zoom = d3.zoom()
             .translateExtent([[marginLeft, marginTop], [width - marginRight, height - marginBottom]])
             .extent([[marginLeft, marginTop], [width - marginRight, height - marginBottom]])
-            .scaleExtent([1, 10])
+            .scaleExtent([1, 15])
             .on("zoom", zoomed);
 
         const svg = d3.create("svg")
@@ -107,12 +95,12 @@
         const gx = svg.append("g")
             .attr("class", "x-axis")
             .attr("transform", `translate(0,${height - marginBottom})`)
-            .call(xAxis);
+            .call(xAxis, xScale);
 
         const gy = svg.append("g")
             .attr("class", "y-axis")
             .attr("transform", `translate(${marginLeft},0)`)
-            .call(yAxis)
+            .call(yAxis, yScale)
             .call(g => g.select(".domain").remove())
             .call(g => g.selectAll(".tick line").clone()
                 .attr("x2", width - marginLeft - marginRight)
@@ -125,7 +113,7 @@
                 .style('fill', 'red')
                 .text(yLabel))
 
-        svg.append("path")
+        const l1 = svg.append("path")
             .attr("class", "line")
             .attr("fill", "none")
             .attr("stroke", "blue")
@@ -133,9 +121,9 @@
             .attr("stroke-linecap", strokeLinecap)
             .attr("stroke-linejoin", strokeLinejoin)
             .attr("stroke-opacity", strokeOpacity)
-            .attr("d", line1(I));
+            .attr("d", line1("adc0", xScale, yScale));
 
-        svg.append("path")
+        const l2 = svg.append("path")
             .attr("class", "line")
             .attr("fill", "none")
             .attr("stroke", "red")
@@ -143,9 +131,9 @@
             .attr("stroke-linecap", strokeLinecap)
             .attr("stroke-linejoin", strokeLinejoin)
             .attr("stroke-opacity", strokeOpacity)
-            .attr("d", line2(I));
+            .attr("d", line1("adc1", xScale, yScale));
 
-        svg.append("path")
+        const l3 = svg.append("path")
             .attr("class", "line")
             .attr("fill", "none")
             .attr("stroke", "orange")
@@ -153,21 +141,23 @@
             .attr("stroke-linecap", strokeLinecap)
             .attr("stroke-linejoin", strokeLinejoin)
             .attr("stroke-opacity", strokeOpacity)
-            .attr("d", line3(I));
+            .attr("d", line1("adc2", xScale, yScale));
 
         function zoomed({ transform }) {
             //const xz = transform.rescaleX(x);
             //path.attr("d", area(data, xz));
             //gx.call(xAxis, xz);
-
-            gx.call(xAxis.scale(transform.rescaleX(xScale)));
-            gy.call(yAxis.scale(transform.rescaleY(yScale)));
+            const xz = transform.rescaleX(xScale);
+            const yz = transform.rescaleY(yScale);
+            gx.call(xAxis, xz);
+            gy.call(yAxis, yz);
 
             //xRange.map(d => transform.applyX(d))
             //I.range(xRange.map(d => transform.applyX(d)));
             //x.range([event.transform.applyX(margin.left), event.transform.applyX(width - margin.right)]);
-            svg.selectAll('.line').attr("d", line1());
-            //console.log(I);
+            l1.attr("d", line1("adc0", xz, yz));
+            l2.attr("d", line1("adc1", xz, yz));
+            l3.attr("d", line1("adc2", xz, yz));
         }
 
         function reset() {
@@ -182,7 +172,7 @@
     }
 
     const params = new URLSearchParams(location.search);
-    var d1 = d3.csv("/d?end=" + params.get('end') + "&mode=" + params.get('mode'), function (object) {
+    var d1 = d3.csv("/d?mode=" + params.get('mode'), function (object) {
         var o = {};
         for (let key in object) { o[key.trim()] = Number(object[key]) };
         return o;
@@ -190,9 +180,9 @@
 
     d1.then(function (data) {
         if (params.get('mode') == 2)
-            document.body.appendChild(LineChart(data, { x: (x) => x.id, y2: (y) => y.adc1 * 10, width: window.innerWidth, height: (window.innerWidth / 2) }));
-        else
             document.body.appendChild(LineChart(data, { width: window.innerWidth, height: (window.innerWidth / 2) }));
+        else
+            document.body.appendChild(LineChart(data, { x: (x) => x.id / 10, width: window.innerWidth, height: (window.innerWidth / 2) }));
     });
 
 </script>

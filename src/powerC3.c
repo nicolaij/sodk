@@ -402,6 +402,7 @@ void dual_adc(void *arg)
         int block_power_off = 0;
         int block_result = 0;
         int block_pre_result = 0;
+        int counter_block_post_result = 0;
 
         int64_t timeout = menu[0].val * 1000LL;
         // int64_t quiet_timeout = 10 * 1000;
@@ -715,28 +716,24 @@ void dual_adc(void *arg)
 
                         if (block_result == blocks)
                         {
+                            counter_block_post_result = 0;
                             xQueueSend(send_queue, (void *)&result, (portTickType)0);
                         }
                     }
 
-                    //копируем данные АЦП в буфер АЦП
-                    static int nb;
-                    static int cb;
-                    if (block_result == blocks)
+                    if (block_result > 0) //есть результаты
                     {
-                        nb = blocks;
-                        cb = sizeof(buffer_ADC_copy) / ADC_BUFFER;
-                    }
-
-                    if (blocks >= nb && cb-- > 0)
-                    {
-                        memcpy(&buffer_ADC_copy[ADC_BUFFER * (blocks - nb)], ptre - ADC_BUFFER, ADC_BUFFER);
-
-                        //после копирования буфера заканчиваем измерение
-                        if (cb == 0)
+                        if (counter_block_post_result < sizeof(buffer_ADC_copy) / ADC_BUFFER) //копируем буфер
                         {
+                            memcpy(&buffer_ADC_copy[ADC_BUFFER * counter_block_post_result], ptre - ADC_BUFFER, ADC_BUFFER);
+                        }
+                        else if (counter_block_post_result > menu[19].val)
+                        {
+                            //заканчиваем измерение
                             break;
                         }
+
+                        counter_block_post_result++;
                     }
                 }
             }
@@ -790,11 +787,12 @@ int getResult_Data(char *line, int data_pos)
         l = strlen(header);
         pos = line + l;
     }
-    
+
     if (data_pos > block_buffer_end)
     {
-
+        return 0;
     }
+    
     l += sprintf(pos, "%d,%d,%d,%d\n", data_pos, bufferR[data_pos].R1, bufferR[data_pos].U, bufferR[data_pos].R2);
     return l;
 }

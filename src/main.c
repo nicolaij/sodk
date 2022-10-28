@@ -52,7 +52,7 @@ menu_t menu[] = {
     {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 10, .min = 1, .max = 1000},
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 10, .min = 1, .max = 1000}, /*17*/
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999},
-    {.id = "test", .name = " ", .val = 1, .min = 0, .max = 1},
+    {.id = "blocks", .name = "График после результ.", .val = 1000, .min = 0, .max = 2000},
 };
 
 int read_nvs_menu()

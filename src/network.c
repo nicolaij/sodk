@@ -721,7 +721,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
             ll = getResult_Data(&buf[l], n);
             
             if (ll == 0) //data end
-                limitData = 0;
+                break;
 
             l = l + ll;
             if (l > (sizeof(buf) - 128))
