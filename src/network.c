@@ -714,66 +714,36 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     int n = 0;
     buf[0] = '\0';
 
-    if (mode == 2)
+    while (n < limitData)
     {
-        while (n < limitData)
-        {
+        if (mode == 2)
             ll = getResult_Data(&buf[l], n);
-            
-            if (ll == 0) //data end
-                break;
+        else
+            ll = getADC_Data(&buf[l], n);
 
-            l = l + ll;
-            if (l > (sizeof(buf) - 128))
-            {
-                // printf("l: %d, ", l);
+        if (ll == 0) // data end
+            break;
 
-                /* Send the buffer contents as HTTP response chunk */
-                if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
-                {
-                    ESP_LOGE(TAG, "File sending failed!");
-                    /* Abort sending file */
-                    httpd_resp_sendstr_chunk(req, NULL);
-                    /* Respond with 500 Internal Server Error */
-                    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
-                    return ESP_FAIL;
-                }
-
-                l = 0;
-            }
-            n++;
-        }
-    }
-    else
-    {
-        while (getADC_Data(line, &ptr_adc, &n) > 0)
+        l = l + ll;
+        if (l > (sizeof(buf) - 128))
         {
-            l = strlcat(buf, line, sizeof(buf));
-            if (l > (sizeof(buf) - sizeof(line)))
+            // printf("l: %d, ", l);
+
+            /* Send the buffer contents as HTTP response chunk */
+            if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
             {
-                // printf("l: %d, ", l);
-
-                /* Send the buffer contents as HTTP response chunk */
-                if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
-                {
-                    ESP_LOGE(TAG, "File sending failed!");
-                    /* Abort sending file */
-                    httpd_resp_sendstr_chunk(req, NULL);
-                    /* Respond with 500 Internal Server Error */
-                    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
-                    return ESP_FAIL;
-                }
-
-                buf[0] = 0;
-                l = 0;
+                ESP_LOGE(TAG, "File sending failed!");
+                /* Abort sending file */
+                httpd_resp_sendstr_chunk(req, NULL);
+                /* Respond with 500 Internal Server Error */
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+                return ESP_FAIL;
             }
 
-            if (n > limitData)
-            {
-                break;
-            }
+            l = 0;
         }
-    }
+        n++;
+    };
 
     if (l > 0)
     {

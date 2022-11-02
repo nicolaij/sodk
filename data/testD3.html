@@ -18,10 +18,10 @@
     function LineChart(data, {
         //x = ([x]) => x, // given d in data, returns the (temporal) x-value
         //y = ([, y]) => y, // given d in data, returns the (quantitative) y-value
-        x = (x) => x.id,
-        y1 = (y) => y.adc0,
-        y2 = (y) => y.adc1,
-        y3 = (y) => y.adc2,
+        name_x = "id",
+        name_y1 = "adc0",
+        name_y2 = "adc1",
+        name_y3 = "adc2",
         defined, // for gaps in data
         curve = d3.curveLinear, // method of interpolation between points
         marginTop = 20, // top margin, in pixels
@@ -46,10 +46,10 @@
     } = {}) {
 
         // Compute values.
-        const X = d3.map(data, x);
-        const Y1 = d3.map(data, y1);
-        const Y2 = d3.map(data, y2);
-        const Y3 = d3.map(data, y3);
+        const X = d3.map(data, (x) => x[name_x]);
+        const Y1 = d3.map(data, (y) => y[name_y1]);
+        const Y2 = d3.map(data, (y) => y[name_y2]);
+        const Y3 = d3.map(data, (y) => y[name_y3]);
         const I = d3.range(X.length);
         if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y2[i]);
         const D = d3.map(data, defined);
@@ -121,7 +121,7 @@
             .attr("stroke-linecap", strokeLinecap)
             .attr("stroke-linejoin", strokeLinejoin)
             .attr("stroke-opacity", strokeOpacity)
-            .attr("d", line1("adc0", xScale, yScale));
+            .attr("d", line1(name_y1, xScale, yScale));
 
         const l2 = svg.append("path")
             .attr("class", "line")
@@ -131,7 +131,7 @@
             .attr("stroke-linecap", strokeLinecap)
             .attr("stroke-linejoin", strokeLinejoin)
             .attr("stroke-opacity", strokeOpacity)
-            .attr("d", line1("adc1", xScale, yScale));
+            .attr("d", line1(name_y2, xScale, yScale));
 
         const l3 = svg.append("path")
             .attr("class", "line")
@@ -141,7 +141,7 @@
             .attr("stroke-linecap", strokeLinecap)
             .attr("stroke-linejoin", strokeLinejoin)
             .attr("stroke-opacity", strokeOpacity)
-            .attr("d", line1("adc2", xScale, yScale));
+            .attr("d", line1(name_y3, xScale, yScale));
 
         function zoomed({ transform }) {
             //const xz = transform.rescaleX(x);
@@ -155,9 +155,9 @@
             //xRange.map(d => transform.applyX(d))
             //I.range(xRange.map(d => transform.applyX(d)));
             //x.range([event.transform.applyX(margin.left), event.transform.applyX(width - margin.right)]);
-            l1.attr("d", line1("adc0", xz, yz));
-            l2.attr("d", line1("adc1", xz, yz));
-            l3.attr("d", line1("adc2", xz, yz));
+            l1.attr("d", line1(name_y1, xz, yz));
+            l2.attr("d", line1(name_y2, xz, yz));
+            l3.attr("d", line1(name_y3, xz, yz));
         }
 
         function reset() {
@@ -180,9 +180,9 @@
 
     d1.then(function (data) {
         if (params.get('mode') == 2)
-            document.body.appendChild(LineChart(data, { width: window.innerWidth, height: (window.innerWidth / 2) }));
+            document.body.appendChild(LineChart(data, { name_y1: "R1", name_y2: "U", name_y3: "R2", width: window.innerWidth, height: (window.innerWidth / 2) }));
         else
-            document.body.appendChild(LineChart(data, { x: (x) => x.id / 10, width: window.innerWidth, height: (window.innerWidth / 2) }));
+            document.body.appendChild(LineChart(data, { width: window.innerWidth, height: (window.innerWidth / 2) }));
     });
 
 </script>

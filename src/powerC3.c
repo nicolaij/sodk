@@ -19,10 +19,10 @@
 // uint32_t bufferR[2][DATALEN / ADC_COUNT_READ];
 // uint32_t bufferR[6][DATALEN];
 calcdata_t bufferR[DATALEN];
-uint32_t buffer[3][DATALEN];
+// uint32_t buffer[3][DATALEN];
 uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
-uint8_t buffer_ADC_copy[ADC_BUFFER * 5];
-int block_buffer_end = 0;
+uint8_t buffer_ADC_copy[ADC_BUFFER * 100];
+int block_buffer_end = 0; //последний блок буфера
 
 result_t result = {};
 
@@ -117,7 +117,7 @@ int current(int adc)
 int kOm(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if (adc_u < 10 || u < 6000)
+    if (adc_u < 10 || u < 4000)
         return 0;
     if (adc_r < 10)
         return chan_r[0].max;
@@ -158,7 +158,7 @@ static void continuous_adc_init()
     // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
 
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BUFFER * 400,
+        .max_store_buf_size = ADC_BUFFER * 100,
         .conv_num_each_intr = ADC_BUFFER,
         .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[1].channel,
@@ -310,11 +310,11 @@ void btn_task(void *arg)
 
             if (cmd == 'r' || cmd == 'R') // print block result
             {
-                int n = 0;
-                for (int i = 0; i < DATALEN; i++)
+                for (int i = 0; i <= block_buffer_end; i++)
                 {
-                    if (buffer[2][i] != 10)
-                        printf("%4d %4d %4d %4d %4d\n", ++n, i, buffer[0][i], buffer[1][i], buffer[2][i]);
+                    // if (buffer[2][i] != 10)
+                    //     printf("%4d %4d %4d %4d %4d\n", ++n, i, buffer[0][i], buffer[1][i], buffer[2][i]);
+                    printf("%4d %4d %4d %4d\n", i, bufferR[i].R1, bufferR[i].U, bufferR[i].R2);
                 }
             }
 
@@ -334,7 +334,7 @@ void btn_task(void *arg)
                         (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[3].channel &&
                         (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel)
                     {
-                        printf("%4d %4d %4d %4d %4d %4d\t", n, (p + 0)->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, (p + 4)->type2.data);
+                        printf("%4d %4d %4d %4d %4d %4d\t", n / ADC_COUNT_READ, (p + 0)->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, (p + 4)->type2.data);
                         printf("=%6d %6d %6d\n", kOm((p + 1)->type2.data, (p + 0)->type2.data), volt((p + 1)->type2.data), kOm2chan((p + 1)->type2.data, (p + 2)->type2.data));
 
                         p = p + 5;
@@ -394,15 +394,16 @@ void dual_adc(void *arg)
         ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 1));
 #endif
         uint8_t *ptr = (uint8_t *)buffer_ADC;
-        uint8_t *ptr1 = (uint8_t *)buffer_ADC;
+        uint8_t *ptr_adc_begin = (uint8_t *)buffer_ADC;
         uint8_t *ptre = (uint8_t *)buffer_ADC;
+        uint8_t *ptrb = (uint8_t *)buffer_ADC;
 
         int blocks = 0;
         int block_power_on = 0;
         int block_power_off = 0;
         int block_result = 0;
         int block_pre_result = 0;
-        int counter_block_post_result = 0;
+        int counter_block_ADC_buffer = 0;
 
         int64_t timeout = menu[0].val * 1000LL;
         // int64_t quiet_timeout = 10 * 1000;
@@ -430,7 +431,7 @@ void dual_adc(void *arg)
         calcdata_t sum_bavg = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
         calcdata_t bref = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
-        const int avg_len = menu[17].val;
+        int avg_len = 0;
         int compare_counter = menu[16].val;
         const int compare_delta = 1; //в %
 
@@ -442,15 +443,12 @@ void dual_adc(void *arg)
         {
             uint32_t req = ADC_BUFFER;
             uint32_t ret = 0;
-            int i = 0;
+            ptrb = ptr;
             while (req > 0)
             {
                 ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, req, &ret, ADC_MAX_DELAY));
                 ptr = ptr + ret;
                 req = req - ret;
-                if (i == 0)
-                    buffer[0][blocks] = ret;
-                i++;
             }
             ptre = ptr;
 
@@ -475,6 +473,7 @@ void dual_adc(void *arg)
             calcdata_t sum_avg01 = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
             int n = 0;
+            int overvolt = 0;
             adc_digi_output_data_t *p = (void *)buffer_ADC;
             while ((uint8_t *)p < ptr - sizeof(adc_digi_output_data_t) * 4)
             {
@@ -492,11 +491,27 @@ void dual_adc(void *arg)
 
                     sum_avg01.R1 += kOm((p + 1)->type2.data, p->type2.data);
                     sum_avg01.R2 += kOm2chan((p + 1)->type2.data, (p + 2)->type2.data);
-                    sum_avg01.U += volt((p + 1)->type2.data);
+                    int v = volt((p + 1)->type2.data);
+                    sum_avg01.U += v;
                     sum_avg01.Ubatt += voltBatt((p + 3)->type2.data);
                     sum_avg01.U0 += volt0((p + 4)->type2.data);
                     p = p + ADC_COUNT_READ;
-                    ptr1 = (void *)p;
+                    ptr_adc_begin = (void *)p;
+
+                    if (v / 1000 > menu[1].val)
+                    {
+                        overvolt++;
+                        if (overvolt >= 3)
+                        {
+                            //ВЫРУБАЕМ
+                            gpio_set_level(ENABLE_PIN, 1);
+                            block_power_off = blocks;
+                        }
+                    }
+                    else
+                    {
+                        overvolt = 0;
+                    }
                 }
                 else
                 {
@@ -510,11 +525,8 @@ void dual_adc(void *arg)
                 }
             };
 
-            buffer[1][blocks] = (ptr - ptr1);
-            buffer[2][blocks] = n;
-
             //обрывок данных
-            size_t d = (ptr - ptr1) % (ADC_COUNT_READ * sizeof(adc_digi_output_data_t));
+            size_t d = (ptr - ptr_adc_begin) % (ADC_COUNT_READ * sizeof(adc_digi_output_data_t));
             if (d > 0)
             {
                 memcpy(buffer_ADC, ptr - d, d);
@@ -547,12 +559,9 @@ void dual_adc(void *arg)
                 //отсечка по времени
                 if ((esp_timer_get_time() - t1) > timeout)
                 {
-                    //ВЫРУБАЕМr
+                    //ВЫРУБАЕМ
                     gpio_set_level(ENABLE_PIN, 1);
-                    // printf("off 1\n");
                     block_power_off = blocks;
-                    // time_off = esp_timer_get_time();
-                    // printf("off count: %d\n", (ptr_off - (uint8_t *)bufferADC) / (ADC_DMA * 4));
                 }
                 else
                 {
@@ -562,7 +571,6 @@ void dual_adc(void *arg)
                         //прекращаем измерения
                         //ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
-                        // printf("off 2\n");
                         if (terminal_mode >= 0)
                             printf("UbattEnd: %d < %d)\n", bufferR[blocks].Ubatt, menu[13].val);
                         BattLow += 100;
@@ -575,7 +583,6 @@ void dual_adc(void *arg)
                         {
                             //ВЫРУБАЕМ
                             gpio_set_level(ENABLE_PIN, 1);
-                            // printf("off 3\n");
                             //прекращаем измерения
                             if (terminal_mode >= 0)
                                 printf("UbattLow: %d < %d (%d)\n", bufferR[blocks].Ubatt, menu[12].val, BattLow);
@@ -609,133 +616,131 @@ void dual_adc(void *arg)
             }
 
             //считаем среднее
-            if (blocks > (ON_BLOCK + 5))
+            if (blocks > ON_BLOCK)
             {
                 sum_bavg.R1 += bufferR[blocks].R1;
                 sum_bavg.R2 += bufferR[blocks].R2;
                 sum_bavg.U += bufferR[blocks].U;
                 sum_bavg.U0 += bufferR[blocks].U0;
-                if (blocks > ((ON_BLOCK + 5) + avg_len))
+                avg_len++;
+
+                if (avg_len > menu[17].val)
                 {
+                    avg_len--;
                     sum_bavg.R1 -= bufferR[blocks - avg_len].R1;
                     sum_bavg.R2 -= bufferR[blocks - avg_len].R2;
                     sum_bavg.U -= bufferR[blocks - avg_len].U;
                     sum_bavg.U0 -= bufferR[blocks - avg_len].U0;
+                }
 
-                    int r1 = sum_bavg.R1 / avg_len;
-                    int r2 = sum_bavg.R2 / avg_len;
-                    int u = sum_bavg.U / avg_len;
-                    int u0 = sum_bavg.U0 / avg_len;
+                int r1 = sum_bavg.R1 / avg_len;
+                int r2 = sum_bavg.R2 / avg_len;
+                int u = sum_bavg.U / avg_len;
+                int u0 = sum_bavg.U0 / avg_len;
 
-                    int cmp_r1_max = r1 * 1000 / (1000 - compare_delta * 10);
-                    int cmp_r1_min = r1 * 1000 / (1000 + compare_delta * 10);
-                    if (cmp_r1_max == r1)
-                        cmp_r1_max = cmp_r1_max + 1;
+                int cmp_r1_max = r1 * 1000 / (1000 - compare_delta * 10);
+                int cmp_r1_min = r1 * 1000 / (1000 + compare_delta * 10);
+                if (cmp_r1_max == r1)
+                    cmp_r1_max = cmp_r1_max + 1;
 
-                    int cmp_r2_max = r2 * 1000 / (1000 - compare_delta * 10);
-                    int cmp_r2_min = r2 * 1000 / (1000 + compare_delta * 10);
-                    if (cmp_r2_max == r2)
-                        cmp_r2_max = cmp_r2_max + 1;
+                int cmp_r2_max = r2 * 1000 / (1000 - compare_delta * 10);
+                int cmp_r2_min = r2 * 1000 / (1000 + compare_delta * 10);
+                if (cmp_r2_max == r2)
+                    cmp_r2_max = cmp_r2_max + 1;
 
-                    int cmp_u_max = u * 1000 / (1000 - compare_delta * 10);
-                    int cmp_u_min = u * 1000 / (1000 + compare_delta * 10);
-                    if (cmp_u_max == u)
-                        cmp_u_max = cmp_u_max + 1;
+                int cmp_u_max = u * 1000 / (1000 - compare_delta * 10);
+                int cmp_u_min = u * 1000 / (1000 + compare_delta * 10);
+                if (cmp_u_max == u)
+                    cmp_u_max = cmp_u_max + 1;
 
-                    if (cmp_r1_min <= bref.R1 &&
-                        cmp_r1_max >= bref.R1 &&
-                        cmp_r2_min <= bref.R2 &&
-                        cmp_r2_max >= bref.R2 &&
-                        cmp_u_min <= bref.U &&
-                        cmp_u_max >= bref.U)
+                if (cmp_r1_min <= bref.R1 &&
+                    cmp_r1_max >= bref.R1 &&
+                    cmp_r2_min <= bref.R2 &&
+                    cmp_r2_max >= bref.R2 &&
+                    cmp_u_min <= bref.U &&
+                    cmp_u_max >= bref.U)
+                {
+                    compare_counter--;
+                }
+                else
+                {
+                    bref.R1 = r1;
+                    bref.R2 = r2;
+                    bref.U = u;
+                    bref.U0 = u0;
+                    compare_counter = menu[16].val;
+                }
+
+                if (block_power_off == 0)
+                {
+                    if (compare_counter == 0)
                     {
-                        compare_counter--;
-                    }
-                    else
-                    {
-                        bref.R1 = r1;
-                        bref.R2 = r2;
-                        bref.U = u;
-                        bref.U0 = u0;
-                        compare_counter = menu[16].val;
-                    }
+                        //ВЫРУБАЕМ
+                        gpio_set_level(ENABLE_PIN, 1);
+                        block_power_off = blocks;
+                        // block_pre_result = blocks;
 
-                    if (block_power_off == 0)
-                    {
-                        if (compare_counter == 0)
-                        {
-                            //ВЫРУБАЕМ
-                            gpio_set_level(ENABLE_PIN, 1);
-                            block_power_off = blocks;
-                            block_pre_result = blocks;
-
-                            if (sum_adc[0] / n < 4000) ///НЕТ ПЕРЕГРУЗКИ
-                                block_result = blocks;
-                        }
-                    }
-                    else
-                    {
-                        if (block_result == 0) //была перегрузка.
-                        {
-                            if (sum_adc[0] / n < 4000)
-                            {
-                                r1 = bufferR[blocks].R1;
-                                r2 = bufferR[blocks].R2;
-                                u = bufferR[blocks].U;
-                                u0 = bufferR[blocks].U0;
-
-                                if (block_pre_result + 1 == blocks)
-                                {
-                                    block_result = blocks;
-                                }
-                                else
-                                    block_pre_result = blocks;
-                            }
-                        }
-                    }
-
-                    //запоминаем результат
-                    if (block_result == blocks || block_pre_result == blocks)
-                    {
-                        result.adc0 = sum_adc[0] / n;
-                        result.adc1 = sum_adc[1] / n;
-                        result.adc2 = sum_adc[2] / n;
-
-                        if (r1 < 4200)
-                        {
-                            result.R = r1;
-                        }
-                        else
-                        {
-                            result.R = r2;
-                        }
-                        result.U = u;
-                        result.U0 = u0;
-                        result.Ubatt1 = (bufferR[ON_BLOCK + 1].Ubatt + bufferR[ON_BLOCK + 2].Ubatt + bufferR[ON_BLOCK + 3].Ubatt) / 3;
-                        result.Ubatt0 = (bufferR[ON_BLOCK - 1].Ubatt + bufferR[ON_BLOCK - 2].Ubatt + bufferR[ON_BLOCK - 3].Ubatt) / 3;
-
-                        if (block_result == blocks)
-                        {
-                            counter_block_post_result = 0;
-                            xQueueSend(send_queue, (void *)&result, (portTickType)0);
-                        }
-                    }
-
-                    if (block_result > 0) //есть результаты
-                    {
-                        if (counter_block_post_result < sizeof(buffer_ADC_copy) / ADC_BUFFER) //копируем буфер
-                        {
-                            memcpy(&buffer_ADC_copy[ADC_BUFFER * counter_block_post_result], ptre - ADC_BUFFER, ADC_BUFFER);
-                        }
-                        else if (counter_block_post_result > menu[19].val)
-                        {
-                            //заканчиваем измерение
-                            break;
-                        }
-
-                        counter_block_post_result++;
+                        if (sum_adc[0] / n < 4000) ///НЕТ ПЕРЕГРУЗКИ
+                            block_result = blocks;
                     }
                 }
+                else
+                {
+                    if (block_result == 0) //была перегрузка.
+                    {
+                        if (sum_adc[0] / n < 4000)
+                        {
+                            r1 = bufferR[blocks].R1;
+                            r2 = bufferR[blocks].R2;
+                            u = bufferR[blocks].U;
+                            u0 = bufferR[blocks].U0;
+
+                            block_result = blocks;
+                        }
+                    }
+                }
+
+                //запоминаем результат
+                if (block_result == blocks || block_pre_result == blocks)
+                {
+                    result.adc0 = sum_adc[0] / n;
+                    result.adc1 = sum_adc[1] / n;
+                    result.adc2 = sum_adc[2] / n;
+
+                    if (r1 < 4200)
+                    {
+                        result.R = r1;
+                    }
+                    else
+                    {
+                        result.R = r2;
+                    }
+                    result.U = u;
+                    result.U0 = u0;
+                    result.Ubatt1 = (bufferR[ON_BLOCK + 1].Ubatt + bufferR[ON_BLOCK + 2].Ubatt + bufferR[ON_BLOCK + 3].Ubatt) / 3;
+                    result.Ubatt0 = (bufferR[ON_BLOCK - 1].Ubatt + bufferR[ON_BLOCK - 2].Ubatt + bufferR[ON_BLOCK - 3].Ubatt) / 3;
+
+                    if (block_result == blocks)
+                    {
+                        xQueueSend(send_queue, (void *)&result, (portTickType)0);
+                    }
+                }
+            }
+
+            //буферезируем 50 блоков после включения и остальные после результата
+            if ((blocks >= ON_BLOCK && counter_block_ADC_buffer < 50) || (block_result > 0))
+            {
+                if (counter_block_ADC_buffer < sizeof(buffer_ADC_copy) / ADC_BUFFER) //копируем буфер
+                {
+                    memcpy(&buffer_ADC_copy[ADC_BUFFER * counter_block_ADC_buffer], ptrb, ADC_BUFFER);
+                }
+                else if (counter_block_ADC_buffer > menu[19].val)
+                {
+                    //заканчиваем измерение
+                    break;
+                }
+
+                counter_block_ADC_buffer++;
             }
 
             //Оставляем свободное место (1/4) в буфере для вычисления сопротивления после отключения ВВ источника
@@ -764,7 +769,7 @@ void dual_adc(void *arg)
 
         //РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        snprintf((char *)buf, sizeof(buf), "(on:%3d off:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_power_off, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
+        snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
         xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
         printf("%s\n", buf);
 
@@ -778,7 +783,7 @@ void dual_adc(void *arg)
 
 int getResult_Data(char *line, int data_pos)
 {
-    const char *header = {"id,adc0,adc1,adc2\n"};
+    const char *header = {"id,R1,U,R2\n"};
     char *pos = line;
     int l = 0;
     if (data_pos == 0)
@@ -792,35 +797,27 @@ int getResult_Data(char *line, int data_pos)
     {
         return 0;
     }
-    
+
     l += sprintf(pos, "%d,%d,%d,%d\n", data_pos, bufferR[data_pos].R1, bufferR[data_pos].U, bufferR[data_pos].R2);
     return l;
 }
 
-int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
+int getADC_Data(char *line, int data_pos)
 {
-    adc_digi_output_data_t *p = (void *)(*ptr_adc);
+    const char *header = {"id,adc0,adc1,adc2,adc3,adc4\n"};
+    char *pos = line;
+    int l = 0;
+    adc_digi_output_data_t *p = (void *)(buffer_ADC_copy + data_pos * ADC_COUNT_READ * sizeof(adc_digi_output_data_t));
 
-    if ((*ptr_adc) == 0)
+    if (data_pos == 0)
     {
-        p = (void *)buffer_ADC_copy;
-        (*ptr_adc) = (uint8_t *)p;
-#if ADC_COUNT_READ == 2
-        strcpy(line, "id,adc0,adc1,adc2,res0,res1\n");
-#elif ADC_COUNT_READ == 5
-        strcpy(line, "id,adc0,adc1,adc2,adc3,adc4\n");
-#endif
-        return 2;
-    };
+        strcpy(line, header);
+        l = strlen(header);
+        pos = line + l;
+    }
 
     while ((uint8_t *)p < (uint8_t *)buffer_ADC_copy + sizeof(buffer_ADC_copy))
     {
-#if ADC_COUNT_READ == 2
-        if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
-            (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[1].channel)
-        {
-            sprintf(line, "%5d, %4d, %4d, %4d, %5d, %5d\n", (*num), p->type2.data, (p + 1)->type2.data, 0, bufferR[0][(*num)], bufferR[1][(*num)]);
-#elif ADC_COUNT_READ == 5
         if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
             (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[1].channel &&
             (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == chan_r[2].channel &&
@@ -828,20 +825,12 @@ int getADC_Data(char *line, uint8_t **ptr_adc, int *num)
             (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel)
         {
             //             id   adc0 adc1 adc2 adc3 adc4
-            sprintf(line, "%5d, %4d, %4d, %4d, %4d, %4d\n", (*num), p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, (p + 4)->type2.data);
-#endif
-            (*num)++;
-            // printf("%s", line);
+            l += sprintf(pos, "%5d, %4d, %4d, %4d, %4d, %4d\n", data_pos, p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, (p + 4)->type2.data);
+
+            return l;
         }
         else
-        {
             p++;
-            continue;
-        };
-
-        p = p + ADC_COUNT_READ;
-        (*ptr_adc) = (uint8_t *)p;
-        return 1;
     };
 
     return 0;

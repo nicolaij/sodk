@@ -135,8 +135,6 @@ void cur_time(char *buf);
 
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on, int channel);
 
-int getADC_Data(char *line, uint8_t **ptr_adc, int *num);
-
 // void power_on(int channel_mask);
 // void power_off(void);
 void pcf8575_set(uint16_t channel_mask);
@@ -145,5 +143,7 @@ int pcf8575_read(uint16_t bit);
 void start_measure(int reasone);
 
 int getResult_Data(char *line, int data_pos);
+
+int getADC_Data(char *line, int data_pos);
 
 #endif
