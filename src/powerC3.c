@@ -21,7 +21,7 @@
 calcdata_t bufferR[DATALEN];
 // uint32_t buffer[3][DATALEN];
 uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
-uint8_t buffer_ADC_copy[ADC_BUFFER * 100];
+uint8_t buffer_ADC_copy[ADC_BUFFER * 200];
 int block_buffer_end = 0; //последний блок буфера
 
 result_t result = {};
@@ -151,14 +151,27 @@ static void continuous_adc_init()
 {
     esp_err_t ret = ESP_OK;
     assert(ret == ESP_OK);
-    int64_t t1 = esp_timer_get_time();
-    int64_t t2 = 0;
-    int64_t t3 = 0;
+    /*
+        adc_digi_filter_t fcfg0 = {
+            .adc_unit = ADC_UNIT_1,
+            .channel = ADC_CHANNEL_0,
+            .mode = ADC_DIGI_FILTER_IIR_64,
+        };
 
-    // esp_err_t adc_digi_filter_set_config(adc_digi_filter_idx_tidx, adc_digi_filter_t *config);
+        ESP_ERROR_CHECK(adc_digi_filter_set_config(ADC_DIGI_FILTER_IDX0, &fcfg0));
+        ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_DIGI_FILTER_IDX0, true));
 
+        adc_digi_filter_t fcfg1 = {
+            .adc_unit = ADC_UNIT_2,
+            .channel = ADC_CHANNEL_0,
+            .mode = ADC_DIGI_FILTER_IIR_64,
+        };
+
+        ESP_ERROR_CHECK(adc_digi_filter_set_config(ADC_DIGI_FILTER_IDX1, &fcfg1));
+        ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_DIGI_FILTER_IDX1, true));
+    */
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BUFFER * 100,
+        .max_store_buf_size = ADC_BUFFER * 200,
         .conv_num_each_intr = ADC_BUFFER,
         .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[1].channel,
@@ -166,13 +179,11 @@ static void continuous_adc_init()
 
     ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
 
-    t2 = esp_timer_get_time();
-
     adc_digi_configuration_t dig_cfg = {
         .conv_limit_en = false,
         .conv_limit_num = 200,
         .sample_freq_hz = ADC_FREQ,
-        .conv_mode = ADC_CONV_BOTH_UNIT,
+        .conv_mode = ADC_CONV_ALTER_UNIT,
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
     };
 
@@ -208,7 +219,6 @@ static void continuous_adc_init()
     dig_cfg.pattern_num = n;
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
-    t3 = esp_timer_get_time();
 }
 
 static xQueueHandle gpio_evt_queue = NULL;
@@ -435,6 +445,9 @@ void dual_adc(void *arg)
         int compare_counter = menu[16].val;
         const int compare_delta = 1; //в %
 
+        int exp_filter_k = menu[20].val;
+        int exp_filter[5] = {0, 0, 0, 0, 0};
+
         int data_errors = 0;
 
         // adc_digi_output_data_t *p =
@@ -477,7 +490,7 @@ void dual_adc(void *arg)
             adc_digi_output_data_t *p = (void *)buffer_ADC;
             while ((uint8_t *)p < ptr - sizeof(adc_digi_output_data_t) * 4)
             {
-                if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel &&
+                if ((p + 0)->type2.unit == 0 && (p + 0)->type2.channel == chan_r[0].channel &&
                     (p + 1)->type2.unit == 1 && (p + 1)->type2.channel == chan_r[1].channel &&
                     (p + 2)->type2.unit == 0 && (p + 2)->type2.channel == chan_r[2].channel &&
                     (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[3].channel &&
@@ -487,14 +500,20 @@ void dual_adc(void *arg)
                     sum_adc[3] += (p + 3)->type2.data;
                     sum_adc[2] += (p + 2)->type2.data;
                     sum_adc[1] += (p + 1)->type2.data;
-                    sum_adc[0] += p->type2.data;
+                    sum_adc[0] += (p + 0)->type2.data;
 
-                    sum_avg01.R1 += kOm((p + 1)->type2.data, p->type2.data);
-                    sum_avg01.R2 += kOm2chan((p + 1)->type2.data, (p + 2)->type2.data);
-                    int v = volt((p + 1)->type2.data);
+                    exp_filter[0] = ((p + 0)->type2.data * exp_filter_k + exp_filter[0] * (100 - exp_filter_k)) / 100;
+                    exp_filter[1] = ((p + 1)->type2.data * exp_filter_k + exp_filter[1] * (100 - exp_filter_k)) / 100;
+                    exp_filter[2] = ((p + 2)->type2.data * exp_filter_k + exp_filter[2] * (100 - exp_filter_k)) / 100;
+                    exp_filter[3] = ((p + 3)->type2.data * exp_filter_k + exp_filter[3] * (100 - exp_filter_k)) / 100;
+                    exp_filter[4] = ((p + 4)->type2.data * exp_filter_k + exp_filter[4] * (100 - exp_filter_k)) / 100;
+
+                    sum_avg01.R1 += kOm(exp_filter[1], exp_filter[0]);
+                    sum_avg01.R2 += kOm2chan(exp_filter[1], exp_filter[2]);
+                    int v = volt(exp_filter[1]);
                     sum_avg01.U += v;
-                    sum_avg01.Ubatt += voltBatt((p + 3)->type2.data);
-                    sum_avg01.U0 += volt0((p + 4)->type2.data);
+                    sum_avg01.Ubatt += voltBatt(exp_filter[3]);
+                    sum_avg01.U0 += volt0(exp_filter[4]);
                     p = p + ADC_COUNT_READ;
                     ptr_adc_begin = (void *)p;
 
@@ -727,14 +746,14 @@ void dual_adc(void *arg)
                 }
             }
 
-            //буферезируем 50 блоков после включения и остальные после результата
-            if ((blocks >= ON_BLOCK && counter_block_ADC_buffer < 50) || (block_result > 0))
+            //буферезируем после включения
+            if (blocks >= ON_BLOCK)
             {
                 if (counter_block_ADC_buffer < sizeof(buffer_ADC_copy) / ADC_BUFFER) //копируем буфер
                 {
                     memcpy(&buffer_ADC_copy[ADC_BUFFER * counter_block_ADC_buffer], ptrb, ADC_BUFFER);
                 }
-                else if (counter_block_ADC_buffer > menu[19].val)
+                else if (block_result > 0 && blocks > (block_result + menu[19].val))
                 {
                     //заканчиваем измерение
                     break;
@@ -802,11 +821,15 @@ int getResult_Data(char *line, int data_pos)
     return l;
 }
 
-int getADC_Data(char *line, int data_pos)
+int getADC_Data(char *line, int data_pos, bool filter)
 {
     const char *header = {"id,adc0,adc1,adc2,adc3,adc4\n"};
     char *pos = line;
     int l = 0;
+
+    int exp_filter_k = menu[20].val;
+    static int exp_filter[5] = {0, 0, 0, 0, 0};
+
     adc_digi_output_data_t *p = (void *)(buffer_ADC_copy + data_pos * ADC_COUNT_READ * sizeof(adc_digi_output_data_t));
 
     if (data_pos == 0)
@@ -814,6 +837,16 @@ int getADC_Data(char *line, int data_pos)
         strcpy(line, header);
         l = strlen(header);
         pos = line + l;
+        exp_filter[0] = 0;
+        exp_filter[1] = 0;
+        exp_filter[2] = 0;
+        exp_filter[3] = 0;
+        exp_filter[4] = 0;
+    }
+
+    if (filter == false)
+    {
+        exp_filter_k = 100;
     }
 
     while ((uint8_t *)p < (uint8_t *)buffer_ADC_copy + sizeof(buffer_ADC_copy))
@@ -824,8 +857,14 @@ int getADC_Data(char *line, int data_pos)
             (p + 3)->type2.unit == 0 && (p + 3)->type2.channel == chan_r[3].channel &&
             (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel)
         {
-            //             id   adc0 adc1 adc2 adc3 adc4
-            l += sprintf(pos, "%5d, %4d, %4d, %4d, %4d, %4d\n", data_pos, p->type2.data, (p + 1)->type2.data, (p + 2)->type2.data, (p + 3)->type2.data, (p + 4)->type2.data);
+            exp_filter[0] = ((p + 0)->type2.data * exp_filter_k + exp_filter[0] * (100 - exp_filter_k)) / 100;
+            exp_filter[1] = ((p + 1)->type2.data * exp_filter_k + exp_filter[1] * (100 - exp_filter_k)) / 100;
+            exp_filter[2] = ((p + 2)->type2.data * exp_filter_k + exp_filter[2] * (100 - exp_filter_k)) / 100;
+            exp_filter[3] = ((p + 3)->type2.data * exp_filter_k + exp_filter[3] * (100 - exp_filter_k)) / 100;
+            exp_filter[4] = ((p + 4)->type2.data * exp_filter_k + exp_filter[4] * (100 - exp_filter_k)) / 100;
+
+            //                 id   adc0 adc1 adc2 adc3 adc4
+            l += sprintf(pos, "%5d, %4d, %4d, %4d, %4d, %4d\n", data_pos, exp_filter[0], exp_filter[1], exp_filter[2], exp_filter[3], exp_filter[4]);
 
             return l;
         }

@@ -4,9 +4,10 @@
 <head>
     <meta charset="utf-8">
     <script src="/d3.min.js"></script>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">    
 </head>
 
-<body>
 
 </body>
 
@@ -27,7 +28,7 @@
         marginTop = 20, // top margin, in pixels
         marginRight = 30, // right margin, in pixels
         marginBottom = 30, // bottom margin, in pixels
-        marginLeft = 40, // left margin, in pixels
+        marginLeft = 60, // left margin, in pixels
         width = 640, // outer width, in pixels
         height = 400, // outer height, in pixels
         xType = d3.scaleLinear, // the x-scale type
@@ -74,7 +75,7 @@
         // Construct a line generator.
         const line1 = (ydata, xscale, yscale) => d3.line()
             .curve(curve)
-            .x(d => xscale(d.id))
+            .x(d => xscale(d[name_x]))
             .y(d => yscale(d[ydata]))
             (data);
 
@@ -180,9 +181,9 @@
 
     d1.then(function (data) {
         if (params.get('mode') == 2)
-            document.body.appendChild(LineChart(data, { name_y1: "R1", name_y2: "U", name_y3: "R2", width: window.innerWidth, height: (window.innerWidth / 2) }));
+            document.body.appendChild(LineChart(data, { name_y1: "R1", name_y2: "U", name_y3: "R2", width: window.innerWidth, height: window.innerHeight }));
         else
-            document.body.appendChild(LineChart(data, { width: window.innerWidth, height: (window.innerWidth / 2) }));
+            document.body.appendChild(LineChart(data, { width: window.innerWidth, height: window.innerHeight }));
     });
 
 </script>

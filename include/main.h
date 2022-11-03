@@ -86,7 +86,7 @@ typedef struct
     int32_t max;
 } menu_t;
 
-extern menu_t menu[20];
+extern menu_t menu[22];
 
 QueueHandle_t uicmd_queue;
 QueueHandle_t send_queue;
@@ -144,6 +144,6 @@ void start_measure(int reasone);
 
 int getResult_Data(char *line, int data_pos);
 
-int getADC_Data(char *line, int data_pos);
+int getADC_Data(char *line, int data_pos, bool filter);
 
 #endif

@@ -16,13 +16,6 @@
 #define TX_GPIO 6
 #define RX_GPIO 7
 
-//#define RX_BUF_SIZE 1024
-
-// static EventGroupHandle_t event_group = NULL;
-
-// char rx_buf[RX_BUF_SIZE];
-// uint8_t buf[WS_BUF_LINE];
-
 char apn[32] = {"mogenergo"};
 
 char serverip[16] = {"10.179.40.11"};
@@ -533,7 +526,7 @@ void radio_task(void *arg)
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
 
-            snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%d, IP:%d.%d.%d.%d, Voltage:%dmV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
+            snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%u, IP:%d.%d.%d.%d, Voltage:%umV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
 
             ESP_LOGI(TAG, "%s", modem_status);
 
@@ -616,8 +609,8 @@ void radio_task(void *arg)
             int len_data = 0;
             while (pdTRUE == xQueueReceive(send_queue, &result, 10000 / portTICK_PERIOD_MS))
             {
-                time_t n = time(0);
-                struct tm *localtm = localtime(&n);
+                n = time(0);
+                localtm = localtime(&n);
                 strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
                 len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%d.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113);
 

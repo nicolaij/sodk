@@ -53,6 +53,8 @@ menu_t menu[] = {
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 10, .min = 1, .max = 1000}, /*17*/
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999},
     {.id = "blocks", .name = "График после результ.", .val = 1000, .min = 0, .max = 2000},
+    {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
+    {.id = "Kfilter2", .name = "", .val = 10, .min = 1, .max = 100},
 };
 
 int read_nvs_menu()
@@ -154,7 +156,7 @@ void go_sleep(void)
     }
 
     //коррекция на время работы
-    time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[14].val)) + 300000LL;
+    time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[14].val));
 
     esp_sleep_enable_timer_wakeup(time_in_us);
     esp_deep_sleep_start();

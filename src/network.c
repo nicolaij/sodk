@@ -23,7 +23,6 @@
 
 #include "driver/uart.h"
 
-// extern menu_t menu[];
 extern uint8_t mac[6];
 extern char modem_status[128];
 
@@ -249,10 +248,16 @@ static esp_err_t settings_handler(httpd_req_t *req)
 {
     reset_sleep_timeout();
 
-    /*                       "<script src=\"/d3.min.js\"></script>"*/
+    /*                       "<script src=\"/d3.min.js\"></script>"
+                           "<link rel=\"shortcut icon\" href=\"/favicon.ico\" type=\"image/x-icon\">"
+                       "<link rel=\"icon\" href=\"/favicon.ico\" type=\"image/x-icon\">"
+*/
     const char *head = "<!DOCTYPE html><html><head>"
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
+                       "<link rel=\"shortcut icon\" href=\"/favicon.ico\">"
+                       "<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"/favicon-32x32.png\">"
+                       "<link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"/favicon-16x16.png\">"
                        "<title>Settings</title></head><body>";
     const char *sodkstartform1 = "<form><fieldset><legend>"; //СОДК</legend><table>";
     const char *sodkstartform2 = "</legend><table>";
@@ -263,7 +268,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *nbiotstart = "<form><fieldset><legend>NB-IoT</legend><table>";
     const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
-    const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=2\">График R</a></p>"
+    const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=1\">График АЦП(фильтр)</a>&nbsp;&nbsp;<a href=\"/d3?mode=2\">График R</a></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<a href=\"?restart=true\">Restart</a>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
@@ -687,7 +692,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
 
     char line[128];
     int limitData = DATALEN;
-    int mode = 0;
+    int mode = 0; // 0 - ADC, 1 - фильтр ADC, 2 - СОДК результаты
 
     if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK)
     {
@@ -718,8 +723,10 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     {
         if (mode == 2)
             ll = getResult_Data(&buf[l], n);
+        else if (mode == 1)
+            ll = getADC_Data(&buf[l], n, true);
         else
-            ll = getADC_Data(&buf[l], n);
+            ll = getADC_Data(&buf[l], n, false);
 
         if (ll == 0) // data end
             break;
@@ -838,6 +845,25 @@ static const httpd_uri_t file_download = {
     .is_websocket = false,
 };
 
+static const httpd_uri_t favicon_ico = {
+    .uri = "/favicon.ico",
+    .method = HTTP_GET,
+    .handler = download_get_handler,
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon.ico", .content = "image/x-icon"}),
+    .is_websocket = false};
+static const httpd_uri_t favicon_png16 = {
+    .uri = "/favicon-16x16.png",
+    .method = HTTP_GET,
+    .handler = download_get_handler,
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon-16x16.png", .content = "image/png"}),
+    .is_websocket = false};
+static const httpd_uri_t favicon_png32 = {
+    .uri = "/favicon-32x32.png",
+    .method = HTTP_GET,
+    .handler = download_get_handler,
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon-32x32.png", .content = "image/png"}),
+    .is_websocket = false};
+
 static const httpd_uri_t d3_get = {
     .uri = "/d3",
     .method = HTTP_GET,
@@ -874,6 +900,9 @@ static httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &file_download);
         httpd_register_uri_handler(server, &d3_get);
         httpd_register_uri_handler(server, &d3_get_gz);
+        httpd_register_uri_handler(server, &favicon_ico);
+        httpd_register_uri_handler(server, &favicon_png16);
+        httpd_register_uri_handler(server, &favicon_png32);
 
         ws_fd = 0;
 
@@ -932,8 +961,8 @@ void wifi_task(void *arg)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    if (wifi_init_sta() == 0)
-        wifi_init_softap();
+    // if (wifi_init_sta() == 0)
+    wifi_init_softap();
 
     /* Start the server for the first time */
     start_webserver();
