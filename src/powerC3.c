@@ -171,8 +171,8 @@ static void continuous_adc_init()
         ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_DIGI_FILTER_IDX1, true));
     */
     adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BUFFER * 200,
-        .conv_num_each_intr = ADC_BUFFER,
+        .max_store_buf_size = ADC_BUFFER * 20, // ??? подобрано по количеству ошибок
+        .conv_num_each_intr = ADC_BUFFER * 4,  // подобрано по количеству ошибок
         .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
         .adc2_chan_mask = 1 << chan_r[1].channel,
     };
@@ -447,23 +447,25 @@ void dual_adc(void *arg)
 
         int exp_filter_k = menu[20].val;
         int exp_filter[5] = {0, 0, 0, 0, 0};
+        bool init_filter = false;
 
         int data_errors = 0;
-
-        // adc_digi_output_data_t *p =
 
         do
         {
             uint32_t req = ADC_BUFFER;
             uint32_t ret = 0;
             ptrb = ptr;
+            // printf("read adc: ");
             while (req > 0)
             {
                 ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, req, &ret, ADC_MAX_DELAY));
                 ptr = ptr + ret;
                 req = req - ret;
+                // printf(" %d", ret);
             }
             ptre = ptr;
+            // printf(" %d\n", ret);
 
             if (blocks == ON_BLOCK) //включаем источник ВВ
             {
@@ -497,10 +499,21 @@ void dual_adc(void *arg)
                     (p + 4)->type2.unit == 0 && (p + 4)->type2.channel == chan_r[4].channel)
                 {
                     n++;
+                    sum_adc[4] += (p + 4)->type2.data;
                     sum_adc[3] += (p + 3)->type2.data;
                     sum_adc[2] += (p + 2)->type2.data;
                     sum_adc[1] += (p + 1)->type2.data;
                     sum_adc[0] += (p + 0)->type2.data;
+
+                    if (!init_filter)
+                    {
+                        exp_filter[0] = (p + 0)->type2.data;
+                        exp_filter[1] = (p + 1)->type2.data;
+                        exp_filter[2] = (p + 2)->type2.data;
+                        exp_filter[3] = (p + 3)->type2.data;
+                        exp_filter[4] = (p + 4)->type2.data;
+                        init_filter = true;
+                    }
 
                     exp_filter[0] = ((p + 0)->type2.data * exp_filter_k + exp_filter[0] * (100 - exp_filter_k)) / 100;
                     exp_filter[1] = ((p + 1)->type2.data * exp_filter_k + exp_filter[1] * (100 - exp_filter_k)) / 100;
@@ -837,11 +850,11 @@ int getADC_Data(char *line, int data_pos, bool filter)
         strcpy(line, header);
         l = strlen(header);
         pos = line + l;
-        exp_filter[0] = 0;
-        exp_filter[1] = 0;
-        exp_filter[2] = 0;
-        exp_filter[3] = 0;
-        exp_filter[4] = 0;
+        exp_filter[0] = (p + 0)->type2.data;
+        exp_filter[1] = (p + 1)->type2.data;
+        exp_filter[2] = (p + 2)->type2.data;
+        exp_filter[3] = (p + 3)->type2.data;
+        exp_filter[4] = (p + 4)->type2.data;
     }
 
     if (filter == false)

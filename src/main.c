@@ -33,8 +33,8 @@ int i2c_err = 1;
 static i2c_dev_t pcf8575;
 
 menu_t menu[] = {
-    {.id = "pulse", .name = "Время импульса", .val = 100, .min = 0, .max = 10000},
-    {.id = "Volt", .name = "Ограничение U", .val = 500, .min = 0, .max = 1000},
+    {.id = "pulse", .name = "Время импульса", .val = 500, .min = 0, .max = 10000},
+    {.id = "Volt", .name = "Ограничение U", .val = 600, .min = 0, .max = 1000},
     {.id = "kU", .name = "коэф. U", .val = 1690, .min = 1, .max = 10000},
     {.id = "offsU", .name = "смещ. U", .val = -7794, .min = -100000, .max = 100000},
     {.id = "kR1", .name = "коэф. R (ch 1)", .val = 15000, .min = 1, .max = 100000},
@@ -48,9 +48,9 @@ menu_t menu[] = {
     {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
     {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
     {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
-    {.id = "WiFitime", .name = "WiFi timeout", .val = 60, .min = 1, .max = 10000},
-    {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 10, .min = 1, .max = 1000},
-    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 10, .min = 1, .max = 1000}, /*17*/
+    {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 1, .max = 10000},
+    {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 1000},
+    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000}, /*17*/
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999},
     {.id = "blocks", .name = "График после результ.", .val = 1000, .min = 0, .max = 2000},
     {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},

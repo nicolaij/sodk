@@ -300,6 +300,9 @@ modem_dce_t *bc26_init(modem_dte_t *dte)
         DCE_CHECK(esp_modem_dce_get_imei_number(&(esp_modem_dce->parent)) == ESP_OK, "get imei failed", err_io);
 
         return &(esp_modem_dce->parent);
+    }else
+    {
+        ESP_LOGE(DCE_TAG, "Not registered on network");
     }
 
 err_io:
