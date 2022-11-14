@@ -701,15 +701,16 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
             mode = atoi(line);
         }
     }
+    //printf("mode:%d\n", mode);
 
-    char header[96] = "attachment; filename=\"";
+    strlcpy(line, "attachment; filename=\"", sizeof(line));
     if (mode == 2)
-        strlcat(header, "SODKdata.txt\"", sizeof(header));
+        strlcat(line, "SODKdata.txt\"", sizeof(line));
     else
-        strlcat(header, "ADCdata.txt\"", sizeof(header));
+        strlcat(line, "ADCdata.txt\"", sizeof(line));
 
     httpd_resp_set_type(req, "text/plain");
-    httpd_resp_set_hdr(req, "Content-Disposition", header);
+    httpd_resp_set_hdr(req, "Content-Disposition", line);
     httpd_resp_set_hdr(req, "Connection", "close");
 
     uint8_t *ptr_adc = 0;

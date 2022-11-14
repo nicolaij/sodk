@@ -52,7 +52,7 @@ menu_t menu[] = {
     {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000}, /*17*/
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999},
-    {.id = "blocks", .name = "График после результ.", .val = 1000, .min = 0, .max = 2000},
+    {.id = "blocks", .name = "График после результ.", .val = 100, .min = 0, .max = 2000},
     {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
     {.id = "Kfilter2", .name = "", .val = 10, .min = 1, .max = 100},
 };

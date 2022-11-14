@@ -144,6 +144,8 @@ void start_measure(int reasone);
 
 int getResult_Data(char *line, int data_pos);
 
+//получаем 1 строку данных data_pos
+//возвращает длину строки
 int getADC_Data(char *line, int data_pos, bool filter);
 
 #endif
