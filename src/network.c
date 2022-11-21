@@ -916,8 +916,6 @@ static httpd_handle_t start_webserver(void)
 
 void wifi_task(void *arg)
 {
-    char msg[WS_BUF_SIZE];
-
     ESP_LOGI("SPIFFS", "Initializing SPIFFS");
     esp_vfs_spiffs_conf_t conf = {
         .base_path = "/spiffs",
@@ -974,28 +972,17 @@ void wifi_task(void *arg)
     {
         if (ws_fd > 0)
         {
-            // Receive an item from allow-split ring buffer
-            size_t item_size1, item_size2;
-            char *item1, *item2;
-            BaseType_t ret = xRingbufferReceiveSplit(wsbuf_handle, (void **)&item1, (void **)&item2, &item_size1, &item_size2, pdMS_TO_TICKS(0));
+
+            // Receive an item from no-split ring buffer
+            size_t item_size;
+            char *item = (char *)xRingbufferReceive(wsbuf_handle, &item_size, pdMS_TO_TICKS(0));
             // Check received item
-            if (ret == pdTRUE && item1 != NULL && item_size1 < sizeof(msg))
+            if (item != NULL)
             {
-                printf("xRingbufferReceiveSplit: %d, %d\n", item_size1, item_size2);
-
-                memcpy(msg, item1, item_size1);
-                msg[item_size1] = '\0';
-                vRingbufferReturnItem(wsbuf_handle, (void *)item1);
-                // Check if item was split
-                if (item2 != NULL)
-                {
-                    memcpy(&msg[item_size1], item2, item_size2);
-                    msg[item_size1 + item_size2] = '\0';
-                    vRingbufferReturnItem(wsbuf_handle, (void *)item2);
-                }
-
-                httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, msg);
+                httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, item);
                 reset_sleep_timeout();
+                // Return Item
+                vRingbufferReturnItem(wsbuf_handle, (void *)item);
             }
         }
         /*

@@ -393,7 +393,7 @@ void app_main()
     // ws_send_queue = xQueueCreate(10, WS_BUF_SIZE);
     // i2c_mux = xSemaphoreCreateMutex();
 
-    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
+    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
 
     ready_event_group = xEventGroupCreate();
 

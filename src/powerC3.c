@@ -273,7 +273,7 @@ void btn_task(void *arg)
             {
                 int l = snprintf((char *)buf, sizeof(buf), "IN: %d", result.input);
                 ESP_LOGI("pcf8575", "%s", buf);
-                xRingbufferSend(wsbuf_handle, buf, l, 0);
+                xRingbufferSend(wsbuf_handle, buf, l+1, 0);
                 d_in = result.input;
             }
         }
@@ -294,6 +294,7 @@ void btn_task(void *arg)
                 }
                 else
                 {
+                    d_in = -1;
                     start_measure(1);
                 }
             }
@@ -798,7 +799,7 @@ void dual_adc(void *arg)
         //РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
         int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
-        UBaseType_t res = xRingbufferSend(wsbuf_handle, buf, l, 0);
+        UBaseType_t res = xRingbufferSend(wsbuf_handle, buf, l+1, 0);
 
         printf("%s\n", buf);
         printf("Avg ADC 0:%d, 1:%d, 2:%d, 3:%d, 4:%d\n", sum_adc_full[0] / count_adc_full, sum_adc_full[1] / count_adc_full, sum_adc_full[2] / count_adc_full, sum_adc_full[3] / count_adc_full, sum_adc_full[4] / count_adc_full);
