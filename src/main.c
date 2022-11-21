@@ -33,7 +33,7 @@ int i2c_err = 1;
 static i2c_dev_t pcf8575;
 
 menu_t menu[] = {
-    {.id = "pulse", .name = "Время импульса", .val = 500, .min = 0, .max = 10000},
+    {.id = "pulse", .name = "Время импульса", .val = 500, .min = -1, .max = 10000},
     {.id = "Volt", .name = "Ограничение U", .val = 600, .min = 0, .max = 1000},
     {.id = "kU", .name = "коэф. U", .val = 1690, .min = 1, .max = 10000},
     {.id = "offsU", .name = "смещ. U", .val = -7794, .min = -100000, .max = 100000},
@@ -122,11 +122,68 @@ int pcf8575_read(uint16_t bit)
     return 0;
 }
 
-void pcf8575_set(uint16_t channel_mask)
+//#define INVERT_NB_PWR 1
+
+// POWER_BIT - и NB_PWR_BIT - инверсные
+// POWER_BIT - всегда, кроме когда каналы выбраны
+void pcf8575_set(int channel_cmd)
 {
     if (i2c_err)
         return;
-    uint16_t port_val = ~(channel_mask);
+
+    const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
+
+    static uint16_t current_mask = 0;
+
+    uint16_t cmd_mask = 0;
+
+    if (channel_cmd == 0)
+    {
+#ifdef INVERT_NB_PWR
+        current_mask = BIT(POWER_BIT);
+#else
+        current_mask = BIT(NB_PWR_BIT) | BIT(POWER_BIT);
+#endif
+        cmd_mask = current_mask;
+    }
+    else if (channel_cmd == NB_PWR_CMDON)
+    {
+#ifdef INVERT_NB_PWR
+        current_mask |= BIT(NB_PWR_BIT);
+#else
+        current_mask &= ~BIT(NB_PWR_BIT);
+#endif
+        cmd_mask = current_mask;
+    }
+    else if (channel_cmd == NB_PWR_CMDOFF)
+    {
+#ifdef INVERT_NB_PWR
+        current_mask &= ~BIT(NB_PWR_BIT);
+#else
+        current_mask |= BIT(NB_PWR_BIT);
+#endif
+        cmd_mask = current_mask;
+    }
+    else if (channel_cmd == NB_RESET_CMD)
+    {
+        // current_mask &= ~BIT(NB_RESET_BIT);
+        cmd_mask = current_mask | BIT(NB_RESET_BIT);
+    }
+    else if (channel_cmd == POWER_CMDOFF)
+    {
+        current_mask |= BIT(POWER_BIT);
+        current_mask &= ~(0x0f); //очищаем каналы
+        cmd_mask = current_mask;
+    }
+    else //каналы
+    {
+        current_mask &= ~BIT(POWER_BIT);
+        current_mask &= ~(0x0f); //очищаем каналы
+        current_mask = pcf_output_map[channel_cmd];
+        cmd_mask = current_mask;
+    }
+
+    uint16_t port_val = ~(cmd_mask);
     pcf8575_port_write(&pcf8575, port_val);
 }
 
@@ -307,8 +364,6 @@ void app_main()
 
     if (gpio_get_level(I2C_MASTER_SDA_PIN) == 1 && gpio_get_level(I2C_MASTER_SCL_PIN) == 1)
     {
-        i2c_err = 0;
-
         // Init i2cdev library
         ESP_ERROR_CHECK(i2cdev_init());
 
@@ -318,8 +373,10 @@ void app_main()
         // Init i2c device descriptor
         ESP_ERROR_CHECK(pcf8575_init_desc(&pcf8575, PCF8575_I2C_ADDR_BASE, 0, I2C_MASTER_SDA_PIN, I2C_MASTER_SCL_PIN));
 
-        //отключаем питание АЦП, включаем NBIOT
-        pcf8575_set(BIT(POWER_BIT));
+        i2c_err = 0;
+
+        // init
+        pcf8575_set(0);
     }
     else
     {
@@ -333,9 +390,10 @@ void app_main()
 
     send_queue = xQueueCreate(10, sizeof(result_t));
 
-    ws_send_queue = xQueueCreate(10, WS_BUF_SIZE);
-
+    // ws_send_queue = xQueueCreate(10, WS_BUF_SIZE);
     // i2c_mux = xSemaphoreCreateMutex();
+
+    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
 
     ready_event_group = xEventGroupCreate();
 
@@ -347,17 +405,13 @@ void app_main()
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 #else
-
-    //ждем включения NBIOT модуля
-    vTaskDelay(600 / portTICK_PERIOD_MS);
-
     xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, NULL);
 
     xTaskCreate(radio_task, "radio_task", 1024 * 6, NULL, 5, &xHandleRadio);
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
     {
-        vTaskDelay(4000 / portTICK_PERIOD_MS);
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
     };
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 5, NULL, 10, NULL);
@@ -365,6 +419,7 @@ void app_main()
     int reasone = 0;
     if (wakeup_reason == ESP_SLEEP_WAKEUP_GPIO)
         reasone = 2;
+
     start_measure(reasone);
 
 #endif
@@ -381,7 +436,11 @@ void app_main()
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
-        xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
+        //для отладки схемы pulse -1
+        if (menu[0].val != -1)
+        {
+            xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
+        }
 
         xEventGroupWaitBits(
             ready_event_group, /* The event group being tested. */

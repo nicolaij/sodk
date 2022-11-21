@@ -12,6 +12,9 @@
 #include "freertos/semphr.h"
 #include "freertos/event_groups.h"
 
+#include "freertos/ringbuf.h"
+
+
 #define DATALEN 2000
 #define ADC_COUNT_READ 5
 #define ADC_FREQ 50000
@@ -32,7 +35,14 @@
 #define NB_PWR_BIT 9
 #define PSM_BIT 10
 #define IN1_BIT 15
+#define NB_RESET_BIT 12
 #endif
+
+#define NB_PWR_CMDON 100
+#define NB_PWR_CMDOFF 101
+#define POWER_CMDON 102
+#define POWER_CMDOFF 103
+#define NB_RESET_CMD 105
 
 #define WS_BUF_SIZE 160
 
@@ -91,7 +101,9 @@ extern menu_t menu[22];
 QueueHandle_t uicmd_queue;
 QueueHandle_t send_queue;
 QueueHandle_t set_lora_queue;
-QueueHandle_t ws_send_queue;
+//QueueHandle_t ws_send_queue;
+RingbufHandle_t wsbuf_handle;
+
 
 // SemaphoreHandle_t i2c_mux;
 
@@ -137,7 +149,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
 
 // void power_on(int channel_mask);
 // void power_off(void);
-void pcf8575_set(uint16_t channel_mask);
+void pcf8575_set(int channel_cmd);
 int pcf8575_read(uint16_t bit);
 
 void start_measure(int reasone);

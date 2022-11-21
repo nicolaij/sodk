@@ -111,7 +111,7 @@ err:
 static esp_err_t esp_modem_dce_handle_cereg(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
-    //printf("%s\n", line);
+    // printf("%s\n", line);
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
     if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
     {
@@ -155,15 +155,15 @@ esp_err_t esp_modem_dce_handle_response_all_ok1(modem_dce_t *dce, const char *li
 
     if (!strncmp(line, (const char *)esp_dce->priv_resource, strlen((const char *)esp_dce->priv_resource)))
     {
-        //err = ESP_OK;
+        // err = ESP_OK;
     }
     else if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
     {
-        //err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+        // err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
     }
     else if (strstr(line, MODEM_RESULT_CODE_ERROR))
     {
-        //err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+        // err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
     }
     return err;
 }
@@ -225,7 +225,7 @@ static esp_err_t esp_modem_dce_handle_response_print(modem_dce_t *dce, const cha
     {
         /* Strip "\r\n" */
         strip_cr_lf_tail(buf, len);
-        //printf("%s\n", buf);
+        // printf("%s\n", buf);
         err = ESP_OK;
     }
 
@@ -243,7 +243,6 @@ static esp_err_t bc26_netlight(modem_dce_t *dce)
 err:
     return ESP_FAIL;
 }
-
 
 modem_dce_t *bc26_init(modem_dte_t *dte)
 {
@@ -272,38 +271,8 @@ modem_dce_t *bc26_init(modem_dte_t *dte)
     DCE_CHECK(esp_modem_dce_sync(&(esp_modem_dce->parent)) == ESP_OK, "sync failed", err_io);
     /* Close echo */
     DCE_CHECK(esp_modem_dce_echo(&(esp_modem_dce->parent), false) == ESP_OK, "close echo mode failed", err_io);
-    /* Get Module name */
-    DCE_CHECK(esp_modem_dce_get_module_name(&(esp_modem_dce->parent)) == ESP_OK, "get module name failed", err_io);
-#ifndef NODEBUG
-    /*Blink LED Netstatus */
-    DCE_CHECK(bc26_netlight(&(esp_modem_dce->parent)) == ESP_OK, "netlight failed", err_io);
-#endif
-    //ждем регистрации в сети
-    uint32_t n = 0;
-    uint32_t stat = 0;
-    int i = 10;
-    do
-    {
-        vTaskDelay(200 * (11 - i) / portTICK_PERIOD_MS);
 
-        get_network_status(dte->dce, &n, &stat);
-        dte->dce->stat = stat;
-    } while (i-- > 0 && stat != 1);
-
-    if (i > 0) //региcтрация успешна
-    {
-        /* Get operator name */
-        DCE_CHECK(esp_modem_dce_get_operator_name(&(esp_modem_dce->parent)) == ESP_OK, "get operator name failed", err_io);
-        /* Get IMSI number */
-        DCE_CHECK(esp_modem_dce_get_imsi_number(&(esp_modem_dce->parent)) == ESP_OK, "get imsi failed", err_io);
-        /* Get IMEI number */
-        DCE_CHECK(esp_modem_dce_get_imei_number(&(esp_modem_dce->parent)) == ESP_OK, "get imei failed", err_io);
-
-        return &(esp_modem_dce->parent);
-    }else
-    {
-        ESP_LOGE(DCE_TAG, "Not registered on network");
-    }
+    return &(esp_modem_dce->parent);
 
 err_io:
     free(esp_modem_dce);

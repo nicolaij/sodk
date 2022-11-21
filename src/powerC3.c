@@ -37,11 +37,11 @@ typedef struct
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_0, .max = 6999},  //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC2_CHANNEL_0, .max = 1000},  //Напряжение источника питания
-    {.channel = ADC1_CHANNEL_4, .max = 99999}, //
-    {.channel = ADC1_CHANNEL_1, .max = 10000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
-    {.channel = ADC1_CHANNEL_3, .max = 1000},  //Напряжение 0 проводника
+    {.channel = ADC1_CHANNEL_0, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC2_CHANNEL_0, .max = 1000},   //Напряжение источника питания
+    {.channel = ADC1_CHANNEL_4, .max = 299999}, //
+    {.channel = ADC1_CHANNEL_1, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC1_CHANNEL_3, .max = 1000},   //Напряжение 0 проводника
 };
 #else
 const measure_t chan_r[] = {
@@ -52,8 +52,6 @@ const measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_3, .max = 1000},   //Напряжение 0 проводника
 };
 #endif
-
-const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
 
 extern int BattLow;
 
@@ -237,8 +235,8 @@ void btn_task(void *arg)
     // set as output mode
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = BIT64(BTN_PIN);
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
 #if MULTICHAN
@@ -246,6 +244,7 @@ void btn_task(void *arg)
 
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
     io_conf.pin_bit_mask = BIT64(INT_PIN);
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
     // create a queue to handle gpio event from isr
@@ -260,6 +259,8 @@ void btn_task(void *arg)
     int old_btn_state = gpio_get_level(BTN_PIN);
     int new_btn_state = old_btn_state;
 
+    int d_in = -1;
+
     while (1)
     {
 #if MULTICHAN
@@ -268,9 +269,13 @@ void btn_task(void *arg)
         {
             char buf[10];
             result.input = pcf8575_read(IN1_BIT);
-            snprintf((char *)buf, sizeof(buf), "IN: %d", result.input);
-            ESP_LOGI("pcf8575", "%s", buf);
-            xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+            if (result.input != d_in)
+            {
+                int l = snprintf((char *)buf, sizeof(buf), "IN: %d", result.input);
+                ESP_LOGI("pcf8575", "%s", buf);
+                xRingbufferSend(wsbuf_handle, buf, l, 0);
+                d_in = result.input;
+            }
         }
 #else
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -281,7 +286,17 @@ void btn_task(void *arg)
         {
             old_btn_state = new_btn_state;
             if (new_btn_state == 1)
-                start_measure(1);
+            {
+                //для отладки схемы pulse -1
+                if (menu[0].val == -1)
+                {
+                    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+                }
+                else
+                {
+                    start_measure(1);
+                }
+            }
 
             reset_sleep_timeout();
         }
@@ -390,6 +405,7 @@ void dual_adc(void *arg)
 
     while (1)
     {
+
         xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
 
         //подаем питание на источник питания, OpAmp, делитель АЦП батареи
@@ -397,9 +413,8 @@ void dual_adc(void *arg)
 
         result.channel = cmd.channel;
 
-#ifdef MULTICHAN
-        pcf8575_set(pcf_output_map[cmd.channel] | BIT(NB_PWR_BIT));
-#endif
+        pcf8575_set(cmd.channel);
+
 #ifndef NODEBUG
         ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 1));
 #endif
@@ -712,7 +727,7 @@ void dual_adc(void *arg)
                     result.adc1 = sum_adc[1] / n;
                     result.adc2 = sum_adc[2] / n;
 
-                    if (result.adc0 > 75) //~ 110 uA
+                    if (result.adc0 > 100) //~ 150 uA
                     {
                         result.R = r1;
                     }
@@ -774,9 +789,7 @@ void dual_adc(void *arg)
         //выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-#ifdef MULTICHAN
-            pcf8575_set(BIT(POWER_BIT) | BIT(NB_PWR_BIT));
-#endif
+            pcf8575_set(POWER_CMDOFF);
 #ifndef NODEBUG
             ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
 #endif
@@ -784,8 +797,9 @@ void dual_adc(void *arg)
 
         //РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
-        xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
+        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
+        UBaseType_t res = xRingbufferSend(wsbuf_handle, buf, l, 0);
+
         printf("%s\n", buf);
         printf("Avg ADC 0:%d, 1:%d, 2:%d, 3:%d, 4:%d\n", sum_adc_full[0] / count_adc_full, sum_adc_full[1] / count_adc_full, sum_adc_full[2] / count_adc_full, sum_adc_full[3] / count_adc_full, sum_adc_full[4] / count_adc_full);
 

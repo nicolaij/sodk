@@ -30,6 +30,15 @@ extern float tsens_out;
 
 char modem_status[128];
 
+struct stringreturn_t
+{
+    int len;
+    char *s;
+};
+
+char tx_buf[WS_BUF_SIZE + 40];
+char buf[WS_BUF_SIZE];
+
 int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
 {
     nvs_handle_t my_handle;
@@ -161,7 +170,7 @@ esp_err_t esp_modem_dce_handle_cclk(modem_dce_t *dce, const char *line)
 
     int32_t *data = esp_dce->priv_resource;
 
-    //printf("%s\n",line);
+    // printf("%s\n",line);
 
     if (!strncmp(line, ss, strlen(ss)))
     {
@@ -394,6 +403,33 @@ esp_err_t esp_modem_dce_handle_response_all_ok(modem_dce_t *dce, const char *lin
     return err;
 }
 
+esp_err_t esp_modem_dce_handle_response_ok_stringreturn(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+
+    struct stringreturn_t *d = esp_dce->priv_resource;
+
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    else
+    {
+        int len = snprintf(d->s, d->len, "%s", line);
+        if (len > 2)
+        {
+            /* Strip "\r\n" */
+            strip_cr_lf_tail(d->s, len);
+        }
+        err = ESP_OK;
+    }
+    return err;
+}
 esp_err_t esp_modem_dce_handle_response_ok_wait(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
@@ -460,6 +496,8 @@ void radio_task(void *arg)
 
     ESP_LOGI(TAG, "init module NB-IoT");
 
+    strlcpy(modem_status, "<b style=\"color:red\">NB-IoT error!</b>", sizeof(modem_status));
+
     // vTaskDelay(pdMS_TO_TICKS(600));
     //  gpio_set_level(POWER_GPIO, 1);
     //  vTaskDelay(pdMS_TO_TICKS(600));
@@ -468,7 +506,11 @@ void radio_task(void *arg)
 
     while (1)
     {
-        modem_status[0] = 0;
+        //pcf8575_set(NB_RESET_CMD);
+        //vTaskDelay(60 / portTICK_PERIOD_MS);
+        pcf8575_set(NB_PWR_CMDON);
+        vTaskDelay(600 / portTICK_PERIOD_MS); //ждем включения NBIOT модуля
+        pcf8575_set(NB_PWR_CMDOFF);
 
         modem_dce_t *dce = NULL;
         dce = bc26_init(dte);
@@ -476,10 +518,30 @@ void radio_task(void *arg)
 
         if (dce != NULL)
         {
+            esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+            struct stringreturn_t d = {.s = buf, .len = sizeof(buf)};
+
             // dce->handle_line = esp_modem_dce_handle_response_default;
             // dte->send_cmd(dte, "AT+QLEDMODE=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
             // dce->handle_line = esp_modem_dce_handle_response_default;
-            // dte->send_cmd(dte, "AT+CEREG=3\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+            // dte->send_cmd(dte, "AT+CPIN?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+            /* Get Module name */
+            buf[0] = '\0';
+            counter = 2;
+            while (counter-- > 0)
+            {
+                esp_dce->priv_resource = &d;
+                dce->handle_line = esp_modem_dce_handle_response_ok_stringreturn;
+                if (dte->send_cmd(dte, "AT+CGMM\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        snprintf(dce->name, MODEM_MAX_NAME_LENGTH, "%s", d.s);
+                        break;
+                    }
+
+                vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+            }
 
             /* Print Module ID, Operator, IMEI, IMSI */
             ESP_LOGI(TAG, "Module: %s", dce->name);
@@ -487,10 +549,89 @@ void radio_task(void *arg)
             // ESP_LOGI(TAG, "IMEI: %s", dce->imei);
             // ESP_LOGI(TAG, "IMSI: %s", dce->imsi);
 
+            // PIN
+            buf[0] = '\0';
+            counter = 5;
+            while (counter-- > 0)
+            {
+                esp_dce->priv_resource = &d;
+                dce->handle_line = esp_modem_dce_handle_response_ok_stringreturn;
+                if (dte->send_cmd(dte, "AT+CPIN?\r", 5000) == ESP_OK)
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        break;
+                    }
+
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+            }
+
+            if (dce->state != MODEM_STATE_SUCCESS)
+            {
+                strlcat(buf, "ERROR", sizeof(buf));
+            };
+
+            if (strstr(buf, "READY") == NULL)
+            {
+                strlcpy(modem_status, "<b style=\"color:red\">NB-IoT SIM: ", sizeof(modem_status));
+                strlcat(modem_status, buf, sizeof(modem_status));
+                strlcat(modem_status, "</b>", sizeof(modem_status));
+                ESP_LOGE(TAG, "SIM: %s", buf);
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                continue; // PIN NOT READY
+            }
+
+            // LED
+            counter = 2;
+            while (counter-- > 0)
+            {
+                dce->handle_line = esp_modem_dce_handle_response_default;
+#ifndef NODEBUG
+                if (dte->send_cmd(dte, "AT+QLEDMODE=1\r", MODEM_COMMAND_TIMEOUT_POWEROFF) == ESP_OK)
+#else
+                if (dte->send_cmd(dte, "AT+QLEDMODE=0\r", MODEM_COMMAND_TIMEOUT_POWEROFF) == ESP_OK)
+#endif
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        break;
+                    }
+
+                vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+            }
+
+            //ждем регистрации в сети
+            uint32_t nn = 0;
+            uint32_t stat = 0;
+            int i = 10;
+            do
+            {
+                vTaskDelay(200 * (10 - i) / portTICK_PERIOD_MS);
+
+                get_network_status(dce, &nn, &stat);
+                dce->stat = stat;
+                
+            } while (i-- > 0 && stat != 1);
+
+            if (i > 0) //региcтрация успешна
+            {
+                /* Get operator name */
+                esp_modem_dce_get_operator_name(dce);
+                /* Get IMSI number */
+                esp_modem_dce_get_imsi_number(dce);
+                /* Get IMEI number */
+                esp_modem_dce_get_imei_number(dce);
+            }
+            else
+            {
+                ESP_LOGE(TAG, "Not registered on network");
+                strlcpy(modem_status, "<b style=\"color:red\">NB-IoT Not registered on network</b>", sizeof(modem_status));
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                continue;
+            }
+
             /* Get signal quality */
             uint32_t rssi;
             uint32_t ber;
-            counter = 3;
+            counter = 2;
             while (counter-- > 0)
             {
                 rssi = 0;
@@ -508,8 +649,6 @@ void radio_task(void *arg)
             uint32_t voltage = 0, bcs = 0, bcl = 0;
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_battery_status(dce, &bcs, &bcl, &voltage));
             // ESP_LOGI(TAG, "Battery voltage: %d mV", voltage);
-
-            esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
 
             // Show PDP Addresses
             int32_t pdpaddr[4] = {0, 0, 0, 0};
@@ -529,9 +668,6 @@ void radio_task(void *arg)
             snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%u, IP:%d.%d.%d.%d, Voltage:%umV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
 
             ESP_LOGI(TAG, "%s", modem_status);
-
-            char tx_buf[WS_BUF_SIZE + 40];
-            char buf[WS_BUF_SIZE];
 
             // connectID, <local_port>,<socket_state
             int32_t connectID[4] = {-1, 0, 0, 0};
@@ -566,6 +702,9 @@ void radio_task(void *arg)
                 if (dce->state != MODEM_STATE_SUCCESS)
                 {
                     vTaskDelay(500 / portTICK_PERIOD_MS);
+
+                    if (counter < 5) //рестартуем
+                        continue;
                 }
 
             } while (connectID[3] != 2 && counter-- > 0);
@@ -591,7 +730,7 @@ void radio_task(void *arg)
                         tm.tm_sec = dt[5];
 
                         time_t t = mktime(&tm) + dt[6] * 3600; // UNIX time + timezone offset
-                        //printf("Setting time: %s", asctime(&tm));
+                        // printf("Setting time: %s", asctime(&tm));
                         struct timeval now = {.tv_sec = t};
                         settimeofday(&now, NULL);
                         // printf("The local date and time is: %s", asctime(&tm));
@@ -619,13 +758,13 @@ void radio_task(void *arg)
                 // if (len_data > 127) buf[127] = '\0';
                 // xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
 
-                counter = 3;
+                counter = 2;
                 while (counter-- > 0)
                 {
                     esp_dce->priv_resource = "SEND";
                     dce->handle_line = esp_modem_dce_handle_response_ok_wait;
                     snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", len_data, buf);
-                    if (dte->send_cmd(dte, tx_buf, 60000) == ESP_OK)
+                    if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
                         if (dce->state == MODEM_STATE_SUCCESS)
                         {
                             break;
@@ -642,7 +781,10 @@ void radio_task(void *arg)
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
             xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
 
-            vTaskDelay(pdMS_TO_TICKS(600000));
+            while (1)
+            {
+                vTaskDelay(pdMS_TO_TICKS(600000));
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(10000));
     }

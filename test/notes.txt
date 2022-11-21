@@ -1,0 +1,9 @@
+c:\Users\nicolai\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 -b 460800 write_flash --flash_mode qio --flash_freq 40m --flash_size 4MB 0x0 bootloader.bin 0x10000 firmware.bin 0x8000 partitions.bin
+
+c:\Users\nicolai\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 -b 460800 erase_flash
+
+c:\Users\nicolai\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 elf2image --flash_mode qio --flash_freq 40m --flash_size 4MB --elf-sha256-offset 0xb0 --min-rev 3 -o D:/ARM/ESP/sodk/.pio/build/c3-NB-IoT-test/firmware.bin D:/ARM/ESP/sodk/.pio/build/c3-NB-IoT-test/firmware.elf
+
+c:\Users\nicolai\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 elf2image --flash_mode dio --flash_freq 40m --flash_size 4MB -o D:/ARM/ESP/sodk/.pio/build/c3-NB-IoT-test/bootloader.bin D:/ARM/ESP/sodk/.pio/build/c3-NB-IoT-test/bootloader.elf
+
+c:\Users\nicolai\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 elf2image --flash_mode dio --flash_freq 40m --flash_size 4MB -o bootloader.bin bootloader.elf && c:\Users\nicolai\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 -b 460800 write_flash --flash_freq 40m --flash_size 4MB 0x0 bootloader.bin
