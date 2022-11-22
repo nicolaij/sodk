@@ -504,16 +504,20 @@ void radio_task(void *arg)
     //  gpio_set_level(POWER_GPIO, 0);
     //  vTaskDelay(pdMS_TO_TICKS(400));
 
+    modem_dce_t *dce = NULL;
+
     while (1)
     {
-        //pcf8575_set(NB_RESET_CMD);
-        //vTaskDelay(60 / portTICK_PERIOD_MS);
+        // pcf8575_set(NB_RESET_CMD);
+        // vTaskDelay(60 / portTICK_PERIOD_MS);
         pcf8575_set(NB_PWR_CMDON);
         vTaskDelay(600 / portTICK_PERIOD_MS); //ждем включения NBIOT модуля
         pcf8575_set(NB_PWR_CMDOFF);
 
-        modem_dce_t *dce = NULL;
+        dce = NULL;
+
         dce = bc26_init(dte);
+
         int counter;
 
         if (dce != NULL)
@@ -577,7 +581,7 @@ void radio_task(void *arg)
                 strlcat(modem_status, "</b>", sizeof(modem_status));
                 ESP_LOGE(TAG, "SIM: %s", buf);
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
-                continue; // PIN NOT READY
+                break; // STOP NBIOT
             }
 
             // LED
@@ -608,7 +612,7 @@ void radio_task(void *arg)
 
                 get_network_status(dce, &nn, &stat);
                 dce->stat = stat;
-                
+
             } while (i-- > 0 && stat != 1);
 
             if (i > 0) //региcтрация успешна
@@ -625,7 +629,7 @@ void radio_task(void *arg)
                 ESP_LOGE(TAG, "Not registered on network");
                 strlcpy(modem_status, "<b style=\"color:red\">NB-IoT Not registered on network</b>", sizeof(modem_status));
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
-                continue;
+                break; // STOP NBIOT
             }
 
             /* Get signal quality */
@@ -653,7 +657,7 @@ void radio_task(void *arg)
             // Show PDP Addresses
             int32_t pdpaddr[4] = {0, 0, 0, 0};
             esp_dce->priv_resource = pdpaddr;
-            counter = 3;
+            counter = 2;
             while (counter-- > 0)
             {
                 dce->handle_line = esp_modem_dce_handle_response_cgpaddr;
@@ -746,7 +750,7 @@ void radio_task(void *arg)
             ESP_LOGI(TAG, "Current date/time: %s", datetime);
 
             int len_data = 0;
-            while (pdTRUE == xQueueReceive(send_queue, &result, 10000 / portTICK_PERIOD_MS))
+            while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
             {
                 n = time(0);
                 localtm = localtime(&n);
@@ -772,20 +776,20 @@ void radio_task(void *arg)
                     vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
                 }
             }
-
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);
-
-            ESP_LOGW(TAG, "Power down");
-            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
-            vTaskDelay(pdMS_TO_TICKS(1020)); // Turn-Off Timing by AT Command
-            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
-            xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
-
-            while (1)
-            {
-                vTaskDelay(pdMS_TO_TICKS(600000));
-            }
+            break;
         }
         vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+
+    ESP_LOGW(TAG, "Power down");
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
+    vTaskDelay(pdMS_TO_TICKS(1020)); // Turn-Off Timing by AT Command
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
+    xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
+
+    while (1)
+    {
+        vTaskDelay(pdMS_TO_TICKS(600000));
     }
 }

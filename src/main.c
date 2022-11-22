@@ -432,7 +432,7 @@ void app_main()
         END_MEASURE,       /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        20000 / portTICK_PERIOD_MS);
+        10000 / portTICK_PERIOD_MS);
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
@@ -451,10 +451,10 @@ void app_main()
     }
 
     xEventGroupWaitBits(
-        ready_event_group, /* The event group being tested. */
-        END_TRANSMIT,      /* The bits within the event group to wait for. */
-        pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
-        pdTRUE,
+        ready_event_group,              /* The event group being tested. */
+        END_TRANSMIT | END_RADIO_SLEEP, /* The bits within the event group to wait for. */
+        pdFALSE,                        /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdFALSE,
         60000 / portTICK_PERIOD_MS);
 
     xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
