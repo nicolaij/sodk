@@ -738,7 +738,7 @@ void dual_adc(void *arg)
                     }
                     result.U = u;
                     result.U0 = u0;
-                    result.Ubatt1 = (bufferR[ON_BLOCK + 1].Ubatt + bufferR[ON_BLOCK + 2].Ubatt + bufferR[ON_BLOCK + 3].Ubatt) / 3;
+                    result.Ubatt1 = (bufferR[ON_BLOCK + 3].Ubatt + bufferR[ON_BLOCK + 4].Ubatt + bufferR[ON_BLOCK + 5].Ubatt) / 3; //сдвинут по времени
                     result.Ubatt0 = (bufferR[ON_BLOCK - 1].Ubatt + bufferR[ON_BLOCK - 2].Ubatt + bufferR[ON_BLOCK - 3].Ubatt) / 3;
 
                     if (block_result == blocks)
