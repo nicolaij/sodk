@@ -16,13 +16,13 @@
 
 // RTC_DATA_ATTR int last_chan;
 
-// uint32_t bufferR[2][DATALEN / ADC_COUNT_READ];
-// uint32_t bufferR[6][DATALEN];
-calcdata_t bufferR[DATALEN];
-// uint32_t buffer[3][DATALEN];
+//кольцевой буфер для визуализации
+calcdata_t bufferR[RINGBUFLEN];
+unsigned int bhead = 0;
+unsigned int btail = 0;
+
 uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
 uint8_t buffer_ADC_copy[ADC_BUFFER * 200];
-int block_buffer_end = 0; //последний блок буфера
 
 result_t result = {};
 
@@ -273,7 +273,7 @@ void btn_task(void *arg)
             {
                 int l = snprintf((char *)buf, sizeof(buf), "IN: %d", result.input);
                 ESP_LOGI("pcf8575", "%s", buf);
-                xRingbufferSend(wsbuf_handle, buf, l+1, 0);
+                xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
                 d_in = result.input;
             }
         }
@@ -336,12 +336,14 @@ void btn_task(void *arg)
 
             if (cmd == 'r' || cmd == 'R') // print block result
             {
-                for (int i = 0; i <= block_buffer_end; i++)
+                unsigned int p = btail;
+                int i = 0;
+                do
                 {
-                    // if (buffer[2][i] != 10)
-                    //     printf("%4d %4d %4d %4d %4d\n", ++n, i, buffer[0][i], buffer[1][i], buffer[2][i]);
-                    printf("%4d %4d %4d %4d\n", i, bufferR[i].R1, bufferR[i].U, bufferR[i].R2);
-                }
+                    printf("%4d %4d %4d %4d\n", i, bufferR[p].R1, bufferR[p].U, bufferR[p].R2);
+                    p = (p + 1) & (RINGBUFLEN - 1);
+                    i++;
+                } while (p != bhead);
             }
 
             if (cmd == 'p' || cmd == 'P') // print ADC buffer
@@ -404,6 +406,10 @@ void dual_adc(void *arg)
 
     continuous_adc_init();
 
+    //сбрасывем буфер
+    bhead = 0;
+    btail = 0;
+
     while (1)
     {
 
@@ -441,7 +447,7 @@ void dual_adc(void *arg)
         calcdata_t sum_bavg = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
         calcdata_t bref = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
-        int avg_len = 0;
+        uint16_t avg_len = 0;
         int compare_counter = menu[16].val;
         const int compare_delta = 1; //в %
 
@@ -585,11 +591,11 @@ void dual_adc(void *arg)
                 // ESP_LOGE("adc", "%4d %d\n", blocks, n);
             }
 
-            bufferR[blocks].U = sum_avg01.U / n / 1000;
-            bufferR[blocks].R1 = sum_avg01.R1 / n;
-            bufferR[blocks].R2 = sum_avg01.R2 / n;
-            bufferR[blocks].Ubatt = sum_avg01.Ubatt / n;
-            bufferR[blocks].U0 = sum_avg01.U0 / n / 1000;
+            bufferR[bhead].U = sum_avg01.U / n / 1000;
+            bufferR[bhead].R1 = sum_avg01.R1 / n;
+            bufferR[bhead].R2 = sum_avg01.R2 / n;
+            bufferR[bhead].Ubatt = sum_avg01.Ubatt / n;
+            bufferR[bhead].U0 = sum_avg01.U0 / n / 1000;
 
             if (blocks > ON_BLOCK && block_power_off == 0)
             {
@@ -603,17 +609,17 @@ void dual_adc(void *arg)
                 else
                 {
                     //отсечка по напряжению, Ubatt
-                    if (bufferR[blocks].Ubatt < menu[13].val)
+                    if (bufferR[bhead].Ubatt < menu[13].val)
                     {
                         //прекращаем измерения
                         //ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
                         if (terminal_mode >= 0)
-                            printf("UbattEnd: %d < %d)\n", bufferR[blocks].Ubatt, menu[13].val);
+                            printf("UbattEnd: %d < %d)\n", bufferR[bhead].Ubatt, menu[13].val);
                         BattLow += 100;
                         break;
                     }
-                    else if (bufferR[blocks].Ubatt < menu[12].val)
+                    else if (bufferR[bhead].Ubatt < menu[12].val)
                     {
                         BattLow += 1;
                         if (BattLow > 10)
@@ -622,7 +628,7 @@ void dual_adc(void *arg)
                             gpio_set_level(ENABLE_PIN, 1);
                             //прекращаем измерения
                             if (terminal_mode >= 0)
-                                printf("UbattLow: %d < %d (%d)\n", bufferR[blocks].Ubatt, menu[12].val, BattLow);
+                                printf("UbattLow: %d < %d (%d)\n", bufferR[bhead].Ubatt, menu[12].val, BattLow);
                             break;
                         }
                     }
@@ -639,19 +645,20 @@ void dual_adc(void *arg)
                 sum_adc_full[3] += sum_adc[3];
                 sum_adc_full[4] += sum_adc[4];
 
-                sum_bavg.R1 += bufferR[blocks].R1;
-                sum_bavg.R2 += bufferR[blocks].R2;
-                sum_bavg.U += bufferR[blocks].U;
-                sum_bavg.U0 += bufferR[blocks].U0;
+                sum_bavg.R1 += bufferR[bhead].R1;
+                sum_bavg.R2 += bufferR[bhead].R2;
+                sum_bavg.U += bufferR[bhead].U;
+                sum_bavg.U0 += bufferR[bhead].U0;
                 avg_len++;
 
                 if (avg_len > menu[17].val)
                 {
                     avg_len--;
-                    sum_bavg.R1 -= bufferR[blocks - avg_len].R1;
-                    sum_bavg.R2 -= bufferR[blocks - avg_len].R2;
-                    sum_bavg.U -= bufferR[blocks - avg_len].U;
-                    sum_bavg.U0 -= bufferR[blocks - avg_len].U0;
+                    unsigned int delpos = (bhead - avg_len) & (RINGBUFLEN - 1);
+                    sum_bavg.R1 -= bufferR[delpos].R1;
+                    sum_bavg.R2 -= bufferR[delpos].R2;
+                    sum_bavg.U -= bufferR[delpos].U;
+                    sum_bavg.U0 -= bufferR[delpos].U0;
                 }
 
                 int r1 = sum_bavg.R1 / avg_len;
@@ -711,10 +718,10 @@ void dual_adc(void *arg)
                     {
                         if (sum_adc[0] / n < 4000)
                         {
-                            r1 = bufferR[blocks].R1;
-                            r2 = bufferR[blocks].R2;
-                            u = bufferR[blocks].U;
-                            u0 = bufferR[blocks].U0;
+                            r1 = bufferR[bhead].R1;
+                            r2 = bufferR[bhead].R2;
+                            u = bufferR[bhead].U;
+                            u0 = bufferR[bhead].U0;
 
                             block_result = blocks;
                         }
@@ -738,8 +745,8 @@ void dual_adc(void *arg)
                     }
                     result.U = u;
                     result.U0 = u0;
-                    result.Ubatt1 = (bufferR[ON_BLOCK + 3].Ubatt + bufferR[ON_BLOCK + 4].Ubatt + bufferR[ON_BLOCK + 5].Ubatt) / 3; //сдвинут по времени
-                    result.Ubatt0 = (bufferR[ON_BLOCK - 1].Ubatt + bufferR[ON_BLOCK - 2].Ubatt + bufferR[ON_BLOCK - 3].Ubatt) / 3;
+                    result.Ubatt1 = (bufferR[(unsigned int)(bhead - block_result + ON_BLOCK + 3) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK + 4) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK + 4) & (RINGBUFLEN - 1)].Ubatt) / 3; //сдвинут по времени
+                    result.Ubatt0 = (bufferR[(unsigned int)(bhead - block_result + ON_BLOCK - 1) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK - 2) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK - 3) & (RINGBUFLEN - 1)].Ubatt) / 3;
 
                     if (block_result == blocks)
                     {
@@ -774,13 +781,12 @@ void dual_adc(void *arg)
                 }
             }
 
-            //Оставляем свободное место (1/4) в буфере для вычисления сопротивления после отключения ВВ источника
-            if (block_power_off == 0 && blocks > DATALEN * 3 / 4)
-                blocks = DATALEN * 3 / 4;
+            bhead = (bhead + 1) & (RINGBUFLEN - 1);
+            if (bhead == btail) //увеличиваем хвост
+                btail = (btail + 1) & (RINGBUFLEN - 1);
 
-        } while (++blocks < DATALEN);
-
-        block_buffer_end = blocks;
+            blocks++;
+        } while (blocks < RINGBUFLEN);
 
         ESP_ERROR_CHECK(adc_digi_stop());
 
@@ -799,7 +805,7 @@ void dual_adc(void *arg)
         //РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
         int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
-        UBaseType_t res = xRingbufferSend(wsbuf_handle, buf, l+1, 0);
+        UBaseType_t res = xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
 
         printf("%s\n", buf);
         printf("Avg ADC 0:%d, 1:%d, 2:%d, 3:%d, 4:%d\n", sum_adc_full[0] / count_adc_full, sum_adc_full[1] / count_adc_full, sum_adc_full[2] / count_adc_full, sum_adc_full[3] / count_adc_full, sum_adc_full[4] / count_adc_full);
@@ -817,6 +823,8 @@ int getResult_Data(char *line, int data_pos)
     const char *header = {"id,R1,U,R2\n"};
     char *pos = line;
     int l = 0;
+    unsigned int ringpos = (unsigned int)(btail + data_pos) & (RINGBUFLEN - 1);
+
     if (data_pos == 0)
     {
         strcpy(line, header);
@@ -824,12 +832,12 @@ int getResult_Data(char *line, int data_pos)
         pos = line + l;
     }
 
-    if (data_pos > block_buffer_end)
+    if (data_pos >= ((bhead - btail) & (RINGBUFLEN - 1)))
     {
         return 0;
     }
 
-    l += sprintf(pos, "%d,%d,%d,%d\n", data_pos, bufferR[data_pos].R1, bufferR[data_pos].U, bufferR[data_pos].R2);
+    l += sprintf(pos, "%d,%d,%d,%d\n", data_pos, bufferR[ringpos].R1, bufferR[ringpos].U, bufferR[ringpos].R2);
     return l;
 }
 

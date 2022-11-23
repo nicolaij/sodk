@@ -691,7 +691,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     reset_sleep_timeout();
 
     char line[128];
-    int limitData = DATALEN;
+    int limitData = RINGBUFLEN;
     int mode = 0; // 0 - ADC, 1 - фильтр ADC, 2 - СОДК результаты
 
     if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK)

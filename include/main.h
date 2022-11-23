@@ -15,7 +15,9 @@
 #include "freertos/ringbuf.h"
 
 
-#define DATALEN 2000
+//размер кольцевого буфера (только степень 2)
+#define RINGBUFLEN 2048 
+
 #define ADC_COUNT_READ 5
 #define ADC_FREQ 50000
 #define ADC_BUFFER (ADC_FREQ / 1000 * 4) // размер буфера данных для выборки 1 mc
