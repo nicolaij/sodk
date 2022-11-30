@@ -445,11 +445,13 @@ void dual_adc(void *arg)
         // int64_t t2 = 0, t3 = 0, time_off = 0;
 
         calcdata_t sum_bavg = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
+        
+        //опорное значение
         calcdata_t bref = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
         uint16_t avg_len = 0;
         int compare_counter = menu[16].val;
-        const int compare_delta = 1; //в %
+        const int compare_delta = 1;
 
         int exp_filter_k = menu[20].val;
         int exp_filter[5] = {0, 0, 0, 0, 0};
@@ -665,6 +667,25 @@ void dual_adc(void *arg)
                 int r2 = sum_bavg.R2 / avg_len;
                 int u = sum_bavg.U / avg_len;
                 int u0 = sum_bavg.U0 / avg_len;
+
+                /*
+                                int dxr1 = abs(bufferR[bhead].R1 - r1) * 1000 / r1;
+                                int dxr2 = abs(bufferR[bhead].R2 - r2) * 1000 / r2;
+                                int dxu = abs(bufferR[bhead].U - u) * 1000 / u;
+
+                                if (dxr1 <= compare_delta && dxr2 <= compare_delta && dxu <= compare_delta)
+                                {
+                                    compare_counter--;
+                                }
+                                else
+                                {
+                                    bref.R1 = r1;
+                                    bref.R2 = r2;
+                                    bref.U = u;
+                                    bref.U0 = u0;
+                                    compare_counter = menu[16].val;
+                                }
+                                */
 
                 int cmp_r1_max = r1 * 1000 / (1000 - compare_delta * 10);
                 int cmp_r1_min = r1 * 1000 / (1000 + compare_delta * 10);
