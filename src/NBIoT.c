@@ -505,14 +505,32 @@ void radio_task(void *arg)
     //  vTaskDelay(pdMS_TO_TICKS(400));
 
     modem_dce_t *dce = NULL;
+    int try_count = 0;
 
     while (1)
     {
-        // pcf8575_set(NB_RESET_CMD);
-        // vTaskDelay(60 / portTICK_PERIOD_MS);
+        try_count++;
+
+#ifdef INVERT_NB_PWR
+        if (try_count % 2 == 0)
+        {
+            pcf8575_set(NB_RESET_CMD);
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            pcf8575_set(NB_PWR_CMDOFF);
+        }
+        else
+        {
+            pcf8575_set(NB_PWR_CMDON);
+            vTaskDelay(600 / portTICK_PERIOD_MS); //ждем включения NBIOT модуля
+            pcf8575_set(NB_PWR_CMDOFF);
+        }
+#else
         pcf8575_set(NB_PWR_CMDON);
         vTaskDelay(600 / portTICK_PERIOD_MS); //ждем включения NBIOT модуля
         pcf8575_set(NB_PWR_CMDOFF);
+#endif
+
+        vTaskDelay(100 / portTICK_PERIOD_MS);
 
         dce = NULL;
 
@@ -683,7 +701,7 @@ void radio_task(void *arg)
             // wait connect
             do
             {
-                dce->sync(dce);
+                // dce->sync(dce);
 
                 connectID[0] = -1;
                 esp_dce->priv_resource = connectID;
@@ -697,8 +715,13 @@ void radio_task(void *arg)
                     ESP_LOGI(TAG, "Open port");
                     esp_dce->priv_resource = "+QIOPEN: ";
                     dce->handle_line = esp_modem_dce_handle_response_ok_wait;
-                    snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"UDP\",\"%s\",%d,0,0\r", serverip, port);
+#define NB26_TCP 1
 
+#ifdef NB26_TCP
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"TCP\",\"%s\",%d,0,0\r", serverip, port);
+#else
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"UDP\",\"%s\",%d,0,0\r", serverip, port);
+#endif
                     // 2. It is recommended to wait for 60 seconds for URC response “+QIOPEN: <connectID>,<err>”.
                     dte->send_cmd(dte, tx_buf, 30000);
                 }
@@ -759,9 +782,6 @@ void radio_task(void *arg)
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
 
-                // if (len_data > 127) buf[127] = '\0';
-                // xQueueSend(ws_send_queue, (char *)buf, (portTickType)0);
-
                 counter = 2;
                 while (counter-- > 0)
                 {
@@ -782,10 +802,24 @@ void radio_task(void *arg)
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
+    if (dce)
+    {
+        esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+        ESP_LOGI(TAG, "Close port");
+        esp_dce->priv_resource = "CLOSE";
+        dce->handle_line = esp_modem_dce_handle_response_ok_wait;
+        dte->send_cmd(dte, "AT+QICLOSE=0\r", 10000);
+        if (dce->state == MODEM_STATE_SUCCESS)
+        {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+
     ESP_LOGW(TAG, "Power down");
     ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
     vTaskDelay(pdMS_TO_TICKS(1020)); // Turn-Off Timing by AT Command
     ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
+
     xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
 
     while (1)

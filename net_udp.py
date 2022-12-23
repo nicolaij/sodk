@@ -71,5 +71,18 @@ while True:
             f.write("Sodk_ZRTS{}_Tcpu,0,{},0,{},192\n".format(id, time_and_date, js["T"]))
             f.write("Sodk_ZRTS{}_rssi,0,{},0,{},192\n".format(id, time_and_date, js["rssi"]))
             f.write("Sodk_ZRTS{}_in,0,{},0,{},192\n".format(id, time_and_date, js["in"]))
-            
-                   
+        
+        #IntouchFilename = '{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(id, datetime.datetime.now())
+        #with open(IntouchFilename, 'w', encoding="latin-1") as f:
+        #    f.write("ASCII\n,\n")
+        #    f.write("SODK,1,Server Local,1,1\n")
+        #    #time_and_date = '{:%Y/%m/%d,%H:%M:%S}'.format(datetime.datetime.now())
+        #    dt = datetime.datetime.strptime(js["dt"], "%Y-%m-%d %H:%M:%S")
+        #    time_and_date = '{:%Y/%m/%d,%H:%M:%S}.000'.format(dt)
+        #    f.write("Sodk_ZRTS{}_U,0,{},0,{},192\n".format(id, time_and_date, js["U"]))
+        #    f.write("Sodk_ZRTS{}_R,0,{},0,{},192\n".format(id, time_and_date, js["R"]))
+        #    f.write("Sodk_ZRTS{}_U0,0,{},0,{},192\n".format(id, time_and_date, js["U0"]))
+        #    f.write("Sodk_ZRTS{}_UBatt0,0,{},0,{},192\n".format(id, time_and_date, js["Ub0"]))
+        #    f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(id, time_and_date, js["Ub1"]))
+        #    f.write("Sodk_ZRTS{}_Tcpu,0,{},0,{},192\n".format(id, time_and_date, js["T"]))
+        #    f.write("Sodk_ZRTS{}_rssi,0,{},0,{},192\n".format(id, time_and_date, js["rssi"]))

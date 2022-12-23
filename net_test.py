@@ -1,7 +1,7 @@
 # tcp-server.py
 
 from datetime import datetime
-from socket import *
+import socket
 import json
 import csv
 
@@ -17,22 +17,19 @@ print(dt)
 s = j['name']
 
 
-csvFilename = 'SODK_{}.csv'.format('567.2')
-with open(csvFilename, 'w', newline='') as csvfile:
-    fieldnames = ['Datetime', 'last_name']
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-    writer.writeheader()
-    writer.writerow({'first_name': 'Baked', 'last_name': 'Beans'})
-    writer.writerow({'first_name': 'Lovely', 'last_name': 'Spam'})
-    writer.writerow({'first_name': 'Wonderful', 'last_name': 'Spam'})
-
-# the result is a JSON string:
-print(s)
-
 # Создать сокет сервера
-server_socket = socket(AF_INET, SOCK_STREAM)
-server_socket.connect((host, port))
-cmd = 'GET http://pr4e.org/romeo.txt HTTP/1.0\r\n\r\n'.encode()
-server_socket.send(cmd)
-server_socket.close()
+
+MAX_CONNECTIONS = 20
+
+clients = [socket.socket(socket.AF_INET, socket.SOCK_STREAM) for i in range(MAX_CONNECTIONS)]
+udp_cli = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+for client in clients:
+    client.connect((host, port))
+
+for i in range(MAX_CONNECTIONS):
+    #clients[i].send(bytes("hello from client number " + str(i), encoding='UTF-8'))
+    udp_cli.sendto(bytes("hello from UDP client number " + str(i), encoding='UTF-8'), (host, port))
+
+for client in clients:
+    data = client.recv(1024)
+    print(str(data))
