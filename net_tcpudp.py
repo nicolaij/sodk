@@ -179,8 +179,8 @@ if __name__ == '__main__':
                 #print("readadle: " + str(s.getpeername()))                
                 try:
                     (message, client_address) = s.recvfrom(DATASIZE)
-                    #print("readadle: " + str(s))
-                    if s != server_socket_udp:
+                    #print("readadle: " + str(s.type))
+                    if s.type == socket.SOCK_STREAM:
                         client_address = s.getpeername()
                         inputs.remove(s)
                         s.close()
