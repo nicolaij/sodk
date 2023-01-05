@@ -6,22 +6,21 @@ import os
 import json
 import datetime
 
-# Говорит о том, сколько дескрипторов единовременно могут быть открыты
-MAX_CONNECTIONS = 2
-
 # Откуда и куда записывать информацию
-INPUTS = list()
-OUTPUTS = list()
+inputs = list()
+outputs = list()
+xinputs = list()
 
 HOST = '10.179.40.11'
 PORT = 48884
 FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
+DATASIZE = 1024
 
 
 def get_non_blocking_server_socket(type):
     # Создаем сокет, который работает без блокирования основного потока
     server = socket.socket(socket.AF_INET, type)
-    server.setblocking(0)
+    server.setblocking(False)
 
     # Биндим сервер на нужный адрес и порт
     server.bind((HOST, PORT))
@@ -30,7 +29,7 @@ def get_non_blocking_server_socket(type):
         return server
 
     # Установка максимального количество подключений
-    server.listen(MAX_CONNECTIONS)
+    server.listen(10)
 
     return server
 
@@ -42,10 +41,9 @@ def handle_readables(readables, server):
         # Если событие исходит от серверного сокета, то мы получаем новое подключение
         if resource is server:
             connection, client_address = resource.accept()
-            connection.setblocking(0)
-            INPUTS.append(connection)
-            print("new connection from {address}".format(
-                address=client_address))
+            connection.setblocking(False)
+            #INPUTS.append(connection)
+            print("new connection from {address}".format(address=client_address))
 
         # Если событие исходит не от серверного сокета, но сработало прерывание на наполнение входного буффера
         else:
@@ -63,8 +61,8 @@ def handle_readables(readables, server):
                 print("getting data: {data}".format(data=str(data)))
 
                 # Говорим о том, что мы будем еще и писать в данный сокет
-                if resource not in OUTPUTS:
-                    OUTPUTS.append(resource)
+                #if resource not in OUTPUTS:
+                #    OUTPUTS.append(resource)
 
             # Если данных нет, но событие сработало, то ОС нам отправляет флаг о полном прочтении ресурса и его закрытии
             else:
@@ -109,8 +107,7 @@ def parse_msg(msg):
 
 # create csv data file
 def write_csv(js):
-    csvFilename = 'SODK_{}_{:%Y-%m}.csv'.format(
-        js["id"], datetime.datetime.now())
+    csvFilename = 'SODK_{}_{:%Y-%m}.csv'.format(js["id"], datetime.datetime.now())
     try:
         with open(csvFilename, 'r', newline='') as csvfile:
             n = csvfile.read(1)
@@ -131,8 +128,7 @@ def write_csv(js):
 # create Wonderware Historian Fast load
 def write_historian(js):
     id = js["id"]
-    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(
-        FASTLOADDIR, id, datetime.datetime.now())
+    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(FASTLOADDIR, id, datetime.datetime.now())
     try:
         with open(IntouchFilename, 'w', encoding="latin-1") as f:
             f.write("ASCII\n,\n")
@@ -161,55 +157,42 @@ def write_historian(js):
 
 
 if __name__ == '__main__':
-
-    socket_1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    socket_2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    socket_1.bind(('127.0.0.1', 9998))
-    socket_2.bind(('127.0.0.1', 9999))
-    poller = select.poll()
-    poller.register(socket_1, select.POLLIN)
-    poller.register(socket_2, select.POLLIN)
-    while (True):
-        evts = poller.poll(5000)
-        for sock, evt in evts:
-            if evt and select.POLLIN:
-                if sock == socket_1.fileno():
-                    socket_1.recvfrom(4096)
-                    print('received poll event from socket_1')
-                if sock == socket_2.fileno():
-                    socket_2.recvfrom(4096)
-                    print('received poll event from socket_2')
-
+    
     # Создаем серверный сокет без блокирования основного потока в ожидании подключения
     server_socket = get_non_blocking_server_socket(socket.SOCK_STREAM)
-
-    pollerObject = select.poll()
-
-    pollerObject.register(server_socket, select.POLLIN)
-
-    while(True):
-
-        fdVsEvent = pollerObject.poll(10000)
-
-        for descriptor, Event in fdVsEvent:
-
-            print("Got an incoming connection request")
-
-            print("Start processing")
-
-            # Do accept() on server socket or read from a client socket
-
-    INPUTS.append(server_socket)
+    inputs.append(server_socket)
     server_socket_udp = get_non_blocking_server_socket(socket.SOCK_DGRAM)
-    INPUTS.append(server_socket_udp)
-
+    inputs.append(server_socket_udp)
     print("server is running, please, press ctrl+c to stop")
-    try:
-        while INPUTS:
-            readables, writables, exceptional = select.select(
-                INPUTS, OUTPUTS, INPUTS)
-            handle_readables(readables, server_socket)
-            handle_writables(writables)
-    except KeyboardInterrupt:
-        clear_resource(server_socket)
-        print("Server stopped! Thank you for using!")
+
+    while inputs:
+        readables, writables, exceptional = select.select(inputs, outputs, xinputs)
+        message = b''
+        client_address = ('',0)
+        for s in readables:
+            #print("readadle: " + str(s))
+            if s == server_socket:
+                connection, client_address = s.accept()
+                connection.setblocking(False)
+                inputs.append(connection)
+            else: #UDP or connection
+                #print("readadle: " + str(s.getpeername()))                
+                try:
+                    (message, client_address) = s.recvfrom(DATASIZE)
+                    #print("readadle: " + str(s))
+                    if s != server_socket_udp:
+                        client_address = s.getpeername()
+                        inputs.remove(s)
+                        s.close()
+                except:
+                    pass
+
+            if message:
+                # Вывод полученных данных на консоль
+                try:
+                    print("{}: {}".format(str(client_address), str(message)))
+                    write_csv(message)
+                    write_historian(message)
+                except:
+                    pass
+

@@ -27,7 +27,7 @@ for client in clients:
     client.connect((host, port))
 
 for i in range(MAX_CONNECTIONS):
-    #clients[i].send(bytes("hello from client number " + str(i), encoding='UTF-8'))
+    clients[i].send(bytes("hello from client number " + str(i), encoding='UTF-8'))
     udp_cli.sendto(bytes("hello from UDP client number " + str(i), encoding='UTF-8'), (host, port))
 
 for client in clients:
