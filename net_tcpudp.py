@@ -106,6 +106,8 @@ def parse_msg(msg):
 
 
 # create csv data file
+# {"id":"12.1","num":1,"dt":"2000-12-12 00:00:58","U":542,"R":299999,"Ub1":9.764,"Ub0":12.035,"U0":0,"in":1,"T":28.7,"rssi":-63}
+
 def write_csv(js):
     csvFilename = 'SODK_{}_{:%Y-%m}.csv'.format(js["id"], datetime.datetime.now())
     try:
@@ -163,7 +165,7 @@ if __name__ == '__main__':
     inputs.append(server_socket)
     server_socket_udp = get_non_blocking_server_socket(socket.SOCK_DGRAM)
     inputs.append(server_socket_udp)
-    print("server is running, please, press ctrl+c to stop")
+    print("TCP/UDP server is running")
 
     while inputs:
         readables, writables, exceptional = select.select(inputs, outputs, xinputs)
@@ -182,17 +184,20 @@ if __name__ == '__main__':
                     #print("readadle: " + str(s.type))
                     if s.type == socket.SOCK_STREAM:
                         client_address = s.getpeername()
-                        inputs.remove(s)
-                        s.close()
+                        #inputs.remove(s)
+                        #s.close()
                 except:
                     pass
 
             if message:
-                # Вывод полученных данных на консоль
                 try:
+                    # Вывод полученных данных на консоль
                     print("{}: {}".format(str(client_address), str(message)))
-                    write_csv(message)
-                    write_historian(message)
+                    for js in parse_msg(message.decode(encoding="latin-1", errors="ignore")):
+                        #print("parsing: ", js)
+                        if js:
+                            write_csv(js)
+                            #write_historian(js)
                 except:
                     pass
 
