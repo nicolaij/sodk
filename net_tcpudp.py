@@ -2,14 +2,9 @@
 
 import select
 import socket
-import os
+import sys
 import json
 import datetime
-
-# Откуда и куда записывать информацию
-inputs = list()
-outputs = list()
-xinputs = list()
 
 HOST = '10.179.40.11'
 PORT = 48884
@@ -159,33 +154,35 @@ def write_historian(js):
 
 
 if __name__ == '__main__':
-    
+    # Откуда и куда записывать информацию
+    outputs = list()
+    xinputs = list()
+
     # Создаем серверный сокет без блокирования основного потока в ожидании подключения
-    server_socket = get_non_blocking_server_socket(socket.SOCK_STREAM)
-    inputs.append(server_socket)
+    server_socket_tcp = get_non_blocking_server_socket(socket.SOCK_STREAM)
     server_socket_udp = get_non_blocking_server_socket(socket.SOCK_DGRAM)
-    inputs.append(server_socket_udp)
+    inputs = [server_socket_tcp, server_socket_udp]
     print("TCP/UDP server is running")
 
     while inputs:
         readables, writables, exceptional = select.select(inputs, outputs, xinputs)
         message = b''
         client_address = ('',0)
+        #print("readadle len: " + str(len(readables)))
         for s in readables:
-            #print("readadle: " + str(s))
-            if s == server_socket:
+            #print("protocol: " + str(s.proto))
+            if s == server_socket_tcp:
                 connection, client_address = s.accept()
                 connection.setblocking(False)
                 inputs.append(connection)
+                continue
             else: #UDP or connection
-                #print("readadle: " + str(s.getpeername()))                
+                #print("readadle: " + str(s))                
                 try:
                     (message, client_address) = s.recvfrom(DATASIZE)
                     #print("readadle: " + str(s.type))
                     if s.type == socket.SOCK_STREAM:
                         client_address = s.getpeername()
-                        #inputs.remove(s)
-                        #s.close()
                 except:
                     pass
 
@@ -200,4 +197,9 @@ if __name__ == '__main__':
                             #write_historian(js)
                 except:
                     pass
+            else:
+                #print("close: " + str(s))
+                s.close()
+                if s not in [server_socket_tcp, server_socket_udp]:
+                    inputs.remove(s)
 

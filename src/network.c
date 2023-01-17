@@ -55,6 +55,7 @@ static EventGroupHandle_t s_wifi_event_group;
 extern uint16_t port;
 extern char apn[32];
 extern char serverip[17];
+extern int32_t proto;
 #else
 extern int fr;
 extern int bw;
@@ -259,7 +260,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
                        "<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"/favicon-32x32.png\">"
                        "<link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"/favicon-16x16.png\">"
                        "<title>Settings</title></head><body>";
-    const char *sodkstartform1 = "<form><fieldset><legend>"; //СОДК</legend><table>";
+    const char *sodkstartform1 = "<form><fieldset><legend>"; // СОДК</legend><table>";
     const char *sodkstartform2 = "</legend><table>";
 
     const char *sodkend = "</table><input type=\"submit\" value=\"Сохранить\" />&nbsp;&nbsp;<input type=\"checkbox\" name=\"save\" id=\"save\"><label for=\"save\">save to flash</label></fieldset></form>";
@@ -279,15 +280,15 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     const char *lora_set_id[] = {
         "<tr><td><label for=\"id\">ID transceiver:</label></td><td><input type=\"text\" name=\"id\" id=\"id\" size=\"7\" value=\"",
-        "\" /></td></tr>"};
+        "\" /></td></tr>\n"};
 
     const char *nb_set_ip[] = {
         "<tr><td><label for=\"ip\">IP adress:</label></td><td><input type=\"text\" name=\"ip\" id=\"ip\" size=\"16\" value=\"",
-        "\" /></td></tr>"};
+        "\" /></td></tr>\n"};
 
     const char *nb_set_port[] = {
-        "<tr><td><label for=\"ip\">UDP port:</label></td><td><input type=\"text\" name=\"port\" id=\"port\" size=\"16\" value=\"",
-        "\" /></td></tr>"};
+        "<tr><td><label for=\"port\">Port:</label></td><td><input type=\"text\" name=\"port\" id=\"port\" size=\"16\" value=\"",
+        "\" /></td></tr>\n"};
 
     const char *lora_set_bw[] = {
         "<tr><td><label for='bw'>Signal bandwidth:</label></td><td><select name='bw' id='bw'>",
@@ -348,8 +349,6 @@ static esp_err_t settings_handler(httpd_req_t *req)
                     int p = atoi(param);
                     if (menu[i].val != p && p >= menu[i].min && p <= menu[i].max)
                     {
-                        param_change = true;
-
                         menu[i].val = p;
 
                         // printf("Param %s = %d\n", menu[i].id, menu[i].val);
@@ -383,7 +382,6 @@ static esp_err_t settings_handler(httpd_req_t *req)
                     }
                 }
             }
-
 #ifdef NB
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
             {
@@ -395,7 +393,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
                 }
             }
 
-            if (httpd_query_key_value(buf, "ip", param, 16) == ESP_OK)
+            if (httpd_query_key_value(buf, "ip", param, 17) == ESP_OK)
             {
                 if (strncmp(param, serverip, 16) != 0)
                 {
@@ -404,7 +402,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
                 }
             }
 
-            if (httpd_query_key_value(buf, "port", param, 5) == ESP_OK)
+            if (httpd_query_key_value(buf, "port", param, 6) == ESP_OK)
             {
                 int p = atoi(param);
                 if (port != p && p > 0)
@@ -414,10 +412,15 @@ static esp_err_t settings_handler(httpd_req_t *req)
                 }
             }
 
-            if (param_change)
+            if (httpd_query_key_value(buf, "proto", param, 2) == ESP_OK)
             {
-                write_nvs_nbiot(&id, apn, serverip, &port);
-            };
+                int p = atoi(param);
+                if (proto != p)
+                {
+                    param_change = true;
+                    proto = p;
+                }
+            }
 #else
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
             {
@@ -474,13 +477,16 @@ static esp_err_t settings_handler(httpd_req_t *req)
                 }
             }
 #endif
-            // if (param_change)
-            //{
+
+            if (param_change)
+            {
+                write_nvs_nbiot();
+            };
+
             httpd_resp_set_status(req, "307 Temporary Redirect");
             httpd_resp_set_hdr(req, "Location", PAGE_LORA_SET);
             httpd_resp_send(req, NULL, 0); // Response body can be empty
             return ESP_OK;
-            //}
         }
     }
 
@@ -524,6 +530,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
         }
     }
     strlcat(buf, sodkend, sizeof(buf));
+    strlcat(buf, "\n", sizeof(buf));
     httpd_resp_sendstr_chunk(req, buf);
 #ifdef NB
     //-----------------------------NB-IoT------------------------------
@@ -536,6 +543,30 @@ static esp_err_t settings_handler(httpd_req_t *req)
     itoa(id, param, 10);
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, lora_set_id[1], sizeof(buf));
+
+    // tcp / udp
+    const char *nb_set_proto[] = {
+        "<tr><td><label for=\"proto\">Data protocol:</label></td><td>",
+        "</td></tr>\n"};
+    const char *proto_select = "<label><input type=\"radio\" name=\"proto\" value=\"";
+
+    strlcat(buf, nb_set_proto[0], sizeof(buf));
+    strlcat(buf, proto_select, sizeof(buf));
+    if (proto == 0)
+        strlcat(buf, "0\" checked/>", sizeof(buf));
+    else
+        strlcat(buf, "0\"/>", sizeof(buf));
+    strlcat(buf, "TCP</label>", sizeof(buf));
+
+    strlcat(buf, proto_select, sizeof(buf));
+    if (proto != 0)
+        strlcat(buf, "1\" checked/>", sizeof(buf));
+    else
+        strlcat(buf, "1\"/>", sizeof(buf));
+    strlcat(buf, "UDP</label>", sizeof(buf));
+
+    strlcat(buf, nb_set_proto[1], sizeof(buf));
+
 
     // Generate ip
     strlcat(buf, nb_set_ip[0], sizeof(buf));

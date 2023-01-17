@@ -24,6 +24,8 @@ uint16_t port = 48884;
 
 int32_t id = 1; // ID передатчика
 
+int32_t proto = 0; // TCP/UDP
+
 static const char *TAG = "nbiot";
 
 extern float tsens_out;
@@ -39,7 +41,7 @@ struct stringreturn_t
 char tx_buf[WS_BUF_SIZE * 2];
 char buf[WS_BUF_SIZE];
 
-int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
+int read_nvs_nbiot()
 {
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open("nbiot", NVS_READONLY, &my_handle);
@@ -50,11 +52,11 @@ int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
     }
     else
     {
-        err = nvs_get_i32(my_handle, "id", pid);
+        err = nvs_get_i32(my_handle, "id", &id);
         switch (err)
         {
         case ESP_OK:
-            ESP_LOGD(TAG, "Read \"%s\" = %d", "id", *pid);
+            ESP_LOGD(TAG, "Read \"%s\" = %d", "id", id);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "id");
@@ -78,11 +80,11 @@ int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
         }
 
         l = 16;
-        err = nvs_get_str(my_handle, "server", server, &l);
+        err = nvs_get_str(my_handle, "server", serverip, &l);
         switch (err)
         {
         case ESP_OK:
-            ESP_LOGD(TAG, "Read \"%s\" = %s", "server", server);
+            ESP_LOGD(TAG, "Read \"%s\" = %s", "server", serverip);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "server");
@@ -96,11 +98,26 @@ int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
         switch (err)
         {
         case ESP_OK:
-            *port = i;
-            ESP_LOGD(TAG, "Read \"%s\" = %d", "port", *port);
+            port = i;
+            ESP_LOGD(TAG, "Read \"%s\" = %d", "port", port);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "port");
+            break;
+        default:
+            ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
+        }
+
+        i = 0;
+        err = nvs_get_i32(my_handle, "proto", &i);
+        switch (err)
+        {
+        case ESP_OK:
+            proto = i;
+            ESP_LOGD(TAG, "Read \"%s\" = %d", "proto", proto);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "proto");
             break;
         default:
             ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
@@ -114,7 +131,7 @@ int read_nvs_nbiot(int32_t *pid, char *apn, char *server, uint16_t *port)
     return 0;
 };
 
-int write_nvs_nbiot(int32_t *pid, const char *apn, const char *server, const uint16_t *port)
+int write_nvs_nbiot()
 {
     nvs_handle_t my_handle;
     esp_err_t err = nvs_open("nbiot", NVS_READWRITE, &my_handle);
@@ -125,26 +142,30 @@ int write_nvs_nbiot(int32_t *pid, const char *apn, const char *server, const uin
     else
     {
         // Write
-        ESP_LOGD(TAG, "Write id: %d ", *pid);
-        err = nvs_set_i32(my_handle, "id", *pid);
+        ESP_LOGD(TAG, "Write id: %d ", id);
+        err = nvs_set_i32(my_handle, "id", id);
         if (err != ESP_OK)
-            ESP_LOGE(TAG, "Write id: %d - Failed!", *pid);
+            ESP_LOGE(TAG, "Write id: %d - Failed!", id);
 
         ESP_LOGD(TAG, "Write APN: \"%s\" ", apn);
         err = nvs_set_str(my_handle, "apn", apn);
         if (err != ESP_OK)
             ESP_LOGE(TAG, "Write APN: \"%s\" - Failed!", apn);
 
-        ESP_LOGD(TAG, "Write server: \"%s\" ", server);
-        err = nvs_set_str(my_handle, "server", server);
+        ESP_LOGD(TAG, "Write server: \"%s\" ", serverip);
+        err = nvs_set_str(my_handle, "server", serverip);
         if (err != ESP_OK)
-            ESP_LOGE(TAG, "Write server: \"%s\" - Failed!", server);
+            ESP_LOGE(TAG, "Write server: \"%s\" - Failed!", serverip);
 
-        ESP_LOGD(TAG, "Write port: %d ", *port);
-        int32_t i = *port;
-        err = nvs_set_i32(my_handle, "port", i);
+        ESP_LOGD(TAG, "Write port: %d ", port);
+        err = nvs_set_i32(my_handle, "port", port);
         if (err != ESP_OK)
-            ESP_LOGE(TAG, "Write port: %d - Failed!", i);
+            ESP_LOGE(TAG, "Write port: %d - Failed!", port);
+
+        ESP_LOGD(TAG, "Write proto: %d ", proto);
+        err = nvs_set_i32(my_handle, "proto", proto);
+        if (err != ESP_OK)
+            ESP_LOGE(TAG, "Write proto: %d - Failed!", proto);
 
         // Commit written value.
         // After setting any values, nvs_commit() must be called to ensure changes are written
@@ -571,7 +592,7 @@ void radio_task(void *arg)
 
     esp_err_t ret = ESP_OK;
 
-    read_nvs_nbiot(&id, apn, serverip, &port);
+    read_nvs_nbiot();
 
     // ESP_ERROR_CHECK(esp_event_loop_create_default());
 
@@ -617,7 +638,7 @@ void radio_task(void *arg)
     while (1)
     {
         pcf8575_set(NB_PWR_CMDON);
-        vTaskDelay(9000 / portTICK_PERIOD_MS); // ждем включения NBIOT модуля
+        vTaskDelay(900 / portTICK_PERIOD_MS); // ждем включения NBIOT модуля
         pcf8575_set(NB_PWR_CMDOFF);
 
         vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -833,7 +854,9 @@ void radio_task(void *arg)
                     {
                         esp_dce->priv_resource = "+CSOC: ";
                         dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                        dte->send_cmd(dte, "AT+CSOC=1,1,1\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                        // AT+CSOC=<domain>,<type>,<protocol>         <type>: Integer 1 TCP 2 UDP
+                        snprintf(tx_buf, "AT+CSOC=1,%d,1\r", (proto == 0) ? 1 : 2);
+                        dte->send_cmd(dte, tx_buf, MODEM_COMMAND_TIMEOUT_DEFAULT);
                         vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
                         connectID[1] = 1;
                     }
@@ -865,13 +888,8 @@ void radio_task(void *arg)
                         ESP_LOGI(TAG, "Open port");
                         esp_dce->priv_resource = "+QIOPEN: ";
                         dce->handle_line = esp_modem_dce_handle_response_ok_wait;
-#define NB26_TCP 1
 
-#ifdef NB26_TCP
-                        snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"TCP\",\"%s\",%d,0,0\r", serverip, port);
-#else
-                        snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"UDP\",\"%s\",%d,0,0\r", serverip, port);
-#endif
+                        snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"%s\",\"%s\",%d,0,0\r", (proto == 0) ? "TCP" : "UDP", serverip, port);
                         // 2. It is recommended to wait for 60 seconds for URC response “+QIOPEN: <connectID>,<err>”.
                         dte->send_cmd(dte, tx_buf, 30000);
                     }
@@ -895,7 +913,6 @@ void radio_task(void *arg)
             counter = 1;
             while (counter-- > 0)
             {
-
                 dce->handle_line = esp_modem_dce_handle_cclk;
                 if (dte->send_cmd(dte, "AT+CCLK?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
                     if (dce->state == MODEM_STATE_SUCCESS)
@@ -944,33 +961,24 @@ void radio_task(void *arg)
                     {
                         esp_dce->priv_resource = "SEND:";
                         dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                        /*                      int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSOSEND=0,%d,", len_data);
-                                                char *pos = tx_buf + len_cmd;
-                                                int i = 0;
-                                                for (i = 0; i < len_data; i++)
-                                                {
-                                                    sprintf(pos + i * 2, "%02X", buf[i]);
-                                                }
-
-                                                sprintf(pos + i * 2, "\r");
-                        */
-
-                        int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSOSEND=0,0,\"");
+                        int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSOSEND=0,0,");
                         char *pos = tx_buf + len_cmd;
                         int i = 0;
+                        *pos++ = '\"';
+                        // Экранируем \"
                         for (i = 0; i < len_data; i++)
                         {
                             if (buf[i] == '\"')
                             {
-                                *pos = '\\';
-                                pos = pos + 1;
+                                *pos++ = '\\';
                             }
-                            
-                            *pos = buf[i]);
-                            pos = pos + 1;
+
+                            *pos++ = buf[i];
                         }
 
-                        sprintf(pos, "\"\r");
+                        *pos++ = '\"';
+                        *pos++ = '\r';
+                        *pos++ = '\0';
 
                         if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
                         {
@@ -987,10 +995,12 @@ void radio_task(void *arg)
                         snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", len_data, buf);
 
                         if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
+                        {
                             if (dce->state == MODEM_STATE_SUCCESS)
                             {
                                 break;
                             };
+                        }
                     }
 
                     vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
@@ -1010,31 +1020,27 @@ void radio_task(void *arg)
         if (strncmp(dce->name, "SIM7020", 7) == 0)
         {
             dce->handle_line = esp_modem_dce_handle_response_all_ok;
-            dte->send_cmd(dte, "AT+CSOCL=0\r", 10000);
+            dte->send_cmd(dte, "AT+CSOCL=0\r", 1000);
         }
         else
         {
             dce->handle_line = esp_modem_dce_handle_response_ok_wait;
-            dte->send_cmd(dte, "AT+QICLOSE=0\r", 10000);
+            dte->send_cmd(dte, "AT+QICLOSE=0\r", 1000);
         }
 
-        if (dce->state == MODEM_STATE_SUCCESS)
+        vTaskDelay(pdMS_TO_TICKS(3000));
+
+        ESP_LOGW(TAG, "Power down");
+        if (strncmp(dce->name, "SIM7020", 7) == 0)
         {
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_dce->priv_resource = "DOWN";
+            dce->handle_line = esp_modem_dce_handle_response_str_ok;
+            dte->send_cmd(dte, "AT+CPOWD=1\r", 10000);
         }
-    }
-
-    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
-    ESP_LOGW(TAG, "Power down");
-    if (strncmp(dce->name, "SIM7020", 7) == 0)
-    {
-        esp_dce->priv_resource = "DOWN";
-        dce->handle_line = esp_modem_dce_handle_response_str_ok;
-        dte->send_cmd(dte, "AT+CPOWD=1\r", 10000);
-    }
-    else
-    {
-        ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
+        else
+        {
+            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
+        }
     }
 
     vTaskDelay(pdMS_TO_TICKS(1020)); // Turn-Off Timing by AT Command
