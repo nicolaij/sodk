@@ -122,6 +122,8 @@ if __name__ == '__main__':
     inputs = [server_socket_tcp, server_socket_udp]
     #print("TCP/UDP server is running")
     logging.info("TCP/UDP server is running")
+    logging.debug("New: {}".format(str(server_socket_tcp)))
+    logging.debug("New: {}".format(str(server_socket_udp)))
 
     while inputs:
         readables, writables, exceptional = select.select(inputs, outputs, xinputs)
@@ -138,6 +140,7 @@ if __name__ == '__main__':
                 continue
             else: #UDP or connection
                 #print("readadle: " + str(s))                
+                logging.debug("Msg: {}".format(str(s)))
                 try:
                     (message, client_address) = s.recvfrom(DATASIZE)
                     #print("readadle: " + str(s.type))
@@ -166,6 +169,6 @@ if __name__ == '__main__':
                 #print("close: " + str(s))
                 if s not in [server_socket_tcp, server_socket_udp]:
                     inputs.remove(s)
-                logging.debug("Close: {}".format(str(s)))
+                logging.debug("Cls: {}".format(str(s)))
                 s.close()
 
