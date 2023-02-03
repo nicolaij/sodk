@@ -2,15 +2,16 @@
 
 import select
 import socket
-import sys
 import json
 import datetime
+import os
+import logging
+import sys
 
 HOST = '10.179.40.11'
 PORT = 48884
 FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
 DATASIZE = 1024
-
 
 def get_non_blocking_server_socket(type):
     # Создаем сокет, который работает без блокирования основного потока
@@ -29,75 +30,16 @@ def get_non_blocking_server_socket(type):
     return server
 
 
-def handle_readables(readables, server):
-    # Обработка появления событий на входах
-    for resource in readables:
-
-        # Если событие исходит от серверного сокета, то мы получаем новое подключение
-        if resource is server:
-            connection, client_address = resource.accept()
-            connection.setblocking(False)
-            #INPUTS.append(connection)
-            print("new connection from {address}".format(address=client_address))
-
-        # Если событие исходит не от серверного сокета, но сработало прерывание на наполнение входного буффера
-        else:
-            data = ""
-            try:
-                data = resource.recv(1024)
-
-            # Если сокет был закрыт на другой стороне
-            except ConnectionResetError:
-                pass
-
-            if data:
-
-                # Вывод полученных данных на консоль
-                print("getting data: {data}".format(data=str(data)))
-
-                # Говорим о том, что мы будем еще и писать в данный сокет
-                #if resource not in OUTPUTS:
-                #    OUTPUTS.append(resource)
-
-            # Если данных нет, но событие сработало, то ОС нам отправляет флаг о полном прочтении ресурса и его закрытии
-            else:
-
-                # Очищаем данные о ресурсе и закрываем дескриптор
-                clear_resource(resource)
-
-
-def clear_resource(resource):
-    """
-    Метод очистки ресурсов использования сокета
-    """
-    if resource in OUTPUTS:
-        OUTPUTS.remove(resource)
-    if resource in INPUTS:
-        INPUTS.remove(resource)
-    resource.close()
-
-    print('closing connection ' + str(resource))
-
-
-def handle_writables(writables):
-    # Данное событие возникает когда в буффере на запись освобождается место
-    for resource in writables:
-        try:
-            resource.send(bytes('Hello from server!', encoding='UTF-8'))
-        except OSError:
-            clear_resource(resource)
-
-
 def parse_msg(msg):
-    try:
-        return [json.loads(msg)]
-    except json.JSONDecodeError as err:
-        if err.msg == 'Extra data':
-            head = [json.loads(msg[0:err.pos])]
-            tail = parse_msg(msg[err.pos:])
-            return head + tail
-        else:
-            return []
+    st = 0
+    fi = 0
+    rez = []
+    while (st >=0 and fi >= 0):
+        st = msg.find('{', fi)
+        fi = msg.find('}', st)
+        if (st >=0 and fi > 0):
+            rez.append(json.loads(msg[st:fi+1]))
+    return rez
 
 
 # create csv data file
@@ -110,15 +52,14 @@ def write_csv(js):
             n = csvfile.read(1)
     except:
         with open(csvFilename, 'w', newline='') as csvfile:
-            csvfile.write('Datetime,Counter,U,R,U0,Ub0,Ub1,T,RSSI,in\n')
+            csvfile.write('Datetime;Counter;U;R;U0;Ub0;Ub1;T;RSSI;in\n')
         pass
 
     try:
         with open(csvFilename, 'a', newline='') as csvfile:
-            csvfile.write('{},{},{},{},{},{},{},{},{},{}\n'.format(
-                js["dt"], js["num"], js["U"], js["R"], js["U0"], js["Ub0"], js["Ub1"], js["T"], js["rssi"], js["in"]))
+            csvfile.write('{};{};{};{};{};{};{};{};{};{}\n'.format(js["dt"], js["num"], str(js["U"]).replace('.',','), str(js["R"]).replace('.',','), str(js["U0"]).replace('.',','), str(js["Ub0"]).replace('.',','), str(js["Ub1"]).replace('.',','), str(js["T"]).replace('.',','), js["rssi"], js["in"]))
     except Exception as e:
-        print('CSV file error! {}'.format(e))
+        logging.error(e)
         pass
 
 
@@ -149,20 +90,38 @@ def write_historian(js):
             f.write("Sodk_ZRTS{}_in,0,{},0,{},192\n".format(
                 id, time_and_date, js["in"]))
     except Exception as e:
-        print('File error! {}'.format(e))
+        #print('File error! {}'.format(e))
+        logging.error(e)
         pass
 
 
 if __name__ == '__main__':
+
+    logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)-5.5s] %(message)s",
+    handlers=[
+        logging.FileHandler("debug.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+    wonderware = False
+    if os.path.isdir(FASTLOADDIR):
+        wonderware = True
+    else:
+        logging.error("Wonderware Historian fastload disable.")
+        #print("Wonderware Historian fastload disable.")
+ 
     # Откуда и куда записывать информацию
-    outputs = list()
-    xinputs = list()
+    outputs = []
+    xinputs = []
 
     # Создаем серверный сокет без блокирования основного потока в ожидании подключения
     server_socket_tcp = get_non_blocking_server_socket(socket.SOCK_STREAM)
     server_socket_udp = get_non_blocking_server_socket(socket.SOCK_DGRAM)
     inputs = [server_socket_tcp, server_socket_udp]
-    print("TCP/UDP server is running")
+    #print("TCP/UDP server is running")
+    logging.info("TCP/UDP server is running")
 
     while inputs:
         readables, writables, exceptional = select.select(inputs, outputs, xinputs)
@@ -175,6 +134,7 @@ if __name__ == '__main__':
                 connection, client_address = s.accept()
                 connection.setblocking(False)
                 inputs.append(connection)
+                logging.debug("New: {}".format(str(s)))
                 continue
             else: #UDP or connection
                 #print("readadle: " + str(s))                
@@ -183,23 +143,29 @@ if __name__ == '__main__':
                     #print("readadle: " + str(s.type))
                     if s.type == socket.SOCK_STREAM:
                         client_address = s.getpeername()
-                except:
+                except Exception as e:
+                    #print(e)
+                    logging.error(e)
                     pass
 
             if message:
+                # Вывод полученных данных на консоль
+                #print("{}: {}".format(str(client_address), str(message)))
+                logging.info("{}: {}".format(str(client_address), str(message)))
                 try:
-                    # Вывод полученных данных на консоль
-                    print("{}: {}".format(str(client_address), str(message)))
                     for js in parse_msg(message.decode(encoding="latin-1", errors="ignore")):
-                        #print("parsing: ", js)
-                        if js:
+                        if js["id"]:
                             write_csv(js)
-                            #write_historian(js)
-                except:
+                            if wonderware:
+                                write_historian(js)
+                except Exception as e:
+                    #print(e)
+                    logging.error(e)
                     pass
             else:
                 #print("close: " + str(s))
-                s.close()
                 if s not in [server_socket_tcp, server_socket_udp]:
                     inputs.remove(s)
+                logging.debug("Close: {}".format(str(s)))
+                s.close()
 
