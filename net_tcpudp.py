@@ -12,6 +12,9 @@ HOST = '10.179.40.11'
 PORT = 48884
 FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
 DATASIZE = 1024
+#тэги historian которые создаются только для первого канала
+ONLYONECHAN = 1
+ONLYONE = ['in','T','rssi']
 
 def get_non_blocking_server_socket(type):
     # Создаем сокет, который работает без блокирования основного потока
@@ -66,6 +69,7 @@ def write_csv(js):
 # create Wonderware Historian Fast load
 def write_historian(js):
     id = js["id"]
+    idn = id.split('.')
     IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(FASTLOADDIR, id, datetime.datetime.now())
     try:
         with open(IntouchFilename, 'w', encoding="latin-1") as f:
@@ -73,22 +77,17 @@ def write_historian(js):
             f.write("SODK,1,Server Local,1,1\n")
             dt = datetime.datetime.strptime(js["dt"], "%Y-%m-%d %H:%M:%S")
             time_and_date = '{:%Y/%m/%d,%H:%M:%S}.000'.format(dt)
-            f.write("Sodk_ZRTS{}_U,0,{},0,{},192\n".format(
-                id, time_and_date, js["U"]))
-            f.write("Sodk_ZRTS{}_R,0,{},0,{},192\n".format(
-                id, time_and_date, js["R"]))
-            f.write("Sodk_ZRTS{}_U0,0,{},0,{},192\n".format(
-                id, time_and_date, js["U0"]))
-            f.write("Sodk_ZRTS{}_UBatt0,0,{},0,{},192\n".format(
-                id, time_and_date, js["Ub0"]))
-            f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(
-                id, time_and_date, js["Ub1"]))
-            f.write("Sodk_ZRTS{}_Tcpu,0,{},0,{},192\n".format(
-                id, time_and_date, js["T"]))
-            f.write("Sodk_ZRTS{}_rssi,0,{},0,{},192\n".format(
-                id, time_and_date, js["rssi"]))
-            f.write("Sodk_ZRTS{}_in,0,{},0,{},192\n".format(
-                id, time_and_date, js["in"]))
+            f.write("Sodk_ZRTS{}_U,0,{},0,{},192\n".format(id, time_and_date, js["U"]))
+            f.write("Sodk_ZRTS{}_R,0,{},0,{},192\n".format(id, time_and_date, js["R"]))
+            f.write("Sodk_ZRTS{}_U0,0,{},0,{},192\n".format(id, time_and_date, js["U0"]))
+            f.write("Sodk_ZRTS{}_UBatt0,0,{},0,{},192\n".format(id, time_and_date, js["Ub0"]))
+            f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(id, time_and_date, js["Ub1"]))
+            if not ('T' in ONLYONE and ONLYONECHAN != idn[1]):
+                f.write("Sodk_ZRTS{}_Tcpu,0,{},0,{},192\n".format(id, time_and_date, js["T"]))
+            if not ('rssi' in ONLYONE and ONLYONECHAN != idn[1]):
+                f.write("Sodk_ZRTS{}_rssi,0,{},0,{},192\n".format(id, time_and_date, js["rssi"]))
+            if not ('in' in ONLYONE and ONLYONECHAN != idn[1]):
+                f.write("Sodk_ZRTS{}_in,0,{},0,{},192\n".format(id, time_and_date, js["in"]))
     except Exception as e:
         #print('File error! {}'.format(e))
         logging.error(e)
