@@ -768,6 +768,7 @@ void dual_adc(void *arg)
                     result.U0 = u0;
                     result.Ubatt1 = (bufferR[(unsigned int)(bhead - block_result + ON_BLOCK + 3) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK + 4) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK + 4) & (RINGBUFLEN - 1)].Ubatt) / 3; //сдвинут по времени
                     result.Ubatt0 = (bufferR[(unsigned int)(bhead - block_result + ON_BLOCK - 1) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK - 2) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - block_result + ON_BLOCK - 3) & (RINGBUFLEN - 1)].Ubatt) / 3;
+                    result.time = block_result;
 
                     if (block_result == blocks)
                     {

@@ -77,6 +77,7 @@ typedef struct
     int Ubatt1;
     int U0;
     int input; //состояние внешнего входа 0 - нет, 1-сработал, 2-проснулись от сработки
+    int time;
 } result_t;
 
 typedef enum
