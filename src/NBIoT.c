@@ -638,7 +638,7 @@ void radio_task(void *arg)
     while (1)
     {
         pcf8575_set(NB_PWR_CMDON);
-        vTaskDelay(900 / portTICK_PERIOD_MS); // ждем включения NBIOT модуля
+        vTaskDelay(1000 / portTICK_PERIOD_MS); // ждем включения NBIOT модуля
         pcf8575_set(NB_PWR_CMDOFF);
 
         vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -1028,9 +1028,8 @@ void radio_task(void *arg)
             dte->send_cmd(dte, "AT+QICLOSE=0\r", 1000);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
 
-        ESP_LOGW(TAG, "Power down");
         if (strncmp(dce->name, "SIM7020", 7) == 0)
         {
             esp_dce->priv_resource = "DOWN";
@@ -1041,6 +1040,9 @@ void radio_task(void *arg)
         {
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
         }
+        
+        if (dce->state == MODEM_STATE_SUCCESS)
+            ESP_LOGW(TAG, "Power down");
     }
 
     vTaskDelay(pdMS_TO_TICKS(1020)); // Turn-Off Timing by AT Command

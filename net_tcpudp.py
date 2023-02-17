@@ -49,18 +49,28 @@ def parse_msg(msg):
 # {"id":"12.1","num":1,"dt":"2000-12-12 00:00:58","U":542,"R":299999,"Ub1":9.764,"Ub0":12.035,"U0":0,"in":1,"T":28.7,"rssi":-63}
 
 def write_csv(js):
+    
+    dataname = ['dt', 'num', 'U', 'R', 'time', 'U0', 'Ub0', 'Ub1', 'T', 'rssi', 'in']
+    for d in dataname:
+        try:
+            if js[d] == '':
+                js[d] = ''
+        except:
+            js[d] = ''
+            pass
+
     csvFilename = 'SODK_{}_{:%Y-%m}.csv'.format(js["id"], datetime.datetime.now())
     try:
         with open(csvFilename, 'r', newline='') as csvfile:
             n = csvfile.read(1)
     except:
         with open(csvFilename, 'w', newline='') as csvfile:
-            csvfile.write('Datetime;Counter;U;R;U0;Ub0;Ub1;T;RSSI;in\n')
+            csvfile.write('Datetime;Counter;U;R;time;U0;Ub0;Ub1;T;RSSI;in\n')
         pass
-
+    
     try:
         with open(csvFilename, 'a', newline='') as csvfile:
-            csvfile.write('{};{};{};{};{};{};{};{};{};{}\n'.format(js["dt"], js["num"], str(js["U"]).replace('.',','), str(js["R"]).replace('.',','), str(js["U0"]).replace('.',','), str(js["Ub0"]).replace('.',','), str(js["Ub1"]).replace('.',','), str(js["T"]).replace('.',','), js["rssi"], js["in"]))
+            csvfile.write('{};{};{};{};{};{};{};{};{};{};{}\n'.format(js[str("dt")], js["num"], str(js["U"]).replace('.',','), str(js["R"]).replace('.',','), js["time"], str(js["U0"]).replace('.',','), str(js["Ub0"]).replace('.',','), str(js["Ub1"]).replace('.',','), str(js["T"]).replace('.',','), js["rssi"], js["in"]))
     except Exception as e:
         logging.error(e)
         pass

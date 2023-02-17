@@ -18,7 +18,7 @@
 #include "pcf8575.h"
 
 RTC_DATA_ATTR int bootCount = 0;
-RTC_DATA_ATTR int BattLow = 0; //Счетчик разряда батареи
+RTC_DATA_ATTR int BattLow = 0; // Счетчик разряда батареи
 
 float tsens_out = 0;
 
@@ -122,46 +122,32 @@ int pcf8575_read(uint16_t bit)
     return 0;
 }
 
-//#define INVERT_NB_PWR 1
-
-// POWER_BIT - и NB_PWR_BIT - инверсные
-// POWER_BIT - всегда, кроме когда каналы выбраны
+// #define INVERT_NB_PWR 1 //без транзистора на входе (0 - сигнал вкл.)
+//  POWER_BIT - и NB_PWR_BIT - инверсные
+//  POWER_BIT - всегда, кроме когда каналы выбраны
 void pcf8575_set(int channel_cmd)
 {
     if (i2c_err)
         return;
 
     const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
-
     static uint16_t current_mask = 0;
 
     uint16_t cmd_mask = 0;
 
     if (channel_cmd == 0)
     {
-#ifdef INVERT_NB_PWR
-        current_mask = BIT(POWER_BIT);
-#else
-        current_mask = BIT(NB_PWR_BIT) | BIT(POWER_BIT);
-#endif
+        current_mask = BIT(POWER_BIT) | BIT(NB_PWR_BIT);
         cmd_mask = current_mask;
     }
     else if (channel_cmd == NB_PWR_CMDON)
     {
-#ifdef INVERT_NB_PWR
-        current_mask |= BIT(NB_PWR_BIT);
-#else
         current_mask &= ~BIT(NB_PWR_BIT);
-#endif
         cmd_mask = current_mask;
     }
     else if (channel_cmd == NB_PWR_CMDOFF)
     {
-#ifdef INVERT_NB_PWR
-        current_mask &= ~BIT(NB_PWR_BIT);
-#else
         current_mask |= BIT(NB_PWR_BIT);
-#endif
         cmd_mask = current_mask;
     }
     else if (channel_cmd == NB_RESET_CMD)
@@ -172,17 +158,18 @@ void pcf8575_set(int channel_cmd)
     else if (channel_cmd == POWER_CMDOFF)
     {
         current_mask |= BIT(POWER_BIT);
-        current_mask &= ~(0x0f); //очищаем каналы
+        current_mask &= ~(0x0f); // очищаем каналы
         cmd_mask = current_mask;
     }
-    else //каналы
+    else // каналы
     {
         current_mask &= ~BIT(POWER_BIT);
-        current_mask &= ~(0x0f); //очищаем каналы
-        current_mask = pcf_output_map[channel_cmd];
+        current_mask &= ~(0x0f); // очищаем каналы
+        current_mask |= pcf_output_map[channel_cmd];
         cmd_mask = current_mask;
     }
 
+    
     uint16_t port_val = ~(cmd_mask);
     pcf8575_port_write(&pcf8575, port_val);
 }
@@ -212,7 +199,7 @@ void go_sleep(void)
         time_in_us = StoUS(60 * 60 * 24 * 30); // 30 days
     }
 
-    //коррекция на время работы
+    // коррекция на время работы
     time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[14].val));
 
     esp_sleep_enable_timer_wakeup(time_in_us);
@@ -436,7 +423,7 @@ void app_main()
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
-        //для отладки схемы pulse -1
+        // для отладки схемы pulse -1
         if (menu[0].val != -1)
         {
             xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
@@ -464,9 +451,9 @@ void app_main()
         END_RADIO_SLEEP,   /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        1200 / portTICK_PERIOD_MS);
+        2000 / portTICK_PERIOD_MS);
 
-    //засыпаем...
+    // засыпаем...
     go_sleep();
 
     while (1)
