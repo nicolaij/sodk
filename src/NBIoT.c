@@ -587,11 +587,6 @@ void radio_task(void *arg)
     // результат измерений
     result_t result;
 
-    BaseType_t xResult;
-    uint32_t ulNotifiedValue;
-
-    esp_err_t ret = ESP_OK;
-
     read_nvs_nbiot();
 
     // ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -633,7 +628,6 @@ void radio_task(void *arg)
     //  vTaskDelay(pdMS_TO_TICKS(400));
 
     modem_dce_t *dce = NULL;
-    int try_count = 0;
 
     while (1)
     {
@@ -855,7 +849,7 @@ void radio_task(void *arg)
                         esp_dce->priv_resource = "+CSOC: ";
                         dce->handle_line = esp_modem_dce_handle_response_all_ok;
                         // AT+CSOC=<domain>,<type>,<protocol>         <type>: Integer 1 TCP 2 UDP
-                        snprintf(tx_buf, "AT+CSOC=1,%d,1\r", (proto == 0) ? 1 : 2);
+                        snprintf(tx_buf, sizeof(tx_buf), "AT+CSOC=1,%d,1\r", (proto == 0) ? 1 : 2);
                         dte->send_cmd(dte, tx_buf, MODEM_COMMAND_TIMEOUT_DEFAULT);
                         vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
                         connectID[1] = 1;
@@ -944,7 +938,7 @@ void radio_task(void *arg)
             ESP_LOGI(TAG, "Current date/time: %s", datetime);
 
             int len_data = 0;
-            while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
+            while (pdTRUE == xQueueReceive(send_queue, &result, 20000 / portTICK_PERIOD_MS))
             {
                 n = time(0);
                 localtm = localtime(&n);

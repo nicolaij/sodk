@@ -80,6 +80,7 @@ def write_csv(js):
 def write_historian(js):
     id = js["id"]
     idn = id.split('.')
+    chan = int(idn[1], base=10)
     IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(FASTLOADDIR, id, datetime.datetime.now())
     try:
         with open(IntouchFilename, 'w', encoding="latin-1") as f:
@@ -92,11 +93,11 @@ def write_historian(js):
             f.write("Sodk_ZRTS{}_U0,0,{},0,{},192\n".format(id, time_and_date, js["U0"]))
             f.write("Sodk_ZRTS{}_UBatt0,0,{},0,{},192\n".format(id, time_and_date, js["Ub0"]))
             f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(id, time_and_date, js["Ub1"]))
-            if not ('T' in ONLYONE and ONLYONECHAN != idn[1]):
+            if not ('T' in ONLYONE and ONLYONECHAN != chan):
                 f.write("Sodk_ZRTS{}_Tcpu,0,{},0,{},192\n".format(id, time_and_date, js["T"]))
-            if not ('rssi' in ONLYONE and ONLYONECHAN != idn[1]):
+            if not ('rssi' in ONLYONE and ONLYONECHAN != chan):
                 f.write("Sodk_ZRTS{}_rssi,0,{},0,{},192\n".format(id, time_and_date, js["rssi"]))
-            if not ('in' in ONLYONE and ONLYONECHAN != idn[1]):
+            if not ('in' in ONLYONE and ONLYONECHAN != chan):
                 f.write("Sodk_ZRTS{}_in,0,{},0,{},192\n".format(id, time_and_date, js["in"]))
     except Exception as e:
         #print('File error! {}'.format(e))

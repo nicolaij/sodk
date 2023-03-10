@@ -1,0 +1,4 @@
+2023-03-09 10:16:35,322 [ERROR] Wonderware Historian fastload disable.
+2023-03-09 10:16:35,424 [INFO ] TCP/UDP server is running
+2023-03-09 10:16:35,469 [DEBUG] New: <socket.socket fd=736, family=AddressFamily.AF_INET, type=SocketKind.SOCK_STREAM, proto=0, laddr=('10.179.40.11', 48884)>
+2023-03-09 10:16:35,470 [DEBUG] New: <socket.socket fd=740, family=AddressFamily.AF_INET, type=SocketKind.SOCK_DGRAM, proto=0, laddr=('10.179.40.11', 48884)>

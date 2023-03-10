@@ -135,41 +135,36 @@ void pcf8575_set(int channel_cmd)
 
     uint16_t cmd_mask = 0;
 
-    if (channel_cmd == 0)
+    switch (channel_cmd)
     {
+    case 0:
         current_mask = BIT(POWER_BIT) | BIT(NB_PWR_BIT);
         cmd_mask = current_mask;
-    }
-    else if (channel_cmd == NB_PWR_CMDON)
-    {
+        break;
+    case NB_PWR_CMDON:
         current_mask &= ~BIT(NB_PWR_BIT);
         cmd_mask = current_mask;
-    }
-    else if (channel_cmd == NB_PWR_CMDOFF)
-    {
+        break;
+    case NB_PWR_CMDOFF:
         current_mask |= BIT(NB_PWR_BIT);
         cmd_mask = current_mask;
-    }
-    else if (channel_cmd == NB_RESET_CMD)
-    {
-        // current_mask &= ~BIT(NB_RESET_BIT);
+        break;
+    case NB_RESET_CMD:
         cmd_mask = current_mask | BIT(NB_RESET_BIT);
-    }
-    else if (channel_cmd == POWER_CMDOFF)
-    {
+        break;
+    case POWER_CMDOFF:
         current_mask |= BIT(POWER_BIT);
         current_mask &= ~(0x0f); // очищаем каналы
         cmd_mask = current_mask;
-    }
-    else // каналы
-    {
+        break;
+    default: // каналы
         current_mask &= ~BIT(POWER_BIT);
         current_mask &= ~(0x0f); // очищаем каналы
         current_mask |= pcf_output_map[channel_cmd];
         cmd_mask = current_mask;
+        break;
     }
 
-    
     uint16_t port_val = ~(cmd_mask);
     pcf8575_port_write(&pcf8575, port_val);
 }
