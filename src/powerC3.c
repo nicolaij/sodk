@@ -433,6 +433,7 @@ void dual_adc(void *arg)
         int blocks = 0;
         int block_power_on = 0;
         int block_power_off = 0;
+        int block_power_off_step = 0;
         int block_result = 0;
         int counter_block_ADC_buffer = 0;
 
@@ -542,7 +543,7 @@ void dual_adc(void *arg)
                     p = p + ADC_COUNT_READ;
                     ptr_adc_begin = (void *)p;
 
-                    if (v / 1000 > menu[1].val)
+                    if (v > menu[1].val * 1000)
                     {
                         overvolt++;
                         if (overvolt >= 3)
@@ -721,7 +722,31 @@ void dual_adc(void *arg)
                 // окончание измерений
                 if (block_power_off == 0)
                 {
-                    if (compare_counter == 0)
+                    if (block_power_off_step == 0 && compare_counter == 0)
+                    {
+                        if (blocks < 250)
+                        {
+                            block_power_off_step = 250;
+                        }
+                        else if (blocks < 500)
+                        {
+                            block_power_off_step = 500;
+                        }
+                        else if (blocks < 1000)
+                        {
+                            block_power_off_step = 1000;
+                        }
+                        else if (blocks < 2000)
+                        {
+                            block_power_off_step = 2000;
+                        }
+                        else
+                        {
+                            block_power_off_step = 4000;
+                        }
+                    }
+
+                    if (block_power_off_step == blocks)
                     {
                         // ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
@@ -809,7 +834,7 @@ void dual_adc(void *arg)
                 btail = (btail + 1) & (RINGBUFLEN - 1);
 
             blocks++;
-        } while (blocks < 10000); //ограничение 10 сек
+        } while (blocks < 10000); // ограничение 10 сек
 
         ESP_ERROR_CHECK(adc_digi_stop());
 

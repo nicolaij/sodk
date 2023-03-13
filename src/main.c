@@ -414,7 +414,7 @@ void app_main()
         END_MEASURE,       /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        10000 / portTICK_PERIOD_MS);
+        portMAX_DELAY);
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
