@@ -436,6 +436,7 @@ void dual_adc(void *arg)
         int block_power_off_step = 0;
         int block_result = 0;
         int counter_block_ADC_buffer = 0;
+        int overload = 0;
 
         int64_t timeout = menu[0].val * 1000LL;
 
@@ -724,7 +725,11 @@ void dual_adc(void *arg)
                 {
                     if (block_power_off_step == 0 && compare_counter == 0)
                     {
-                        if (blocks < 250)
+                        if (blocks < 125)
+                        {
+                            block_power_off_step = 125;
+                        }
+                        else if (blocks < 250)
                         {
                             block_power_off_step = 250;
                         }
@@ -740,21 +745,27 @@ void dual_adc(void *arg)
                         {
                             block_power_off_step = 2000;
                         }
-                        else
+                        else if (blocks < 4000)
                         {
                             block_power_off_step = 4000;
                         }
+                        else
+                        {
+                            block_power_off_step = 8000;
+                        }
                     }
 
-                    if (block_power_off_step == blocks)
+                    if (blocks == block_power_off_step)
                     {
                         // ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
                         block_power_off = blocks;
                         // block_pre_result = blocks;
 
-                        if (sum_adc[0] / n < 4000) /// НЕТ ПЕРЕГРУЗКИ
+                        if (sum_adc[0] / n < 4000) // НЕТ ПЕРЕГРУЗКИ измерительного канала
                             block_result = blocks;
+                        else
+                            overload = 1;
                     }
                 }
                 else
@@ -763,13 +774,18 @@ void dual_adc(void *arg)
                     {
                         if (sum_adc[0] / n < 4000)
                         {
-                            r1 = bufferR[bhead].R1;
-                            r2 = bufferR[bhead].R2;
-                            u = bufferR[bhead].U;
-                            u0 = bufferR[bhead].U0;
+                            if (overload > 0) // при выходе из перегрузки среднее не действительно
+                            {
+                                r1 = bufferR[bhead].R1;
+                                r2 = bufferR[bhead].R2;
+                                u = bufferR[bhead].U;
+                                u0 = bufferR[bhead].U0;
+                            }
 
                             block_result = blocks;
                         }
+                        else
+                            overload = 1;
                     }
                 }
 
