@@ -16,6 +16,11 @@
 
 // RTC_DATA_ATTR int last_chan;
 
+RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0};
+RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0};
+const int step_time_const[] = {0, 125, 250, 500, 1000, 2000, 4000, 8000}; 
+#define STEP_TIME_COUNT 3
+
 // кольцевой буфер для визуализации
 calcdata_t bufferR[RINGBUFLEN];
 unsigned int bhead = 0;
@@ -433,7 +438,7 @@ void dual_adc(void *arg)
         int blocks = 0;
         int block_power_on = 0;
         int block_power_off = 0;
-        int block_power_off_step = 0;
+        int block_power_off_step = step_time_const[step_time[result.channel]];
         int block_result = 0;
         int counter_block_ADC_buffer = 0;
         int overload = 0;
@@ -723,36 +728,55 @@ void dual_adc(void *arg)
                 // окончание измерений
                 if (block_power_off == 0)
                 {
-                    if (block_power_off_step == 0 && compare_counter == 0)
+                    if (compare_counter == 0)
                     {
-                        if (blocks < 125)
+                        if (step_time[result.channel] == 0) // первое измерение после старта
                         {
-                            block_power_off_step = 125;
-                        }
-                        else if (blocks < 250)
-                        {
-                            block_power_off_step = 250;
-                        }
-                        else if (blocks < 500)
-                        {
-                            block_power_off_step = 500;
-                        }
-                        else if (blocks < 1000)
-                        {
-                            block_power_off_step = 1000;
-                        }
-                        else if (blocks < 2000)
-                        {
-                            block_power_off_step = 2000;
-                        }
-                        else if (blocks < 4000)
-                        {
-                            block_power_off_step = 4000;
+                            for (int i = 1; i < sizeof(step_time_const) / sizeof(step_time_const[0]); i++)
+                            {
+                                if (blocks <= step_time_const[i])
+                                {
+                                    step_time[result.channel] = i;
+                                    break;
+                                }
+                            };
                         }
                         else
                         {
-                            block_power_off_step = 8000;
+                            // счетчик необходимости переключения диапазона
+                            if (blocks <= step_time_const[step_time[result.channel] - 1])
+                            {
+                                step_time_switch[result.channel]--;
+                            }
+                            else if (blocks > step_time_const[step_time[result.channel]])
+                            {
+                                step_time_switch[result.channel]++;
+                            }
+                            else
+                            {
+                                step_time_switch[result.channel] = 0;
+                            }
+
+                            // переключаем диапазон
+                            if (step_time_switch[result.channel] <= STEP_TIME_COUNT * -1)
+                            {
+                                if (step_time[result.channel] > 1)
+                                    step_time[result.channel]--;
+
+                                step_time_switch[result.channel] = 0;
+                            }
+
+                            // переключаем диапазон
+                            if (step_time_switch[result.channel] >= STEP_TIME_COUNT)
+                            {
+                                if (step_time[result.channel] < sizeof(step_time_const) / sizeof(step_time_const[0]) - 1)
+                                    step_time[result.channel]++;
+
+                                step_time_switch[result.channel] = 0;
+                            }
                         }
+
+                        block_power_off_step = step_time_const[step_time[result.channel]];
                     }
 
                     if (blocks == block_power_off_step)
@@ -760,7 +784,6 @@ void dual_adc(void *arg)
                         // ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
                         block_power_off = blocks;
-                        // block_pre_result = blocks;
 
                         if (sum_adc[0] / n < 4000) // НЕТ ПЕРЕГРУЗКИ измерительного канала
                             block_result = blocks;
@@ -797,7 +820,7 @@ void dual_adc(void *arg)
                 }
 
                 // запоминаем результат
-                if (block_result == blocks)
+                if (blocks == block_result)
                 {
                     result.adc0 = sum_adc[0] / n;
                     result.adc1 = sum_adc[1] / n;
