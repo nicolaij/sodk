@@ -1,0 +1,51 @@
+[0;31mE (60123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (60123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (60123) bc26: bc26_init(271): sync failed[0m
+[0;31mE (71723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (71723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (71723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (83323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (83323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (83323) bc26: bc26_init(271): sync failed[0m
+[0;31mE (94923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (94923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (94923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (106523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (106523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (106523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (118123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (118123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (118123) bc26: bc26_init(271): sync failed[0m
+[0;31mE (129723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (129723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (129723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (141323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (141323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (141323) bc26: bc26_init(271): sync failed[0m
+[0;31mE (152923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (152923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (152923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (164523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (164523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (164523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (176123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (176123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (176123) bc26: bc26_init(271): sync failed[0m
+I (178493) wifi:flush txq
+I (178493) wifi:stop sw txq
+I (178493) wifi:lmac stop hw txq
+[0;31mE (187723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (187723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (187723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (199323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (199323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (199323) bc26: bc26_init(271): sync failed[0m
+[0;31mE (210923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (210923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (210923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (222523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (222523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (222523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (234123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (234123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (234123) bc26: bc26_init(271): sync failed[0m

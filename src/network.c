@@ -8,7 +8,7 @@
 */
 #include "main.h"
 
-#include "esp_system.h"
+#include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
@@ -16,6 +16,7 @@
 #include "lwip/err.h"
 #include "lwip/sys.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 
 #include <esp_http_server.h>
 
@@ -71,7 +72,7 @@ static const char *TAGH = "httpd";
 
 static int s_retry_num = 0;
 
-char buf[CONFIG_LWIP_TCP_MSS];
+static char buf[CONFIG_LWIP_TCP_MSS];
 size_t buf_len;
 
 int64_t timeout_begin;
@@ -265,8 +266,6 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     const char *sodkend = "</table><input type=\"submit\" value=\"Сохранить\" />&nbsp;&nbsp;<input type=\"checkbox\" name=\"save\" id=\"save\"><label for=\"save\">save to flash</label></fieldset></form>";
 
-    const char *lorastart = "<form><fieldset><legend>LoRa</legend><table>";
-    const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *nbiotstart = "<form><fieldset><legend>NB-IoT</legend><table>";
     const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=1\">График АЦП(фильтр)</a>&nbsp;&nbsp;<a href=\"/d3?mode=2\">График R</a></p>"
@@ -289,6 +288,10 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *nb_set_port[] = {
         "<tr><td><label for=\"port\">Port:</label></td><td><input type=\"text\" name=\"port\" id=\"port\" size=\"16\" value=\"",
         "\" /></td></tr>\n"};
+
+#ifndef NB
+    const char *lorastart = "<form><fieldset><legend>LoRa</legend><table>";
+    const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
 
     const char *lora_set_bw[] = {
         "<tr><td><label for='bw'>Signal bandwidth:</label></td><td><select name='bw' id='bw'>",
@@ -317,6 +320,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *lora_set_op[] = {
         "<tr><td><label for=\"op\">Output Power(2-17):</label></td><td><input type=\"text\" name=\"op\" id=\"op\" size=\"7\" value=\"",
         "\" /></td></tr>"};
+#endif
 
     char param[32];
 
@@ -685,7 +689,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
     size_t chunksize;
-    int n = 0;
+    //int n = 0;
     do
     {
         // memset(buf, 0, sizeof(buf));
@@ -744,7 +748,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Content-Disposition", line);
     httpd_resp_set_hdr(req, "Connection", "close");
 
-    uint8_t *ptr_adc = 0;
+    //uint8_t *ptr_adc = 0;
 
     int l = 0;
     int ll = 0;
@@ -985,7 +989,7 @@ void wifi_task(void *arg)
         ESP_LOGI("SPIFFS", "Partition size: total: %d, used: %d", total, used);
     }
 
-    int wifi_on = 1;
+    //int wifi_on = 1;
 
     s_wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());

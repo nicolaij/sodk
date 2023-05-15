@@ -13,8 +13,6 @@
 // limitations under the License.
 
 #include <string.h>
-#include "esp_netif.h"
-#include "esp_netif_ppp.h"
 #include "esp_modem.h"
 #include "esp_modem_netif.h"
 #include "esp_log.h"
@@ -41,7 +39,7 @@ static void on_modem_compat_handler(void *arg, esp_event_base_t event_base,
 static void on_ip_event(void *arg, esp_event_base_t event_base,
                         int32_t event_id, void *event_data)
 {
-    ESP_LOGI(TAG, "IP event! %d", event_id);
+    ESP_LOGI(TAG, "IP event! %ld", event_id);
     if (event_id == IP_EVENT_PPP_GOT_IP) {
         esp_netif_dns_info_t dns_info;
         ppp_client_ip_info_t ipinfo = {0};

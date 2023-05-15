@@ -101,16 +101,16 @@ typedef struct
 
 extern menu_t menu[22];
 
-QueueHandle_t uicmd_queue;
-QueueHandle_t send_queue;
-QueueHandle_t set_lora_queue;
+extern QueueHandle_t uicmd_queue;
+extern QueueHandle_t send_queue;
+extern QueueHandle_t set_lora_queue;
 //QueueHandle_t ws_send_queue;
-RingbufHandle_t wsbuf_handle;
+extern RingbufHandle_t wsbuf_handle;
 
 
 // SemaphoreHandle_t i2c_mux;
 
-EventGroupHandle_t ready_event_group;
+extern EventGroupHandle_t ready_event_group;
 
 //Конец измерений
 #define END_MEASURE BIT0
@@ -119,7 +119,7 @@ EventGroupHandle_t ready_event_group;
 #define END_RADIO_SLEEP BIT3
 #define END_UI_SLEEP BIT4
 
-extern RTC_DATA_ATTR int bootCount;
+extern int bootCount;
 extern int terminal_mode;
 
 void ui_task(void *arg);

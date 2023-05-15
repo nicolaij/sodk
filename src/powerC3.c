@@ -1,11 +1,14 @@
 #include "main.h"
 #include <stdio.h>
 #include <string.h>
-#include "esp_spi_flash.h"
+// #include "esp_spi_flash.h"
 #include "esp_err.h"
 #include "esp_partition.h"
 
-#include "driver/adc.h"
+#include "driver/gpio.h"
+#include "esp_adc/adc_continuous.h"
+
+#include "esp_timer.h"
 
 // #include "esp_adc_cal.h"
 #include "esp_rom_sys.h"
@@ -18,7 +21,7 @@
 
 RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0};
 RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0};
-const int step_time_const[] = {0, 125, 250, 500, 1000, 2000, 4000, 8000}; 
+const int step_time_const[] = {0, 125, 250, 500, 1000, 2000, 4000, 8000};
 #define STEP_TIME_COUNT 3
 
 // кольцевой буфер для визуализации
@@ -35,7 +38,7 @@ result_t result = {};
 
 typedef struct
 {
-    adc1_channel_t channel;
+    adc_channel_t channel;
     adc_atten_t k;
     int max;
 } measure_t;
@@ -50,11 +53,11 @@ const measure_t chan_r[] = {
 };
 #else
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_1, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC2_CHANNEL_0, .max = 1000},   // Напряжение источника питания
-    {.channel = ADC1_CHANNEL_4, .max = 299999}, //~х22
-    {.channel = ADC1_CHANNEL_0, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
-    {.channel = ADC1_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
+    {.channel = ADC_CHANNEL_1, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC_CHANNEL_0, .max = 1000},   // Напряжение источника питания
+    {.channel = ADC_CHANNEL_4, .max = 299999}, //~х22
+    {.channel = ADC_CHANNEL_0, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
 };
 #endif
 
@@ -80,7 +83,7 @@ int adc_cur_chan()
 
 void adc_info()
 {
-    printf("APB_SARADC_SAR_PATT_TAB1_REG: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
+    printf("APB_SARADC_SAR_PATT_TAB1_REG: %8lX\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
     // printf("APB_SARADC_APB_ADC_CLKM_CONF_REG: %8X\n", REG_READ(APB_SARADC_APB_ADC_CLKM_CONF_REG));
     // printf("APB_SARADC_APB_TSENS_CTRL_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL_REG));
     // printf("APB_SARADC_APB_TSENS_CTRL2_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL2_REG));
@@ -150,47 +153,22 @@ int kOm2chan(int adc_u, int adc_r)
     return r;
 };
 
-static void continuous_adc_init()
+static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
-    esp_err_t ret = ESP_OK;
-    assert(ret == ESP_OK);
-    /*
-        adc_digi_filter_t fcfg0 = {
-            .adc_unit = ADC_UNIT_1,
-            .channel = ADC_CHANNEL_0,
-            .mode = ADC_DIGI_FILTER_IIR_64,
-        };
-
-        ESP_ERROR_CHECK(adc_digi_filter_set_config(ADC_DIGI_FILTER_IDX0, &fcfg0));
-        ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_DIGI_FILTER_IDX0, true));
-
-        adc_digi_filter_t fcfg1 = {
-            .adc_unit = ADC_UNIT_2,
-            .channel = ADC_CHANNEL_0,
-            .mode = ADC_DIGI_FILTER_IIR_64,
-        };
-
-        ESP_ERROR_CHECK(adc_digi_filter_set_config(ADC_DIGI_FILTER_IDX1, &fcfg1));
-        ESP_ERROR_CHECK(adc_digi_filter_enable(ADC_DIGI_FILTER_IDX1, true));
-    */
-    adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BUFFER * 20, // ??? подобрано по количеству ошибок
-        .conv_num_each_intr = ADC_BUFFER * 4,  // подобрано по количеству ошибок
-        .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
-        .adc2_chan_mask = 1 << chan_r[1].channel,
+    adc_continuous_handle_t handle = NULL;
+    adc_continuous_handle_cfg_t adc_config = {
+        .max_store_buf_size = ADC_BUFFER * 20,
+        .conv_frame_size = ADC_BUFFER * 4,
     };
+    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
 
-    ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
-
-    adc_digi_configuration_t dig_cfg = {
-        .conv_limit_en = false,
-        .conv_limit_num = 200,
+    adc_continuous_config_t dig_cfg = {
         .sample_freq_hz = ADC_FREQ,
         .conv_mode = ADC_CONV_ALTER_UNIT,
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
     };
-
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
+
     int n = 0;
     // Note: Все atten при инициализации должны быть одинаковые!!!???
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
@@ -221,10 +199,12 @@ static void continuous_adc_init()
 
     dig_cfg.pattern_num = n;
     dig_cfg.adc_pattern = adc_pattern;
-    ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
+    ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
+
+    *out_handle = handle;
 }
 
-static xQueueHandle gpio_evt_queue = NULL;
+static QueueHandle_t gpio_evt_queue = NULL;
 
 static void IRAM_ATTR pcf_int_handler(void *arg)
 {
@@ -409,7 +389,8 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
 #endif
 
-    continuous_adc_init();
+    adc_continuous_handle_t handle = NULL;
+    continuous_adc_init(&handle);
 
     // сбрасывем буфер
     bhead = 0;
@@ -418,7 +399,7 @@ void dual_adc(void *arg)
     while (1)
     {
 
-        xQueueReceive(uicmd_queue, &cmd, (portTickType)portMAX_DELAY);
+        xQueueReceive(uicmd_queue, &cmd, portMAX_DELAY);
 
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
         // включаем канал
@@ -432,7 +413,7 @@ void dual_adc(void *arg)
 #endif
         uint8_t *ptr = (uint8_t *)buffer_ADC;
         uint8_t *ptr_adc_begin = (uint8_t *)buffer_ADC;
-        uint8_t *ptre = (uint8_t *)buffer_ADC;
+        // uint8_t *ptre = (uint8_t *)buffer_ADC;
         uint8_t *ptrb = (uint8_t *)buffer_ADC;
 
         int blocks = 0;
@@ -445,7 +426,7 @@ void dual_adc(void *arg)
 
         int64_t timeout = menu[0].val * 1000LL;
 
-        ESP_ERROR_CHECK(adc_digi_start());
+        ESP_ERROR_CHECK(adc_continuous_start(handle));
 
         int64_t t1 = esp_timer_get_time();
         // int64_t t2 = 0, t3 = 0, time_off = 0;
@@ -458,6 +439,7 @@ void dual_adc(void *arg)
         uint16_t avg_len = 0;
         int compare_counter = menu[16].val;
         const int compare_delta = 1;
+        bool compare_ok = false;
 
         int exp_filter_k = menu[20].val;
         int exp_filter[5] = {0, 0, 0, 0, 0};
@@ -475,12 +457,11 @@ void dual_adc(void *arg)
             // printf("read adc: ");
             while (req > 0)
             {
-                ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, req, &ret, ADC_MAX_DELAY));
+                ESP_ERROR_CHECK(adc_continuous_read(handle, ptr, req, &ret, ADC_MAX_DELAY));
                 ptr = ptr + ret;
                 req = req - ret;
                 // printf(" %d", ret);
             }
-            ptre = ptr;
             // printf(" %d\n", ret);
 
             if (blocks == ON_BLOCK) // включаем источник ВВ
@@ -623,7 +604,7 @@ void dual_adc(void *arg)
                         // ВЫРУБАЕМ
                         gpio_set_level(ENABLE_PIN, 1);
                         if (terminal_mode >= 0)
-                            printf("UbattEnd: %d < %d)\n", bufferR[bhead].Ubatt, menu[13].val);
+                            printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[13].val);
                         BattLow += 100;
                         break;
                     }
@@ -636,7 +617,7 @@ void dual_adc(void *arg)
                             gpio_set_level(ENABLE_PIN, 1);
                             // прекращаем измерения
                             if (terminal_mode >= 0)
-                                printf("UbattLow: %d < %d (%d)\n", bufferR[bhead].Ubatt, menu[12].val, BattLow);
+                                printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[12].val, BattLow);
                             break;
                         }
                     }
@@ -730,6 +711,7 @@ void dual_adc(void *arg)
                 {
                     if (compare_counter == 0)
                     {
+                        compare_ok = true;
                         if (step_time[result.channel] == 0) // первое измерение после старта
                         {
                             for (int i = 1; i < sizeof(step_time_const) / sizeof(step_time_const[0]); i++)
@@ -739,7 +721,7 @@ void dual_adc(void *arg)
                                     step_time[result.channel] = i;
                                     break;
                                 }
-                            };
+                            }
                         }
                         else
                         {
@@ -748,16 +730,12 @@ void dual_adc(void *arg)
                             {
                                 step_time_switch[result.channel]--;
                             }
-                            else if (blocks > step_time_const[step_time[result.channel]])
-                            {
-                                step_time_switch[result.channel]++;
-                            }
-                            else
+                            else if (blocks <= step_time_const[step_time[result.channel]])
                             {
                                 step_time_switch[result.channel] = 0;
                             }
 
-                            // переключаем диапазон
+                            // переключаем диапазон вниз
                             if (step_time_switch[result.channel] <= STEP_TIME_COUNT * -1)
                             {
                                 if (step_time[result.channel] > 1)
@@ -765,18 +743,28 @@ void dual_adc(void *arg)
 
                                 step_time_switch[result.channel] = 0;
                             }
+                        }
 
-                            // переключаем диапазон
+                        block_power_off_step = step_time_const[step_time[result.channel]];
+                    }
+
+                    if (blocks == block_power_off_step)
+                    {
+                        if (compare_ok == false) // если небыло успешного сравнения
+                        {
+                            step_time_switch[result.channel]++;
+
+                            // переключаем диапазон вверх
                             if (step_time_switch[result.channel] >= STEP_TIME_COUNT)
                             {
                                 if (step_time[result.channel] < sizeof(step_time_const) / sizeof(step_time_const[0]) - 1)
                                     step_time[result.channel]++;
 
                                 step_time_switch[result.channel] = 0;
+
+                                block_power_off_step = step_time_const[step_time[result.channel]];
                             }
                         }
-
-                        block_power_off_step = step_time_const[step_time[result.channel]];
                     }
 
                     if (blocks == block_power_off_step)
@@ -792,7 +780,7 @@ void dual_adc(void *arg)
                     }
                 }
                 else
-                {
+                { 
                     if (block_result == 0) // была перегрузка или отключились по timeout
                     {
                         if (sum_adc[0] / n < 4000)
@@ -838,7 +826,7 @@ void dual_adc(void *arg)
                     result.U0 = u0;
                     result.time = block_result;
 
-                    xQueueSend(send_queue, (void *)&result, (portTickType)0);
+                    xQueueSend(send_queue, (void *)&result, (TickType_t)0);
                 }
             }
 
@@ -875,7 +863,8 @@ void dual_adc(void *arg)
             blocks++;
         } while (blocks < 10000); // ограничение 10 сек
 
-        ESP_ERROR_CHECK(adc_digi_stop());
+        ESP_ERROR_CHECK(adc_continuous_stop(handle));
+        //ESP_ERROR_CHECK(adc_continuous_deinit(handle));
 
         // ВЫРУБАЕМ (на всякий случай)
         gpio_set_level(ENABLE_PIN, 1);

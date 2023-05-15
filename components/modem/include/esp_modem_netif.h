@@ -13,6 +13,10 @@
 // limitations under the License.
 #pragma once
 
+#include "esp_modem_dte.h"
+#include "esp_netif.h"
+#include "esp_netif_defaults.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

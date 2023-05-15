@@ -13,7 +13,8 @@ PORT = 48884
 FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
 DATASIZE = 1024
 #тэги historian которые создаются только для первого канала
-ONLYONECHAN = 1
+#ONLYONECHAN = 1
+ONLYONECHAN = -1
 ONLYONE = ['in','T','rssi']
 
 def get_non_blocking_server_socket(type):

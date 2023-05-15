@@ -11,11 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include <string.h>
 #include "esp_log.h"
 #include "esp_modem_dce_service.h"
 
-static const char *DCE_TAG = "dce_service";
+const char *DCE_TAG = "dce_service";
 
 /**
  * @brief Macro defined for error checking
@@ -72,7 +75,7 @@ static esp_err_t esp_modem_dce_handle_csq(modem_dce_t *dce, const char *line)
     else if (!strncmp(line, "+CSQ", strlen("+CSQ")))
     {
         /* +CSQ: <rssi>,<ber> */
-        sscanf(line, "%*s%d,%d", csq[0], csq[1]);
+        sscanf(line, "%*s%ld,%ld", csq[0], csq[1]);
         err = ESP_OK;
     }
     return err;
@@ -99,7 +102,7 @@ static esp_err_t esp_modem_dce_handle_cbc(modem_dce_t *dce, const char *line)
         /* store value of bcs, bcl, voltage */
         uint32_t **cbc = esp_dce->priv_resource;
         /* +CBC: <bcs>,<bcl>,<voltage> */
-        sscanf(line, "%*s%d,%d,%d", cbc[0], cbc[1], cbc[2]);
+        sscanf(line, "%*s%ld,%ld,%ld", cbc[0], cbc[1], cbc[2]);
         err = ESP_OK;
     }
     return err;
@@ -356,7 +359,7 @@ esp_err_t esp_modem_dce_define_pdp_context(modem_dce_t *dce, uint32_t cid, const
 {
     modem_dte_t *dte = dce->dte;
     char command[64];
-    int len = snprintf(command, sizeof(command), "AT+CGDCONT=%d,\"%s\",\"%s\"\r", cid, type, apn);
+    int len = snprintf(command, sizeof(command), "AT+CGDCONT=%ld,\"%s\",\"%s\"\r", cid, type, apn);
     DCE_CHECK(len < sizeof(command), "command too long: %s", err, command);
     dce->handle_line = esp_modem_dce_handle_response_default;
     DCE_CHECK(dte->send_cmd(dte, command, MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK, "send command failed", err);

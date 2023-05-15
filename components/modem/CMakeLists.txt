@@ -9,4 +9,4 @@ set(srcs "src/esp_modem.c"
 
 idf_component_register(SRCS "${srcs}"
                     INCLUDE_DIRS include
-                    REQUIRES driver)
+                    REQUIRES driver esp_netif)

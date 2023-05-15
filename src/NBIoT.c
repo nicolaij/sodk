@@ -30,7 +30,7 @@ static const char *TAG = "nbiot";
 
 extern float tsens_out;
 
-char modem_status[128];
+char modem_status[200];
 
 struct stringreturn_t
 {
@@ -38,8 +38,8 @@ struct stringreturn_t
     char *s;
 };
 
-char tx_buf[WS_BUF_SIZE * 2];
-char buf[WS_BUF_SIZE];
+static char tx_buf[WS_BUF_SIZE * 2];
+static char buf[WS_BUF_SIZE];
 
 int read_nvs_nbiot()
 {
@@ -56,7 +56,7 @@ int read_nvs_nbiot()
         switch (err)
         {
         case ESP_OK:
-            ESP_LOGD(TAG, "Read \"%s\" = %d", "id", id);
+            ESP_LOGD(TAG, "Read \"%s\" = %ld", "id", id);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "id");
@@ -114,7 +114,7 @@ int read_nvs_nbiot()
         {
         case ESP_OK:
             proto = i;
-            ESP_LOGD(TAG, "Read \"%s\" = %d", "proto", proto);
+            ESP_LOGD(TAG, "Read \"%s\" = %ld", "proto", proto);
             break;
         case ESP_ERR_NVS_NOT_FOUND:
             ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "proto");
@@ -142,10 +142,10 @@ int write_nvs_nbiot()
     else
     {
         // Write
-        ESP_LOGD(TAG, "Write id: %d ", id);
+        ESP_LOGD(TAG, "Write id: %ld ", id);
         err = nvs_set_i32(my_handle, "id", id);
         if (err != ESP_OK)
-            ESP_LOGE(TAG, "Write id: %d - Failed!", id);
+            ESP_LOGE(TAG, "Write id: %ld - Failed!", id);
 
         ESP_LOGD(TAG, "Write APN: \"%s\" ", apn);
         err = nvs_set_str(my_handle, "apn", apn);
@@ -162,10 +162,10 @@ int write_nvs_nbiot()
         if (err != ESP_OK)
             ESP_LOGE(TAG, "Write port: %d - Failed!", port);
 
-        ESP_LOGD(TAG, "Write proto: %d ", proto);
+        ESP_LOGD(TAG, "Write proto: %ld ", proto);
         err = nvs_set_i32(my_handle, "proto", proto);
         if (err != ESP_OK)
-            ESP_LOGE(TAG, "Write proto: %d - Failed!", proto);
+            ESP_LOGE(TAG, "Write proto: %ld - Failed!", proto);
 
         // Commit written value.
         // After setting any values, nvs_commit() must be called to ensure changes are written
@@ -818,12 +818,12 @@ void radio_task(void *arg)
                 }
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
-            snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%u, IP:%d.%d.%d.%d, Voltage:%umV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
+            snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%lu, IP:%ld.%ld.%ld.%ld, Voltage:%lumV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
 
             ESP_LOGI(TAG, "%s", modem_status);
 
             // connectID, <local_port>,<socket_state
-            int32_t connectID[4] = {-1, 0, 0, 0};
+            int connectID[4] = {-1, 0, 0, 0};
 
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
 
@@ -943,7 +943,7 @@ void radio_task(void *arg)
                 n = time(0);
                 localtm = localtime(&n);
                 strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
-                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%d.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d,\"T\":%.1f,\"rssi\":%d,\"time\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113, result.time);
+                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d,\"T\":%.1f,\"rssi\":%d,\"time\":%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113, result.time);
                 // len_data = snprintf((char *)buf, sizeof(buf), "{'id':'%d.%d','num':%d,'dt':'%s','U':%d,'R':%d,'Ub1':%.3f,'Ub0':%.3f,'U0':%d,'in':%d,'T':%.1f,'rssi':%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);

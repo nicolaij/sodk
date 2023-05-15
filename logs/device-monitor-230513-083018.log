@@ -1,0 +1,805 @@
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x1 (POWERON),boot:0xd (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x3fcd5820,len:0x16a0
+load:0x403cc710,len:0x968
+load:0x403ce710,len:0x2e78
+entry 0x403cc710
+[0;32mI (31) boot: ESP-IDF 5.0.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time 08:27:36[0m
+[0;32mI (31) boot: chip revision: v0.3[0m
+[0;32mI (33) boot.esp32c3: SPI Speed      : 40MHz[0m
+[0;32mI (38) boot.esp32c3: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32c3: SPI Flash Size : 4MB[0m
+[0;32mI (47) boot: Enabling RNG early entropy source...[0m
+[0;32mI (53) boot: Partition Table:[0m
+[0;32mI (56) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (64) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (79) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (86) boot:  3 storage          Unknown data     01 82 00110000 000f0000[0m
+[0;32mI (94) boot: End of partition table[0m
+[0;32mI (98) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=276c8h (161480) map[0m
+[0;32mI (140) esp_image: segment 1: paddr=000376f0 vaddr=3fc93200 size=02ce8h ( 11496) load[0m
+[0;32mI (143) esp_image: segment 2: paddr=0003a3e0 vaddr=40380000 size=05c38h ( 23608) load[0m
+[0;32mI (152) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=abe0ch (704012) map[0m
+[0;32mI (302) esp_image: segment 4: paddr=000ebe34 vaddr=40385c38 size=0d430h ( 54320) load[0m
+[0;32mI (315) esp_image: segment 5: paddr=000f926c vaddr=50000000 size=00030h (    48) load[0m
+[0;32mI (321) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (321) boot: Disabling RNG early entropy source...[0m
+[0;32mI (336) cpu_start: Pro cpu up.[0m
+[0;32mI (345) cpu_start: Pro cpu start user code[0m
+[0;32mI (345) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (345) cpu_start: Application information:[0m
+[0;32mI (348) cpu_start: Project name:     sodk[0m
+[0;32mI (353) cpu_start: App version:      2ac901f-dirty[0m
+[0;32mI (358) cpu_start: Compile time:     May 13 2023 08:26:56[0m
+[0;32mI (364) cpu_start: ELF file SHA256:  cf8feac38f305524...[0m
+[0;32mI (370) cpu_start: ESP-IDF:          5.0.1[0m
+[0;32mI (375) cpu_start: Min chip rev:     v0.3[0m
+[0;32mI (380) cpu_start: Max chip rev:     v0.99 [0m
+[0;32mI (385) cpu_start: Chip rev:         v0.3[0m
+[0;32mI (389) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (397) heap_init: At 3FCAE490 len 0002E280 (184 KiB): DRAM[0m
+[0;32mI (403) heap_init: At 3FCDC710 len 00002950 (10 KiB): STACK/DRAM[0m
+[0;32mI (409) heap_init: At 50000040 len 00001FC0 (7 KiB): RTCRAM[0m
+[0;32mI (417) spi_flash: detected chip: generic[0m
+[0;32mI (420) spi_flash: flash io: dio[0m
+[0;32mI (425) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (431) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (438) cpu_start: Starting scheduler.[0m
+[0;32mI (443) main: Wakeup was not caused by deep sleep: 0[0m
+[0;32mI (443) main: Boot number: 1[0m
+[0;32mI (443) main: mac: 4c-bf-39-03-f7-84[0m
+[0;32mI (453) temperature_sensor: Range [-30°C ~ 50°C], error < 2°C[0m
+[0;32mI (463) TempSensor: Temperature out celsius 24.12°C[0m
+[0;32mI (473) gpio: GPIO[8]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (473) gpio: GPIO[10]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (483) i2c: i2c bus error state![0m
+[0;32mI (483) gpio: GPIO[9]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (493) gpio: GPIO[2]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:2 [0m
+[0;31mE (503) nbiot: Error (ESP_ERR_NVS_NOT_FOUND) opening NVS handle![0m
+[0;32mI (513) uart: queue free spaces: 30[0m
+[0;32mI (513) nbiot: init module NB-IoT[0m
+[0;31mE (2123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (2123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (2123) bc26: bc26_init(271): sync failed[0m
+[0;32mI (3523) gpio: GPIO[19]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3523) gpio: GPIO[18]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (3523) adc_continuous: ADC2 continuous mode is no longer supported, please use ADC1. Search for errata on espressif website for more details. You can enable CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3 to force use ADC2[0m
+[0;32mI (3543) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3553) gpio: GPIO[1]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3563) gpio: GPIO[3]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3573) gpio: GPIO[4]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (3583) gpio: GPIO[5]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+(on: 10 res:500 err:  0) "channel":1,"U":5,"R":378,"Ub1":20.491,"Ub0":20.491,"U0":273,"in":0
+Avg ADC 0:0, 1:94, 2:415, 3:4095, 4:1701
+(on: 10 res:5001 err: 47) "channel":2,"U":5,"R":461,"Ub1":20.491,"Ub0":20.491,"U0":274,"in":0
+Avg ADC 0:0, 1:83, 2:417, 3:4095, 4:1706
+[0;31mE (13723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (13723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (13723) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:5000 err: 16) "channel":3,"U":6,"R":519,"Ub1":20.491,"Ub0":20.491,"U0":274,"in":0
+Avg ADC 0:0, 1:83, 2:417, 3:4095, 4:1706
+(on: 10 res:5003 err:  8) "channel":4,"U":5,"R":319,"Ub1":20.491,"Ub0":20.491,"U0":274,"in":0
+Avg ADC 0:0, 1:82, 2:414, 3:4095, 4:1705
+[0;32mI (19233) SPIFFS: Initializing SPIFFS[0m
+[0;32mI (19263) SPIFFS: Partition size: total: 896321, used: 402855[0m
+[0;32mI (19263) pp: pp rom version: 9387209[0m
+[0;32mI (19263) net80211: net80211 rom version: 9387209[0m
+I (19273) wifi:wifi driver task: 3fcc1250, prio:23, stack:6656, core=0
+[0;32mI (19273) system_api: Base MAC address is not set[0m
+[0;32mI (19273) system_api: read default base MAC address from EFUSE[0m
+I (19283) wifi:wifi firmware version: 17afb16
+I (19283) wifi:wifi certification version: v7.0
+I (19293) wifi:config NVS flash: enabled
+I (19293) wifi:config nano formating: disabled
+I (19303) wifi:Init data frame dynamic rx buffer num: 32
+I (19303) wifi:Init management frame dynamic rx buffer num: 32
+I (19313) wifi:Init management short buffer num: 32
+I (19313) wifi:Init dynamic tx buffer num: 32
+I (19323) wifi:Init static tx FG buffer num: 2
+I (19323) wifi:Init static rx buffer size: 1600
+I (19323) wifi:Init static rx buffer num: 10
+I (19333) wifi:Init dynamic rx buffer num: 32
+[0;32mI (19333) wifi_init: rx ba win: 6[0m
+[0;32mI (19343) wifi_init: tcpip mbox: 32[0m
+[0;32mI (19343) wifi_init: udp mbox: 6[0m
+[0;32mI (19343) wifi_init: tcp mbox: 6[0m
+[0;32mI (19353) wifi_init: tcp tx win: 5744[0m
+[0;32mI (19353) wifi_init: tcp rx win: 5744[0m
+[0;32mI (19363) wifi_init: tcp mss: 1440[0m
+[0;32mI (19363) wifi_init: WiFi IRAM OP enabled[0m
+[0;32mI (19373) wifi_init: WiFi RX IRAM OP enabled[0m
+[0;32mI (19373) phy_init: phy_version 950,11a46e9,Oct 21 2022,08:56:12[0m
+I (19413) wifi:mode : softAP (84:f7:03:39:bf:4d)
+I (19413) wifi:Total power save buffer number: 16
+I (19423) wifi:Init max length of beacon: 752/752
+I (19423) wifi:Init max length of beacon: 752/752
+[0;32mI (19423) wifi: wifi_init_softap finished. SSID:MegaOm password:123123123 channel:1[0m
+[0;32mI (19433) wifi: Starting server on port: '80'[0m
+[0;32mI (19433) wifi: Registering URI handlers[0m
+[0;31mE (25323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (25323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (25323) bc26: bc26_init(271): sync failed[0m
+[0;31mE (36923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (36923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (36923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (48523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (48523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (48523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (60123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (60123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (60123) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:500 err:  8) "channel":1,"U":31,"R":1479,"Ub1":20.491,"Ub0":20.491,"U0":280,"in":0
+Avg ADC 0:0, 1:249, 2:737, 3:4095, 4:1748
+(on: 10 res:500 err: 25) "channel":2,"U":30,"R":1415,"Ub1":20.491,"Ub0":20.491,"U0":280,"in":0
+Avg ADC 0:0, 1:229, 2:735, 3:4095, 4:1748
+(on: 10 res:250 err:  4) "channel":3,"U":31,"R":1448,"Ub1":20.491,"Ub0":20.491,"U0":281,"in":0
+Avg ADC 0:0, 1:237, 2:750, 3:4095, 4:1750
+(on: 10 res:2000 err:123) "channel":4,"U":9,"R":677,"Ub1":20.491,"Ub0":20.491,"U0":275,"in":0
+Avg ADC 0:0, 1:128, 2:573, 3:4095, 4:1721
+[0;31mE (71723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (71723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (71723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (83323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (83323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (83323) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:500 err: 29) "channel":1,"U":24,"R":1023,"Ub1":20.491,"Ub0":20.491,"U0":279,"in":0
+Avg ADC 0:0, 1:207, 2:810, 3:4095, 4:1744
+(on: 10 res:500 err: 24) "channel":2,"U":14,"R":789,"Ub1":20.491,"Ub0":20.491,"U0":277,"in":0
+Avg ADC 0:0, 1:165, 2:722, 3:4095, 4:1735
+(on: 10 res:250 err: 16) "channel":3,"U":15,"R":792,"Ub1":20.491,"Ub0":20.491,"U0":277,"in":0
+Avg ADC 0:0, 1:141, 2:679, 3:4095, 4:1731
+(on: 10 res:2000 err: 58) "channel":4,"U":13,"R":757,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:152, 2:697, 3:4095, 4:1730
+[0;31mE (94923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (94923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (94923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (106523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (106523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (106523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (118123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (118123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (118123) bc26: bc26_init(271): sync failed[0m
+[0;31mE (129723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (129723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (129723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (141323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (141323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (141323) bc26: bc26_init(271): sync failed[0m
+[0;31mE (152923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (152923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (152923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (164523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (164523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (164523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (176123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (176123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (176123) bc26: bc26_init(271): sync failed[0m
+[0;31mE (187723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (187723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (187723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (199323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (199323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (199323) bc26: bc26_init(271): sync failed[0m
+I (208143) wifi:flush txq
+I (208143) wifi:stop sw txq
+I (208143) wifi:lmac stop hw txq
+[0;31mE (210923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (210923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (210923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (222523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (222523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (222523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (234123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (234123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (234123) bc26: bc26_init(271): sync failed[0m
+[0;31mE (245723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (245723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (245723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (257323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (257323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (257323) bc26: bc26_init(271): sync failed[0m
+[0;31mE (268923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (268923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (268923) bc26: bc26_init(271): sync failed[0m
+[0;33mW (270143) main: Go sleep...[0m
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x5 (DSLEEP),boot:0xd (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x3fcd5820,len:0x16a0
+load:0x403cc710,len:0x968
+load:0x403ce710,len:0x2e78
+entry 0x403cc710
+[0;32mI (31) boot: ESP-IDF 5.0.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time 08:27:36[0m
+[0;32mI (32) boot: chip revision: v0.3[0m
+[0;32mI (33) boot.esp32c3: SPI Speed      : 40MHz[0m
+[0;32mI (38) boot.esp32c3: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32c3: SPI Flash Size : 4MB[0m
+[0;32mI (48) boot: Enabling RNG early entropy source...[0m
+[0;32mI (53) boot: Partition Table:[0m
+[0;32mI (57) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (64) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (79) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (86) boot:  3 storage          Unknown data     01 82 00110000 000f0000[0m
+[0;32mI (94) boot: End of partition table[0m
+[0;32mI (98) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=276c8h (161480) map[0m
+[0;32mI (140) esp_image: segment 1: paddr=000376f0 vaddr=3fc93200 size=02ce8h ( 11496) load[0m
+[0;32mI (143) esp_image: segment 2: paddr=0003a3e0 vaddr=40380000 size=05c38h ( 23608) load[0m
+[0;32mI (152) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=abe0ch (704012) map[0m
+[0;32mI (302) esp_image: segment 4: paddr=000ebe34 vaddr=40385c38 size=0d430h ( 54320) load[0m
+[0;32mI (315) esp_image: segment 5: paddr=000f926c vaddr=50000000 size=00030h (    48) [0m
+[0;32mI (321) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (321) boot: Disabling RNG early entropy source...[0m
+[0;32mI (335) cpu_start: Pro cpu up.[0m
+[0;32mI (345) cpu_start: Pro cpu start user code[0m
+[0;32mI (345) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (345) cpu_start: Application information:[0m
+[0;32mI (348) cpu_start: Project name:     sodk[0m
+[0;32mI (352) cpu_start: App version:      2ac901f-dirty[0m
+[0;32mI (358) cpu_start: Compile time:     May 13 2023 08:26:56[0m
+[0;32mI (364) cpu_start: ELF file SHA256:  cf8feac38f305524...[0m
+[0;32mI (370) cpu_start: ESP-IDF:          5.0.1[0m
+[0;32mI (375) cpu_start: Min chip rev:     v0.3[0m
+[0;32mI (379) cpu_start: Max chip rev:     v0.99 [0m
+[0;32mI (384) cpu_start: Chip rev:         v0.3[0m
+[0;32mI (389) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (396) heap_init: At 3FCAE490 len 0002E280 (184 KiB): DRAM[0m
+[0;32mI (402) heap_init: At 3FCDC710 len 00002950 (10 KiB): STACK/DRAM[0m
+[0;32mI (409) heap_init: At 50000040 len 00001FC0 (7 KiB): RTCRAM[0m
+[0;32mI (417) spi_flash: detected chip: generic[0m
+[0;32mI (420) spi_flash: flash io: dio[0m
+[0;32mI (425) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (431) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (438) cpu_start: Starting scheduler.[0m
+[0;32mI (443) main: Wakeup caused by timer[0m
+[0;32mI (443) main: Boot number: 2[0m
+[0;32mI (443) main: mac: 4c-bf-39-03-f7-84[0m
+[0;32mI (453) temperature_sensor: Range [-30°C ~ 50°C], error < 2°C[0m
+[0;32mI (453) TempSensor: Temperature out celsius 24.12°C[0m
+[0;32mI (473) gpio: GPIO[8]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (473) gpio: GPIO[10]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (483) i2c: i2c bus error state![0m
+[0;32mI (483) gpio: GPIO[9]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (493) gpio: GPIO[2]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:2 [0m
+[0;31mE (503) nbiot: Error (ESP_ERR_NVS_NOT_FOUND) opening NVS handle![0m
+[0;32mI (513) uart: queue free spaces: 30[0m
+[0;32mI (513) nbiot: init module NB-IoT[0m
+[0;32mI (523) gpio: GPIO[19]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (523) gpio: GPIO[18]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (533) adc_continuous: ADC2 continuous mode is no longer supported, please use ADC1. Search for errata on espressif website for more details. You can enable CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3 to force use ADC2[0m
+[0;32mI (553) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (563) gpio: GPIO[1]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (573) gpio: GPIO[3]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (583) gpio: GPIO[4]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (593) gpio: GPIO[5]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+(on: 10 res:500 err:  0) "channel":1,"U":11,"R":793,"Ub1":20.491,"Ub0":20.491,"U0":275,"in":0
+Avg ADC 0:0, 1:123, 2:518, 3:4095, 4:1716
+(on: 10 res:500 err:  2) "channel":2,"U":13,"R":908,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:126, 2:520, 3:4095, 4:1718
+(on: 10 res:250 err:  3) "channel":3,"U":10,"R":771,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:115, 2:520, 3:4095, 4:1719
+[0;31mE (2123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (2123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (2123) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:1000 err: 10) "channel":4,"U":10,"R":753,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:116, 2:516, 3:4095, 4:1719
+[0;31mE (13723) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (13723) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (13723) bc26: bc26_init(271): sync failed[0m
+[0;31mE (25323) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (25323) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (25323) bc26: bc26_init(271): sync failed[0m
+[0;31mE (36923) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (36923) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (36923) bc26: bc26_init(271): sync failed[0m
+[0;31mE (48523) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (48523) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (48523) bc26: bc26_init(271): sync failed[0m
+[0;31mE (60123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (60123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (60123) bc26: bc26_init(271): sync failed[0m
+[0;33mW (64993) main: Go sleep...[0m
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x5 (DSLEEP),boot:0xd (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x3fcd5820,len:0x16a0
+load:0x403cc710,len:0x968
+load:0x403ce710,len:0x2e78
+entry 0x403cc710
+[0;32mI (31) boot: ESP-IDF 5.0.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time 08:27:36[0m
+[0;32mI (32) boot: chip revision: v0.3[0m
+[0;32mI (33) boot.esp32c3: SPI Speed      : 40MHz[0m
+[0;32mI (38) boot.esp32c3: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32c3: SPI Flash Size : 4MB[0m
+[0;32mI (48) boot: Enabling RNG early entropy source...[0m
+[0;32mI (53) boot: Partition Table:[0m
+[0;32mI (57) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (64) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (79) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (86) boot:  3 storage          Unknown data     01 82 00110000 000f0000[0m
+[0;32mI (94) boot: End of partition table[0m
+[0;32mI (98) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=276c8h (161480) map[0m
+[0;32mI (140) esp_image: segment 1: paddr=000376f0 vaddr=3fc93200 size=02ce8h ( 11496) load[0m
+[0;32mI (143) esp_image: segment 2: paddr=0003a3e0 vaddr=40380000 size=05c38h ( 23608) load[0m
+[0;32mI (152) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=abe0ch (704012) map[0m
+[0;32mI (302) esp_image: segment 4: paddr=000ebe34 vaddr=40385c38 size=0d430h ( 54320) load[0m
+[0;32mI (315) esp_image: segment 5: paddr=000f926c vaddr=50000000 size=00030h (    48) [0m
+[0;32mI (321) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (321) boot: Disabling RNG early entropy source...[0m
+[0;32mI (335) cpu_start: Pro cpu up.[0m
+[0;32mI (345) cpu_start: Pro cpu start user code[0m
+[0;32mI (345) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (345) cpu_start: Application information:[0m
+[0;32mI (348) cpu_start: Project name:     sodk[0m
+[0;32mI (352) cpu_start: App version:      2ac901f-dirty[0m
+[0;32mI (358) cpu_start: Compile time:     May 13 2023 08:26:56[0m
+[0;32mI (364) cpu_start: ELF file SHA256:  cf8feac38f305524...[0m
+[0;32mI (370) cpu_start: ESP-IDF:          5.0.1[0m
+[0;32mI (375) cpu_start: Min chip rev:     v0.3[0m
+[0;32mI (379) cpu_start: Max chip rev:     v0.99 [0m
+[0;32mI (384) cpu_start: Chip rev:         v0.3[0m
+[0;32mI (389) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (396) heap_init: At 3FCAE490 len 0002E280 (184 KiB): DRAM[0m
+[0;32mI (402) heap_init: At 3FCDC710 len 00002950 (10 KiB): STACK/DRAM[0m
+[0;32mI (409) heap_init: At 50000040 len 00001FC0 (7 KiB): RTCRAM[0m
+[0;32mI (417) spi_flash: detected chip: generic[0m
+[0;32mI (420) spi_flash: flash io: dio[0m
+[0;32mI (425) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (431) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (438) cpu_start: Starting scheduler.[0m
+[0;32mI (443) main: Wakeup caused by timer[0m
+[0;32mI (443) main: Boot number: 3[0m
+[0;32mI (443) main: mac: 4c-bf-39-03-f7-84[0m
+[0;32mI (453) temperature_sensor: Range [-30°C ~ 50°C], error < 2°C[0m
+[0;32mI (453) TempSensor: Temperature out celsius 23.24°C[0m
+[0;32mI (473) gpio: GPIO[8]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (473) gpio: GPIO[10]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (483) i2c: i2c bus error state![0m
+[0;32mI (483) gpio: GPIO[9]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (493) gpio: GPIO[2]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:2 [0m
+[0;31mE (503) nbiot: Error (ESP_ERR_NVS_NOT_FOUND) opening NVS handle![0m
+[0;32mI (513) uart: queue free spaces: 30[0m
+[0;32mI (513) nbiot: init module NB-IoT[0m
+[0;32mI (523) gpio: GPIO[19]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (523) gpio: GPIO[18]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (533) adc_continuous: ADC2 continuous mode is no longer supported, please use ADC1. Search for errata on espressif website for more details. You can enable CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3 to force use ADC2[0m
+[0;32mI (553) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (563) gpio: GPIO[1]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (573) gpio: GPIO[3]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (583) gpio: GPIO[4]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (593) gpio: GPIO[5]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+(on: 10 res:500 err:  0) "channel":1,"U":7,"R":645,"Ub1":20.491,"Ub0":20.491,"U0":275,"in":0
+Avg ADC 0:0, 1:103, 2:438, 3:4095, 4:1715
+(on: 10 res:1000 err:  7) "channel":2,"U":7,"R":654,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:94, 2:441, 3:4095, 4:1718
+[0;31mE (2123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (2123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (2133) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:500 err: 10) "channel":3,"U":7,"R":669,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:96, 2:446, 3:4095, 4:1720
+(on: 10 res:1000 err:  2) "channel":4,"U":7,"R":660,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:96, 2:446, 3:4095, 4:1720
+[0;31mE (13743) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (13743) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (13743) bc26: bc26_init(271): sync failed[0m
+[0;31mE (25343) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (25343) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (25343) bc26: bc26_init(271): sync failed[0m
+[0;31mE (36943) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (36943) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (36943) bc26: bc26_init(271): sync failed[0m
+[0;31mE (48543) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (48543) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (48543) bc26: bc26_init(271): sync failed[0m
+[0;31mE (60143) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (60143) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (60143) bc26: bc26_init(271): sync failed[0m
+[0;33mW (65743) main: Go sleep...[0m
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x5 (DSLEEP),boot:0xd (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x3fcd5820,len:0x16a0
+load:0x403cc710,len:0x968
+load:0x403ce710,len:0x2e78
+entry 0x403cc710
+[0;32mI (31) boot: ESP-IDF 5.0.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time 08:27:36[0m
+[0;32mI (32) boot: chip revision: v0.3[0m
+[0;32mI (33) boot.esp32c3: SPI Speed      : 40MHz[0m
+[0;32mI (38) boot.esp32c3: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32c3: SPI Flash Size : 4MB[0m
+[0;32mI (48) boot: Enabling RNG early entropy source...[0m
+[0;32mI (53) boot: Partition Table:[0m
+[0;32mI (57) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (64) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (79) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (86) boot:  3 storage          Unknown data     01 82 00110000 000f0000[0m
+[0;32mI (94) boot: End of partition table[0m
+[0;32mI (98) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=276c8h (161480) map[0m
+[0;32mI (140) esp_image: segment 1: paddr=000376f0 vaddr=3fc93200 size=02ce8h ( 11496) load[0m
+[0;32mI (143) esp_image: segment 2: paddr=0003a3e0 vaddr=40380000 size=05c38h ( 23608) load[0m
+[0;32mI (152) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=abe0ch (704012) map[0m
+[0;32mI (302) esp_image: segment 4: paddr=000ebe34 vaddr=40385c38 size=0d430h ( 54320) load[0m
+[0;32mI (315) esp_image: segment 5: paddr=000f926c vaddr=50000000 size=00030h (    48) [0m
+[0;32mI (321) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (321) boot: Disabling RNG early entropy source...[0m
+[0;32mI (335) cpu_start: Pro cpu up.[0m
+[0;32mI (345) cpu_start: Pro cpu start user code[0m
+[0;32mI (345) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (345) cpu_start: Application information:[0m
+[0;32mI (348) cpu_start: Project name:     sodk[0m
+[0;32mI (352) cpu_start: App version:      2ac901f-dirty[0m
+[0;32mI (358) cpu_start: Compile time:     May 13 2023 08:26:56[0m
+[0;32mI (364) cpu_start: ELF file SHA256:  cf8feac38f305524...[0m
+[0;32mI (370) cpu_start: ESP-IDF:          5.0.1[0m
+[0;32mI (375) cpu_start: Min chip rev:     v0.3[0m
+[0;32mI (379) cpu_start: Max chip rev:     v0.99 [0m
+[0;32mI (384) cpu_start: Chip rev:         v0.3[0m
+[0;32mI (389) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (396) heap_init: At 3FCAE490 len 0002E280 (184 KiB): DRAM[0m
+[0;32mI (402) heap_init: At 3FCDC710 len 00002950 (10 KiB): STACK/DRAM[0m
+[0;32mI (409) heap_init: At 50000040 len 00001FC0 (7 KiB): RTCRAM[0m
+[0;32mI (417) spi_flash: detected chip: generic[0m
+[0;32mI (420) spi_flash: flash io: dio[0m
+[0;32mI (425) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (431) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (438) cpu_start: Starting scheduler.[0m
+[0;32mI (443) main: Wakeup caused by timer[0m
+[0;32mI (443) main: Boot number: 4[0m
+[0;32mI (443) main: mac: 4c-bf-39-03-f7-84[0m
+[0;32mI (453) temperature_sensor: Range [-30°C ~ 50°C], error < 2°C[0m
+[0;32mI (453) TempSensor: Temperature out celsius 22.80°C[0m
+[0;32mI (473) gpio: GPIO[8]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (473) gpio: GPIO[10]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (483) i2c: i2c bus error state![0m
+[0;32mI (483) gpio: GPIO[9]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (493) gpio: GPIO[2]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:2 [0m
+[0;31mE (503) nbiot: Error (ESP_ERR_NVS_NOT_FOUND) opening NVS handle![0m
+[0;32mI (513) uart: queue free spaces: 30[0m
+[0;32mI (513) nbiot: init module NB-IoT[0m
+[0;32mI (523) gpio: GPIO[19]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (523) gpio: GPIO[18]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (533) adc_continuous: ADC2 continuous mode is no longer supported, please use ADC1. Search for errata on espressif website for more details. You can enable CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3 to force use ADC2[0m
+[0;32mI (553) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (563) gpio: GPIO[1]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (573) gpio: GPIO[3]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (583) gpio: GPIO[4]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (593) gpio: GPIO[5]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+(on: 10 res:500 err:  0) "channel":1,"U":7,"R":648,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:96, 2:428, 3:4095, 4:1716
+(on: 10 res:1000 err:  7) "channel":2,"U":7,"R":651,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:91, 2:424, 3:4095, 4:1719
+[0;31mE (2123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (2123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (2133) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:500 err:  9) "channel":3,"U":7,"R":655,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:90, 2:420, 3:4095, 4:1718
+(on: 10 res:1000 err:  9) "channel":4,"U":7,"R":650,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:90, 2:425, 3:4095, 4:1719
+[0;31mE (13743) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (13743) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (13743) bc26: bc26_init(271): sync failed[0m
+[0;31mE (25343) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (25343) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (25343) bc26: bc26_init(271): sync failed[0m
+[0;31mE (36943) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (36943) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (36943) bc26: bc26_init(271): sync failed[0m
+[0;31mE (48543) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (48543) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (48543) bc26: bc26_init(271): sync failed[0m
+[0;31mE (60143) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (60143) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (60143) bc26: bc26_init(271): sync failed[0m
+[0;33mW (65743) main: Go sleep...[0m
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x5 (DSLEEP),boot:0xd (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x3fcd5820,len:0x16a0
+load:0x403cc710,len:0x968
+load:0x403ce710,len:0x2e78
+entry 0x403cc710
+[0;32mI (31) boot: ESP-IDF 5.0.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time 08:27:36[0m
+[0;32mI (32) boot: chip revision: v0.3[0m
+[0;32mI (33) boot.esp32c3: SPI Speed      : 40MHz[0m
+[0;32mI (38) boot.esp32c3: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32c3: SPI Flash Size : 4MB[0m
+[0;32mI (48) boot: Enabling RNG early entropy source...[0m
+[0;32mI (53) boot: Partition Table:[0m
+[0;32mI (57) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (64) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (79) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (86) boot:  3 storage          Unknown data     01 82 00110000 000f0000[0m
+[0;32mI (94) boot: End of partition table[0m
+[0;32mI (98) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=276c8h (161480) map[0m
+[0;32mI (140) esp_image: segment 1: paddr=000376f0 vaddr=3fc93200 size=02ce8h ( 11496) load[0m
+[0;32mI (143) esp_image: segment 2: paddr=0003a3e0 vaddr=40380000 size=05c38h ( 23608) load[0m
+[0;32mI (152) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=abe0ch (704012) map[0m
+[0;32mI (302) esp_image: segment 4: paddr=000ebe34 vaddr=40385c38 size=0d430h ( 54320) load[0m
+[0;32mI (315) esp_image: segment 5: paddr=000f926c vaddr=50000000 size=00030h (    48) [0m
+[0;32mI (321) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (321) boot: Disabling RNG early entropy source...[0m
+[0;32mI (335) cpu_start: Pro cpu up.[0m
+[0;32mI (345) cpu_start: Pro cpu start user code[0m
+[0;32mI (345) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (345) cpu_start: Application information:[0m
+[0;32mI (348) cpu_start: Project name:     sodk[0m
+[0;32mI (352) cpu_start: App version:      2ac901f-dirty[0m
+[0;32mI (358) cpu_start: Compile time:     May 13 2023 08:26:56[0m
+[0;32mI (364) cpu_start: ELF file SHA256:  cf8feac38f305524...[0m
+[0;32mI (370) cpu_start: ESP-IDF:          5.0.1[0m
+[0;32mI (375) cpu_start: Min chip rev:     v0.3[0m
+[0;32mI (379) cpu_start: Max chip rev:     v0.99 [0m
+[0;32mI (384) cpu_start: Chip rev:         v0.3[0m
+[0;32mI (389) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (396) heap_init: At 3FCAE490 len 0002E280 (184 KiB): DRAM[0m
+[0;32mI (402) heap_init: At 3FCDC710 len 00002950 (10 KiB): STACK/DRAM[0m
+[0;32mI (409) heap_init: At 50000040 len 00001FC0 (7 KiB): RTCRAM[0m
+[0;32mI (417) spi_flash: detected chip: generic[0m
+[0;32mI (420) spi_flash: flash io: dio[0m
+[0;32mI (425) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (431) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (438) cpu_start: Starting scheduler.[0m
+[0;32mI (443) main: Wakeup caused by timer[0m
+[0;32mI (443) main: Boot number: 5[0m
+[0;32mI (443) main: mac: 4c-bf-39-03-f7-84[0m
+[0;32mI (453) temperature_sensor: Range [-30°C ~ 50°C], error < 2°C[0m
+[0;32mI (453) TempSensor: Temperature out celsius 22.80°C[0m
+[0;32mI (473) gpio: GPIO[8]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (473) gpio: GPIO[10]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (483) i2c: i2c bus error state![0m
+[0;32mI (483) gpio: GPIO[9]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (493) gpio: GPIO[2]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:2 [0m
+[0;31mE (503) nbiot: Error (ESP_ERR_NVS_NOT_FOUND) opening NVS handle![0m
+[0;32mI (513) uart: queue free spaces: 30[0m
+[0;32mI (513) nbiot: init module NB-IoT[0m
+[0;32mI (523) gpio: GPIO[19]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (523) gpio: GPIO[18]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (533) adc_continuous: ADC2 continuous mode is no longer supported, please use ADC1. Search for errata on espressif website for more details. You can enable CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3 to force use ADC2[0m
+[0;32mI (553) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (563) gpio: GPIO[1]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (573) gpio: GPIO[3]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (583) gpio: GPIO[4]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (593) gpio: GPIO[5]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+(on: 10 res:500 err:  0) "channel":1,"U":5,"R":214,"Ub1":20.491,"Ub0":20.491,"U0":275,"in":0
+Avg ADC 0:0, 1:84, 2:391, 3:4095, 4:1712
+(on: 10 res:1000 err: 16) "channel":2,"U":5,"R":247,"Ub1":20.491,"Ub0":20.491,"U0":275,"in":0
+Avg ADC 0:0, 1:79, 2:391, 3:4095, 4:1712
+[0;31mE (2123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (2123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (2133) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:500 err:  6) "channel":3,"U":5,"R":229,"Ub1":20.491,"Ub0":20.491,"U0":275,"in":0
+Avg ADC 0:0, 1:79, 2:393, 3:4095, 4:1711
+(on: 10 res:1000 err:  8) "channel":4,"U":5,"R":113,"Ub1":20.491,"Ub0":20.491,"U0":275,"in":0
+Avg ADC 0:0, 1:79, 2:392, 3:4095, 4:1712
+[0;31mE (13743) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (13743) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (13743) bc26: bc26_init(271): sync failed[0m
+[0;31mE (25343) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (25343) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (25343) bc26: bc26_init(271): sync failed[0m
+[0;31mE (36943) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (36943) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (36943) bc26: bc26_init(271): sync failed[0m
+[0;31mE (48543) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (48543) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (48543) bc26: bc26_init(271): sync failed[0m
+[0;31mE (60143) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (60143) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (60143) bc26: bc26_init(271): sync failed[0m
+[0;33mW (65743) main: Go sleep...[0m
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x5 (DSLEEP),boot:0xd (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x3fcd5820,len:0x16a0
+load:0x403cc710,len:0x968
+load:0x403ce710,len:0x2e78
+entry 0x403cc710
+[0;32mI (31) boot: ESP-IDF 5.0.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time 08:27:36[0m
+[0;32mI (32) boot: chip revision: v0.3[0m
+[0;32mI (33) boot.esp32c3: SPI Speed      : 40MHz[0m
+[0;32mI (38) boot.esp32c3: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32c3: SPI Flash Size : 4MB[0m
+[0;32mI (48) boot: Enabling RNG early entropy source...[0m
+[0;32mI (53) boot: Partition Table:[0m
+[0;32mI (57) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (64) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (79) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (86) boot:  3 storage          Unknown data     01 82 00110000 000f0000[0m
+[0;32mI (94) boot: End of partition table[0m
+[0;32mI (98) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=276c8h (161480) map[0m
+[0;32mI (140) esp_image: segment 1: paddr=000376f0 vaddr=3fc93200 size=02ce8h ( 11496) load[0m
+[0;32mI (143) esp_image: segment 2: paddr=0003a3e0 vaddr=40380000 size=05c38h ( 23608) load[0m
+[0;32mI (152) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=abe0ch (704012) map[0m
+[0;32mI (302) esp_image: segment 4: paddr=000ebe34 vaddr=40385c38 size=0d430h ( 54320) load[0m
+[0;32mI (315) esp_image: segment 5: paddr=000f926c vaddr=50000000 size=00030h (    48) [0m
+[0;32mI (321) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (321) boot: Disabling RNG early entropy source...[0m
+[0;32mI (335) cpu_start: Pro cpu up.[0m
+[0;32mI (345) cpu_start: Pro cpu start user code[0m
+[0;32mI (345) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (345) cpu_start: Application information:[0m
+[0;32mI (348) cpu_start: Project name:     sodk[0m
+[0;32mI (352) cpu_start: App version:      2ac901f-dirty[0m
+[0;32mI (358) cpu_start: Compile time:     May 13 2023 08:26:56[0m
+[0;32mI (364) cpu_start: ELF file SHA256:  cf8feac38f305524...[0m
+[0;32mI (370) cpu_start: ESP-IDF:          5.0.1[0m
+[0;32mI (375) cpu_start: Min chip rev:     v0.3[0m
+[0;32mI (379) cpu_start: Max chip rev:     v0.99 [0m
+[0;32mI (384) cpu_start: Chip rev:         v0.3[0m
+[0;32mI (389) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (396) heap_init: At 3FCAE490 len 0002E280 (184 KiB): DRAM[0m
+[0;32mI (402) heap_init: At 3FCDC710 len 00002950 (10 KiB): STACK/DRAM[0m
+[0;32mI (409) heap_init: At 50000040 len 00001FC0 (7 KiB): RTCRAM[0m
+[0;32mI (417) spi_flash: detected chip: generic[0m
+[0;32mI (420) spi_flash: flash io: dio[0m
+[0;32mI (425) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (431) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (438) cpu_start: Starting scheduler.[0m
+[0;32mI (443) main: Wakeup caused by timer[0m
+[0;32mI (443) main: Boot number: 6[0m
+[0;32mI (443) main: mac: 4c-bf-39-03-f7-84[0m
+[0;32mI (453) temperature_sensor: Range [-30°C ~ 50°C], error < 2°C[0m
+[0;32mI (453) TempSensor: Temperature out celsius 22.80°C[0m
+[0;32mI (473) gpio: GPIO[8]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (473) gpio: GPIO[10]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (483) i2c: i2c bus error state![0m
+[0;32mI (483) gpio: GPIO[9]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (493) gpio: GPIO[2]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:2 [0m
+[0;31mE (503) nbiot: Error (ESP_ERR_NVS_NOT_FOUND) opening NVS handle![0m
+[0;32mI (513) uart: queue free spaces: 30[0m
+[0;32mI (513) nbiot: init module NB-IoT[0m
+[0;32mI (523) gpio: GPIO[19]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (523) gpio: GPIO[18]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (533) adc_continuous: ADC2 continuous mode is no longer supported, please use ADC1. Search for errata on espressif website for more details. You can enable CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3 to force use ADC2[0m
+[0;32mI (553) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (563) gpio: GPIO[1]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (573) gpio: GPIO[3]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (583) gpio: GPIO[4]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (593) gpio: GPIO[5]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+(on: 10 res:500 err:  0) "channel":1,"U":7,"R":687,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:100, 2:433, 3:4095, 4:1717
+(on: 10 res:1000 err:  7) "channel":2,"U":7,"R":664,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:94, 2:433, 3:4095, 4:1721
+[0;31mE (2123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (2123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (2133) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:1000 err: 15) "channel":3,"U":7,"R":670,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:95, 2:434, 3:4095, 4:1722
+(on: 10 res:1000 err:  2) "channel":4,"U":7,"R":666,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:95, 2:435, 3:4095, 4:1722
+[0;31mE (13743) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (13743) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (13743) bc26: bc26_init(271): sync failed[0m
+[0;31mE (25343) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (25343) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (25343) bc26: bc26_init(271): sync failed[0m
+[0;31mE (36943) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (36943) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (36943) bc26: bc26_init(271): sync failed[0m
+[0;31mE (48543) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (48543) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (48543) bc26: bc26_init(271): sync failed[0m
+[0;31mE (60143) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (60143) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (60143) bc26: bc26_init(271): sync failed[0m
+[0;33mW (66243) main: Go sleep...[0m
+ESP-ROM:esp32c3-api1-20210207
+Build:Feb  7 2021
+rst:0x5 (DSLEEP),boot:0xd (SPI_FAST_FLASH_BOOT)
+SPIWP:0xee
+mode:DIO, clock div:2
+load:0x3fcd5820,len:0x16a0
+load:0x403cc710,len:0x968
+load:0x403ce710,len:0x2e78
+entry 0x403cc710
+[0;32mI (31) boot: ESP-IDF 5.0.1 2nd stage bootloader[0m
+[0;32mI (31) boot: compile time 08:27:36[0m
+[0;32mI (32) boot: chip revision: v0.3[0m
+[0;32mI (33) boot.esp32c3: SPI Speed      : 40MHz[0m
+[0;32mI (38) boot.esp32c3: SPI Mode       : DIO[0m
+[0;32mI (43) boot.esp32c3: SPI Flash Size : 4MB[0m
+[0;32mI (48) boot: Enabling RNG early entropy source...[0m
+[0;32mI (53) boot: Partition Table:[0m
+[0;32mI (57) boot: ## Label            Usage          Type ST Offset   Length[0m
+[0;32mI (64) boot:  0 nvs              WiFi data        01 02 00009000 00006000[0m
+[0;32mI (71) boot:  1 phy_init         RF data          01 01 0000f000 00001000[0m
+[0;32mI (79) boot:  2 factory          factory app      00 00 00010000 00100000[0m
+[0;32mI (86) boot:  3 storage          Unknown data     01 82 00110000 000f0000[0m
+[0;32mI (94) boot: End of partition table[0m
+[0;32mI (98) esp_image: segment 0: paddr=00010020 vaddr=3c0b0020 size=276c8h (161480) map[0m
+[0;32mI (140) esp_image: segment 1: paddr=000376f0 vaddr=3fc93200 size=02ce8h ( 11496) load[0m
+[0;32mI (143) esp_image: segment 2: paddr=0003a3e0 vaddr=40380000 size=05c38h ( 23608) load[0m
+[0;32mI (152) esp_image: segment 3: paddr=00040020 vaddr=42000020 size=abe0ch (704012) map[0m
+[0;32mI (302) esp_image: segment 4: paddr=000ebe34 vaddr=40385c38 size=0d430h ( 54320) load[0m
+[0;32mI (315) esp_image: segment 5: paddr=000f926c vaddr=50000000 size=00030h (    48) [0m
+[0;32mI (321) boot: Loaded app from partition at offset 0x10000[0m
+[0;32mI (321) boot: Disabling RNG early entropy source...[0m
+[0;32mI (335) cpu_start: Pro cpu up.[0m
+[0;32mI (345) cpu_start: Pro cpu start user code[0m
+[0;32mI (345) cpu_start: cpu freq: 160000000 Hz[0m
+[0;32mI (345) cpu_start: Application information:[0m
+[0;32mI (348) cpu_start: Project name:     sodk[0m
+[0;32mI (352) cpu_start: App version:      2ac901f-dirty[0m
+[0;32mI (358) cpu_start: Compile time:     May 13 2023 08:26:56[0m
+[0;32mI (364) cpu_start: ELF file SHA256:  cf8feac38f305524...[0m
+[0;32mI (370) cpu_start: ESP-IDF:          5.0.1[0m
+[0;32mI (375) cpu_start: Min chip rev:     v0.3[0m
+[0;32mI (379) cpu_start: Max chip rev:     v0.99 [0m
+[0;32mI (384) cpu_start: Chip rev:         v0.3[0m
+[0;32mI (389) heap_init: Initializing. RAM available for dynamic allocation:[0m
+[0;32mI (396) heap_init: At 3FCAE490 len 0002E280 (184 KiB): DRAM[0m
+[0;32mI (402) heap_init: At 3FCDC710 len 00002950 (10 KiB): STACK/DRAM[0m
+[0;32mI (409) heap_init: At 50000040 len 00001FC0 (7 KiB): RTCRAM[0m
+[0;32mI (417) spi_flash: detected chip: generic[0m
+[0;32mI (420) spi_flash: flash io: dio[0m
+[0;32mI (425) sleep: Configure to isolate all GPIO pins in sleep state[0m
+[0;32mI (431) sleep: Enable automatic switching of GPIO sleep configuration[0m
+[0;32mI (438) cpu_start: Starting scheduler.[0m
+[0;32mI (443) main: Wakeup caused by timer[0m
+[0;32mI (443) main: Boot number: 7[0m
+[0;32mI (443) main: mac: 4c-bf-39-03-f7-84[0m
+[0;32mI (453) temperature_sensor: Range [-30°C ~ 50°C], error < 2°C[0m
+[0;32mI (453) TempSensor: Temperature out celsius 22.80°C[0m
+[0;32mI (473) gpio: GPIO[8]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (473) gpio: GPIO[10]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (483) i2c: i2c bus error state![0m
+[0;32mI (483) gpio: GPIO[9]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (493) gpio: GPIO[2]| InputEn: 1| OutputEn: 0| OpenDrain: 0| Pullup: 1| Pulldown: 0| Intr:2 [0m
+[0;31mE (503) nbiot: Error (ESP_ERR_NVS_NOT_FOUND) opening NVS handle![0m
+[0;32mI (513) uart: queue free spaces: 30[0m
+[0;32mI (513) nbiot: init module NB-IoT[0m
+[0;32mI (523) gpio: GPIO[19]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (523) gpio: GPIO[18]| InputEn: 0| OutputEn: 1| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;31mE (533) adc_continuous: ADC2 continuous mode is no longer supported, please use ADC1. Search for errata on espressif website for more details. You can enable CONFIG_ADC_CONTINUOUS_FORCE_USE_ADC2_ON_C3_S3 to force use ADC2[0m
+[0;32mI (553) gpio: GPIO[0]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (563) gpio: GPIO[1]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (573) gpio: GPIO[3]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (583) gpio: GPIO[4]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+[0;32mI (593) gpio: GPIO[5]| InputEn: 0| OutputEn: 0| OpenDrain: 0| Pullup: 0| Pulldown: 0| Intr:0 [0m
+(on: 10 res:500 err:  0) "channel":1,"U":10,"R":815,"Ub1":20.491,"Ub0":20.491,"U0":277,"in":0
+Avg ADC 0:0, 1:116, 2:473, 3:4095, 4:1727
+(on: 10 res:1000 err: 13) "channel":2,"U":10,"R":831,"Ub1":20.491,"Ub0":20.491,"U0":277,"in":0
+Avg ADC 0:0, 1:111, 2:472, 3:4095, 4:1727
+[0;31mE (2123) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (2123) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (2133) bc26: bc26_init(271): sync failed[0m
+(on: 10 res:1000 err: 10) "channel":3,"U":10,"R":809,"Ub1":20.491,"Ub0":20.491,"U0":277,"in":0
+Avg ADC 0:0, 1:112, 2:479, 3:4095, 4:1727
+(on: 10 res:1000 err:  2) "channel":4,"U":9,"R":786,"Ub1":20.491,"Ub0":20.491,"U0":276,"in":0
+Avg ADC 0:0, 1:104, 2:452, 3:4095, 4:1723
+[0;31mE (13743) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (13743) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (13743) bc26: bc26_init(271): sync failed[0m
+[0;31mE (25343) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (25343) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (25343) bc26: bc26_init(271): sync failed[0m
+[0;31mE (36943) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (36943) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (36943) bc26: bc26_init(271): sync failed[0m
+[0;31mE (48543) esp-modem: esp_modem_dte_send_cmd(274): process command timeout[0m
+[0;31mE (48543) dce_service: esp_modem_dce_sync(283): send command failed[0m
+[0;31mE (48543) bc26: bc26_init(271): sync failed[0m

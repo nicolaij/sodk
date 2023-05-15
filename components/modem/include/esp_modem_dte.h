@@ -19,7 +19,7 @@ extern "C" {
 
 #include "esp_types.h"
 #include "esp_err.h"
-#include "esp_event.h"
+//#include "esp_event.h"
 
 typedef struct modem_dte modem_dte_t;
 typedef struct modem_dce modem_dce_t;

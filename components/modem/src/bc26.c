@@ -125,7 +125,7 @@ static esp_err_t esp_modem_dce_handle_cereg(modem_dce_t *dce, const char *line)
     {
         uint32_t **stat = esp_dce->priv_resource;
         /* +CSQ: <rssi>,<ber> */
-        sscanf(line, "%*s%d,%d", stat[0], stat[1]);
+        sscanf(line, "%*s%ld,%ld", stat[0], stat[1]);
         err = ESP_OK;
     }
     return err;

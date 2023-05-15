@@ -2,8 +2,7 @@
 #include <sys/time.h>
 
 #include <stdio.h>
-#include "esp_system.h"
-#include "esp_spi_flash.h"
+#include "esp_mac.h"
 
 #include "driver/gpio.h"
 #include "esp_sleep.h"
@@ -11,8 +10,10 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
+#include "esp_timer.h"
+
 #if CONFIG_IDF_TARGET_ESP32C3
-#include "driver/temp_sensor.h"
+    #include "driver/temperature_sensor.h"
 #endif
 
 #include "pcf8575.h"
@@ -57,6 +58,13 @@ menu_t menu[] = {
     {.id = "Kfilter2", .name = "", .val = 10, .min = 1, .max = 100},
 };
 
+QueueHandle_t uicmd_queue;
+QueueHandle_t send_queue;
+QueueHandle_t set_lora_queue;
+RingbufHandle_t wsbuf_handle;
+
+EventGroupHandle_t ready_event_group;
+
 int read_nvs_menu()
 {
     // Open
@@ -74,7 +82,7 @@ int read_nvs_menu()
             switch (err)
             {
             case ESP_OK:
-                ESP_LOGD("NVS", "Read \"%s\" = %d", menu[i].name, menu[i].val);
+                ESP_LOGD("NVS", "Read \"%s\" = %ld", menu[i].name, menu[i].val);
                 break;
             case ESP_ERR_NVS_NOT_FOUND:
                 ESP_LOGD("NVS", "The value  \"%s\" is not initialized yet!", menu[i].name);
@@ -217,7 +225,7 @@ void start_measure(int reasone)
             else
                 cmd.cmd = 0;
 
-            xQueueSend(uicmd_queue, &cmd, (portTickType)0);
+            xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
         }
         pos /= 10;
     }
@@ -288,6 +296,7 @@ void app_main()
     ESP_LOGI("main", "Boot number: %d", bootCount);
 
     /* Print chip information */
+    /*
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
     ESP_LOGI("main", "This is ESP32 chip with %d CPU cores, WiFi%s%s, silicon revision %d",
@@ -296,24 +305,28 @@ void app_main()
              (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "",
              chip_info.revision);
 
+
     ESP_LOGI("main", "flash: %dMB %s", spi_flash_get_chip_size() / (1024 * 1024),
              (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-
+*/
     esp_efuse_mac_get_default(mac);
     ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
 #if CONFIG_IDF_TARGET_ESP32C3
     // ESP_LOGI(TAG, "Initializing Temperature sensor");
 
-    temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
-    // temp_sensor_get_config(&temp_sensor);
-    // ESP_LOGI(TAG, "default dac %d, clk_div %d", temp_sensor.dac_offset, temp_sensor.clk_div);
-    // temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
-    ESP_ERROR_CHECK(temp_sensor_set_config(temp_sensor));
-    ESP_ERROR_CHECK(temp_sensor_start());
-    ESP_ERROR_CHECK(temp_sensor_read_celsius(&tsens_out));
-    ESP_LOGI("TempSensor", "Temperature out celsius %f°C", tsens_out);
-    ESP_ERROR_CHECK(temp_sensor_stop());
+    temperature_sensor_handle_t temp_sensor = NULL;
+    temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-30, 50);
+
+    ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor_config, &temp_sensor));
+    ESP_ERROR_CHECK(temperature_sensor_enable(temp_sensor));
+    
+    ESP_ERROR_CHECK(temperature_sensor_get_celsius(temp_sensor, &tsens_out));
+
+    ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
+    ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
+
+    ESP_LOGI("TempSensor", "Temperature out celsius %.01f°C", tsens_out);
 #endif
 
     // go_sleep();
