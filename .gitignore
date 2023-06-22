@@ -2,4 +2,5 @@
 .vscode
 platformio-device-monitor*
 *.csv
+logs
 !partitions_spiffs.csv

@@ -13,10 +13,12 @@
 #include "esp_timer.h"
 
 #if CONFIG_IDF_TARGET_ESP32C3
-    #include "driver/temperature_sensor.h"
+#include "driver/temperature_sensor.h"
 #endif
 
 #include "pcf8575.h"
+
+#include <string.h>
 
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR int BattLow = 0; // Счетчик разряда батареи
@@ -135,6 +137,8 @@ int pcf8575_read(uint16_t bit)
 //  POWER_BIT - всегда, кроме когда каналы выбраны
 void pcf8575_set(int channel_cmd)
 {
+    ESP_LOGD("pcf8575", "pcf8575 set (%d)", channel_cmd);
+
     if (i2c_err)
         return;
 
@@ -146,15 +150,27 @@ void pcf8575_set(int channel_cmd)
     switch (channel_cmd)
     {
     case 0:
+#if NB == 26
         current_mask = BIT(POWER_BIT) | BIT(NB_PWR_BIT);
+#else
+        current_mask = BIT(POWER_BIT);
+#endif
         cmd_mask = current_mask;
         break;
     case NB_PWR_CMDON:
+#if NB == 26
         current_mask &= ~BIT(NB_PWR_BIT);
+#else
+        current_mask |= BIT(NB_PWR_BIT);
+#endif
         cmd_mask = current_mask;
         break;
     case NB_PWR_CMDOFF:
+#if NB == 26
         current_mask |= BIT(NB_PWR_BIT);
+#else
+        current_mask &= ~BIT(NB_PWR_BIT);
+#endif
         cmd_mask = current_mask;
         break;
     case NB_RESET_CMD:
@@ -320,7 +336,7 @@ void app_main()
 
     ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor_config, &temp_sensor));
     ESP_ERROR_CHECK(temperature_sensor_enable(temp_sensor));
-    
+
     ESP_ERROR_CHECK(temperature_sensor_get_celsius(temp_sensor, &tsens_out));
 
     ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));

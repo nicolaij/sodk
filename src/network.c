@@ -57,6 +57,7 @@ extern uint16_t port;
 extern char apn[32];
 extern char serverip[17];
 extern int32_t proto;
+extern int32_t timezone;
 #else
 extern int fr;
 extern int bw;
@@ -289,6 +290,10 @@ static esp_err_t settings_handler(httpd_req_t *req)
         "<tr><td><label for=\"port\">Port:</label></td><td><input type=\"text\" name=\"port\" id=\"port\" size=\"16\" value=\"",
         "\" /></td></tr>\n"};
 
+    const char *nb_set_timezone[] = {
+        "<tr><td><label for=\"timezone\">Timezone:</label></td><td><input type=\"text\" name=\"timezone\" id=\"timezone\" size=\"16\" value=\"",
+        "\" /></td></tr>\n"};
+
 #ifndef NB
     const char *lorastart = "<form><fieldset><legend>LoRa</legend><table>";
     const char *loraend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
@@ -425,6 +430,17 @@ static esp_err_t settings_handler(httpd_req_t *req)
                     proto = p;
                 }
             }
+
+            if (httpd_query_key_value(buf, "timezone", param, 2) == ESP_OK)
+            {
+                int p = atoi(param);
+                if (timezone != p)
+                {
+                    param_change = true;
+                    timezone = p;
+                }
+            }
+
 #else
             if (httpd_query_key_value(buf, "id", param, 7) == ESP_OK)
             {
@@ -571,7 +587,6 @@ static esp_err_t settings_handler(httpd_req_t *req)
 
     strlcat(buf, nb_set_proto[1], sizeof(buf));
 
-
     // Generate ip
     strlcat(buf, nb_set_ip[0], sizeof(buf));
     strlcat(buf, serverip, sizeof(buf));
@@ -582,6 +597,12 @@ static esp_err_t settings_handler(httpd_req_t *req)
     itoa(port, param, 10);
     strlcat(buf, param, sizeof(buf));
     strlcat(buf, nb_set_port[1], sizeof(buf));
+
+    // Generate timezone
+    strlcat(buf, nb_set_timezone[0], sizeof(buf));
+    itoa(timezone, param, 10);
+    strlcat(buf, param, sizeof(buf));
+    strlcat(buf, nb_set_timezone[1], sizeof(buf));
 
     // status
     strlcat(buf, "<tr><td>Status:</td><td>", sizeof(buf));
@@ -689,7 +710,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
     size_t chunksize;
-    //int n = 0;
+    // int n = 0;
     do
     {
         // memset(buf, 0, sizeof(buf));
@@ -748,7 +769,7 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     httpd_resp_set_hdr(req, "Content-Disposition", line);
     httpd_resp_set_hdr(req, "Connection", "close");
 
-    //uint8_t *ptr_adc = 0;
+    // uint8_t *ptr_adc = 0;
 
     int l = 0;
     int ll = 0;
@@ -989,7 +1010,7 @@ void wifi_task(void *arg)
         ESP_LOGI("SPIFFS", "Partition size: total: %d, used: %d", total, used);
     }
 
-    //int wifi_on = 1;
+    // int wifi_on = 1;
 
     s_wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());

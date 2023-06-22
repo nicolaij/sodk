@@ -1,3 +1,4 @@
+#include <main.h>
 #include <stdio.h>
 #include "driver/gpio.h"
 #include <sys/time.h>
@@ -10,8 +11,7 @@
 #include "esp_modem.h"
 #include "esp_modem_netif.h"
 #include "bc26.h"
-
-#include <main.h>
+#include "sim7600.h"
 
 #define TX_GPIO 6
 #define RX_GPIO 7
@@ -25,6 +25,8 @@ uint16_t port = 48884;
 int32_t id = 1; // ID передатчика
 
 int32_t proto = 0; // TCP/UDP
+
+int32_t timezone = 3;
 
 static const char *TAG = "nbiot";
 
@@ -123,6 +125,21 @@ int read_nvs_nbiot()
             ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
         }
 
+        i = timezone;
+        err = nvs_get_i32(my_handle, "timezone", &i);
+        switch (err)
+        {
+        case ESP_OK:
+            timezone = i;
+            ESP_LOGD(TAG, "Read \"%s\" = %ld", "timezone", timezone);
+            break;
+        case ESP_ERR_NVS_NOT_FOUND:
+            ESP_LOGD(TAG, "The value  \"%s\" is not initialized yet!", "timezone");
+            break;
+        default:
+            ESP_LOGE(TAG, "Error (%s) reading!", esp_err_to_name(err));
+        }
+
         // Close
         nvs_close(my_handle);
 
@@ -201,7 +218,7 @@ esp_err_t esp_modem_dce_handle_cclk(modem_dce_t *dce, const char *line)
         {
             // year
             data[0] = atoi(s + 1);
-            if (data[0] > 20 && data[0] < 100)
+            if (data[0] > 0 && data[0] < 100)
                 data[0] = data[0] + 2000;
             s = strchr(s + 1, '/');
             if (s)
@@ -581,6 +598,33 @@ esp_err_t esp_modem_dce_handle_response_ok_wait(modem_dce_t *dce, const char *li
     return err;
 }
 
+/**
+ * @brief Handle response from AT+CBC (Get battery status)
+ *
+ */
+static esp_err_t sim7020_handle_cbc(modem_dce_t *dce, const char *line)
+{
+    esp_err_t err = ESP_FAIL;
+    esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
+        err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
+    }
+    else if (!strncmp(line, "+CBC", strlen("+CBC")))
+    {
+        /* store value of bcl, voltage */
+        uint32_t **cbc = esp_dce->priv_resource;
+        /* +CBC: <bcl>,<voltage> */
+        sscanf(line, "%*s%ld,%ld", cbc[0], cbc[1]);
+        err = ESP_OK;
+    }
+    return err;
+}
+
 void radio_task(void *arg)
 {
 
@@ -771,26 +815,39 @@ void radio_task(void *arg)
 
             /* Get battery voltage */
             uint32_t voltage = 0, bcs = 0, bcl = 0;
+
+#if NB == 7020
+            /* Get battery voltage */
+            uint32_t *resource[2] = {&bcl, &voltage};
+            esp_dce->priv_resource = resource;
+            dce->handle_line = sim7020_handle_cbc;
+            dte->send_cmd(dte, "AT+CBC\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+#endif
+#if NB == 26
+            /* Get battery voltage */
             ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_battery_status(dce, &bcs, &bcl, &voltage));
             // ESP_LOGI(TAG, "Battery voltage: %d mV", voltage);
+#endif
 
-            if (strncmp(dce->name, "SIM7020", 7) == 0)
-            {
-                // AT+CTZU Automatic Time Update
-                // AT+CLTS Get Local Timestamp
-                // AT+CURTC=0 AT+CURTC Control CCLK Show UTC Or RTC Time
-                esp_dce->priv_resource = "+CLTS";
-                dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                dte->send_cmd(dte, "AT+CLTS=1\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+#if NB == 7020
+            // Синхронизация времени
+            //  AT+CTZU Automatic Time Update
+            //  AT+CLTS Get Local Timestamp
+            //  AT+CURTC=0 AT+CURTC Control CCLK Show UTC Or RTC Time
+            esp_dce->priv_resource = "+CLTS";
+            dce->handle_line = esp_modem_dce_handle_response_all_ok;
+            dte->send_cmd(dte, "AT+CLTS=1\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
 
-                esp_dce->priv_resource = "+CTZU";
-                dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                dte->send_cmd(dte, "AT+CTZU=1\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+            esp_dce->priv_resource = "+CTZU";
+            dce->handle_line = esp_modem_dce_handle_response_all_ok;
+            dte->send_cmd(dte, "AT+CTZU=1\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
 
-                esp_dce->priv_resource = "+CURTC: ";
-                dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                dte->send_cmd(dte, "AT+CURTC=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
-            }
+/*
+            esp_dce->priv_resource = "+CURTC: ";
+            dce->handle_line = esp_modem_dce_handle_response_all_ok;
+            dte->send_cmd(dte, "AT+CURTC=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+*/
+#endif
 
             // Show PDP Addresses
             int32_t pdpaddr[4] = {0, 0, 0, 0};
@@ -798,24 +855,22 @@ void radio_task(void *arg)
             counter = 2;
             while (counter-- > 0)
             {
-                if (strncmp(dce->name, "SIM7020", 7) == 0)
-                {
-                    dce->handle_line = esp_modem_dce_handle_response_cgpaddr1;
-                    if (dte->send_cmd(dte, "AT+CGPADDR=1\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
-                        if (dce->state == MODEM_STATE_SUCCESS)
-                        {
-                            break;
-                        }
-                }
-                else
-                {
-                    dce->handle_line = esp_modem_dce_handle_response_cgpaddr;
-                    if (dte->send_cmd(dte, "AT+CGPADDR?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
-                        if (dce->state == MODEM_STATE_SUCCESS)
-                        {
-                            break;
-                        }
-                }
+#if NB == 7020
+                dce->handle_line = esp_modem_dce_handle_response_cgpaddr1;
+                if (dte->send_cmd(dte, "AT+CGPADDR=1\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        break;
+                    }
+#endif
+#if NB == 26
+                dce->handle_line = esp_modem_dce_handle_response_cgpaddr;
+                if (dte->send_cmd(dte, "AT+CGPADDR?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
+                    if (dce->state == MODEM_STATE_SUCCESS)
+                    {
+                        break;
+                    }
+#endif
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
             snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%lu, IP:%ld.%ld.%ld.%ld, Voltage:%lumV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
@@ -831,76 +886,77 @@ void radio_task(void *arg)
 
             // wait connect
 
-            if (strncmp(dce->name, "SIM7020", 7) == 0)
+#if NB == 7020
+            do
             {
-                do
+                vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+                ESP_LOGI(TAG, "try %d, connectID: %d, %d", counter, connectID[0], connectID[1]);
+
+                connectID[0] = -1;
+                connectID[1] = -1; // 0 None socket 1 Socket create but not connect 2 Connected
+                esp_dce->priv_resource = connectID;
+                dce->handle_line = esp_modem_dce_handle_csostatus;
+                dte->send_cmd(dte, "AT+CSOSTATUS=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+                if (connectID[1] == 0) // Creat a TCP/UDP Socket
                 {
-                    // dce->sync(dce);
-                    connectID[0] = -1;
-                    connectID[1] = -1; // 0 None socket 1 Socket create but not connect 2 Connected
-                    esp_dce->priv_resource = connectID;
-                    dce->handle_line = esp_modem_dce_handle_csostatus;
-                    dte->send_cmd(dte, "AT+CSOSTATUS=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                    esp_dce->priv_resource = "+CSOC: ";
+                    dce->handle_line = esp_modem_dce_handle_response_all_ok;
+                    // AT+CSOC=<domain>,<type>,<protocol>         <type>: Integer 1 TCP 2 UDP
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+CSOC=1,%d,1\r", (proto == 0) ? 1 : 2);
+                    dte->send_cmd(dte, tx_buf, MODEM_COMMAND_TIMEOUT_DEFAULT);
+                    // if (dce->state == MODEM_STATE_SUCCESS)
+                    // {
+                    //    connectID[1] = 1;
+                    // }
+                }
 
-                    ESP_LOGI(TAG, "try %d, connectID: %d, %d", counter, connectID[0], connectID[1]);
+                if (connectID[1] == 1) // Connect Socket to Remote Address and Port
+                {
+                    esp_dce->priv_resource = "+CSOERR: ";
+                    dce->handle_line = esp_modem_dce_handle_response_all_ok;
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+CSOCON=0,%d,%s\r", port, serverip);
+                    dte->send_cmd(dte, tx_buf, 60000);
+                }
 
-                    if (connectID[1] == 0) // Creat a TCP/UDP Socket
-                    {
-                        esp_dce->priv_resource = "+CSOC: ";
-                        dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                        // AT+CSOC=<domain>,<type>,<protocol>         <type>: Integer 1 TCP 2 UDP
-                        snprintf(tx_buf, sizeof(tx_buf), "AT+CSOC=1,%d,1\r", (proto == 0) ? 1 : 2);
-                        dte->send_cmd(dte, tx_buf, MODEM_COMMAND_TIMEOUT_DEFAULT);
-                        vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
-                        connectID[1] = 1;
-                    }
-
-                    if (connectID[1] == 1) // Connect Socket to Remote Address and Port
-                    {
-                        esp_dce->priv_resource = "+CSOERR: ";
-                        dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                        snprintf(tx_buf, sizeof(tx_buf), "AT+CSOCON=0,%d,%s\r", port, serverip);
-                        dte->send_cmd(dte, tx_buf, 60000);
-                    }
-
-                } while (connectID[1] != 2 && counter-- > 0);
-            }
-            else
+            } while (connectID[1] != 2 && counter-- > 0);
+#endif
+#if NB == 26
+            do
             {
-                do
+                // dce->sync(dce);
+                connectID[0] = -1;
+                esp_dce->priv_resource = connectID;
+                dce->handle_line = esp_modem_dce_handle_quistate;
+                dte->send_cmd(dte, "AT+QISTATE?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+                ESP_LOGI(TAG, "try %d, connectID: %d, %d, %d, %d", counter, connectID[0], connectID[1], connectID[2], connectID[3]);
+
+                if (connectID[0] == -1)
                 {
-                    // dce->sync(dce);
-                    connectID[0] = -1;
-                    esp_dce->priv_resource = connectID;
-                    dce->handle_line = esp_modem_dce_handle_quistate;
-                    dte->send_cmd(dte, "AT+QISTATE?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                    ESP_LOGI(TAG, "Open port");
+                    esp_dce->priv_resource = "+QIOPEN: ";
+                    dce->handle_line = esp_modem_dce_handle_response_ok_wait;
 
-                    ESP_LOGI(TAG, "try %d, connectID: %d, %d, %d, %d", counter, connectID[0], connectID[1], connectID[2], connectID[3]);
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"%s\",\"%s\",%d,0,0\r", (proto == 0) ? "TCP" : "UDP", serverip, port);
+                    // 2. It is recommended to wait for 60 seconds for URC response “+QIOPEN: <connectID>,<err>”.
+                    dte->send_cmd(dte, tx_buf, 30000);
+                }
 
-                    if (connectID[0] == -1)
-                    {
-                        ESP_LOGI(TAG, "Open port");
-                        esp_dce->priv_resource = "+QIOPEN: ";
-                        dce->handle_line = esp_modem_dce_handle_response_ok_wait;
+                if (dce->state != MODEM_STATE_SUCCESS)
+                {
+                    vTaskDelay(500 / portTICK_PERIOD_MS);
 
-                        snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"%s\",\"%s\",%d,0,0\r", (proto == 0) ? "TCP" : "UDP", serverip, port);
-                        // 2. It is recommended to wait for 60 seconds for URC response “+QIOPEN: <connectID>,<err>”.
-                        dte->send_cmd(dte, tx_buf, 30000);
-                    }
+                    if (counter < 5) // рестартуем
+                        continue;
+                }
 
-                    if (dce->state != MODEM_STATE_SUCCESS)
-                    {
-                        vTaskDelay(500 / portTICK_PERIOD_MS);
-
-                        if (counter < 5) // рестартуем
-                            continue;
-                    }
-
-                } while (connectID[3] != 2 && counter-- > 0);
-            }
+            } while (connectID[3] != 2 && counter-- > 0);
+#endif
 
             // запрос времени
-            //+CCLK: 2022/10/27,08:18:29GMT+3
+            //+CCLK: 2022/10/27,08:18:29GMT+3 - NB26
+            //+CCLK: 23/06/22,06:25:03+12 - SIM7020
             int32_t dt[8] = {0, 0, 0, 0, 0, 0, 0, 0};
             esp_dce->priv_resource = dt;
             char datetime[22] = "";
@@ -919,7 +975,7 @@ void radio_task(void *arg)
                         tm.tm_min = dt[4];
                         tm.tm_sec = dt[5];
 
-                        dt[6] = 3; // FORCE TIMEZONE
+                        dt[6] = timezone; // FORCE TIMEZONE
 
                         time_t t = mktime(&tm) + dt[6] * 3600; // UNIX time + timezone offset
                         // printf("Setting time: %s", asctime(&tm));
@@ -951,51 +1007,49 @@ void radio_task(void *arg)
                 counter = 2;
                 while (counter-- > 0)
                 {
-                    if (strncmp(dce->name, "SIM7020", 7) == 0)
+#if NB == 7020
+                    esp_dce->priv_resource = "SEND:";
+                    dce->handle_line = esp_modem_dce_handle_response_all_ok;
+                    int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSOSEND=0,0,");
+                    char *pos = tx_buf + len_cmd;
+                    int i = 0;
+                    *pos++ = '\"';
+                    // Экранируем \"
+                    for (i = 0; i < len_data; i++)
                     {
-                        esp_dce->priv_resource = "SEND:";
-                        dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                        int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSOSEND=0,0,");
-                        char *pos = tx_buf + len_cmd;
-                        int i = 0;
-                        *pos++ = '\"';
-                        // Экранируем \"
-                        for (i = 0; i < len_data; i++)
+                        if (buf[i] == '\"')
                         {
-                            if (buf[i] == '\"')
-                            {
-                                *pos++ = '\\';
-                            }
-
-                            *pos++ = buf[i];
+                            *pos++ = '\\';
                         }
 
-                        *pos++ = '\"';
-                        *pos++ = '\r';
-                        *pos++ = '\0';
-
-                        if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
-                        {
-                            if (dce->state == MODEM_STATE_SUCCESS)
-                            {
-                                break;
-                            };
-                        }
+                        *pos++ = buf[i];
                     }
-                    else
+
+                    *pos++ = '\"';
+                    *pos++ = '\r';
+                    *pos++ = '\0';
+
+                    if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
                     {
-                        esp_dce->priv_resource = "SEND";
-                        dce->handle_line = esp_modem_dce_handle_response_ok_wait;
-                        snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", len_data, buf);
-
-                        if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
+                        if (dce->state == MODEM_STATE_SUCCESS)
                         {
-                            if (dce->state == MODEM_STATE_SUCCESS)
-                            {
-                                break;
-                            };
-                        }
+                            break;
+                        };
                     }
+#endif
+#if NB == 26
+                    esp_dce->priv_resource = "SEND";
+                    dce->handle_line = esp_modem_dce_handle_response_ok_wait;
+                    snprintf(tx_buf, sizeof(tx_buf), "AT+QISEND=0,%d,%s\r", len_data, buf);
+
+                    if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
+                    {
+                        if (dce->state == MODEM_STATE_SUCCESS)
+                        {
+                            break;
+                        };
+                    }
+#endif
 
                     vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
                 }
@@ -1011,30 +1065,26 @@ void radio_task(void *arg)
         esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
         ESP_LOGI(TAG, "Close port");
         esp_dce->priv_resource = "CLOSE";
-        if (strncmp(dce->name, "SIM7020", 7) == 0)
-        {
-            dce->handle_line = esp_modem_dce_handle_response_all_ok;
-            dte->send_cmd(dte, "AT+CSOCL=0\r", 1000);
-        }
-        else
-        {
-            dce->handle_line = esp_modem_dce_handle_response_ok_wait;
-            dte->send_cmd(dte, "AT+QICLOSE=0\r", 1000);
-        }
+#if NB == 7020
+        dce->handle_line = esp_modem_dce_handle_response_all_ok;
+        dte->send_cmd(dte, "AT+CSOCL=0\r", 1000);
+#endif
+#if NB == 26
+        dce->handle_line = esp_modem_dce_handle_response_ok_wait;
+        dte->send_cmd(dte, "AT+QICLOSE=0\r", 1000);
+#endif
 
         vTaskDelay(pdMS_TO_TICKS(1000));
 
-        if (strncmp(dce->name, "SIM7020", 7) == 0)
-        {
-            esp_dce->priv_resource = "DOWN";
-            dce->handle_line = esp_modem_dce_handle_response_str_ok;
-            dte->send_cmd(dte, "AT+CPOWD=1\r", 10000);
-        }
-        else
-        {
-            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
-        }
-        
+#if NB == 7020
+        esp_dce->priv_resource = "DOWN";
+        dce->handle_line = esp_modem_dce_handle_response_str_ok;
+        dte->send_cmd(dte, "AT+CPOWD=1\r", 10000);
+#endif
+#if NB == 26
+        ESP_ERROR_CHECK_WITHOUT_ABORT(dce->power_down(dce));
+#endif
+
         if (dce->state == MODEM_STATE_SUCCESS)
             ESP_LOGW(TAG, "Power down");
     }

@@ -1,0 +1,4 @@
+Menuconfig обязательные настройки:
+
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_WS_SUPPORT=y

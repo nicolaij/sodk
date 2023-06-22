@@ -15,7 +15,7 @@
 #include <string.h>
 #include "esp_log.h"
 #include "esp_modem_dce_service.h"
-#include "bg96.h"
+#include "bc26.h"
 
 /**
  * @brief This module supports SIM7600 module, which has a very similar interface
@@ -45,11 +45,16 @@ static esp_err_t sim7600_handle_cbc(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_modem_dce = __containerof(dce, esp_modem_dce_t, parent);
-    if (strstr(line, MODEM_RESULT_CODE_SUCCESS)) {
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
         err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
-    } else if (strstr(line, MODEM_RESULT_CODE_ERROR)) {
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
         err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
-    } else if (!strncmp(line, "+CBC", strlen("+CBC"))) {
+    }
+    else if (!strncmp(line, "+CBC", strlen("+CBC")))
+    {
         /* store value of bcs, bcl, voltage */
         int32_t **cbc = esp_modem_dce->priv_resource;
         int32_t volts = 0, fraction = 0;
@@ -60,7 +65,7 @@ static esp_err_t sim7600_handle_cbc(modem_dce_t *dce, const char *line)
          */
         *cbc[0] = -1; // BCS
         *cbc[1] = -1; // BCL
-        *cbc[2] = volts*1000 + fraction;
+        *cbc[2] = volts * 1000 + fraction;
         err = ESP_OK;
     }
     return err;
@@ -72,11 +77,16 @@ static esp_err_t sim7600_handle_cbc(modem_dce_t *dce, const char *line)
 static esp_err_t sim7600_handle_cpof(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_OK;
-    if (strstr(line, MODEM_RESULT_CODE_SUCCESS)) {
+    if (strstr(line, MODEM_RESULT_CODE_SUCCESS))
+    {
         err = esp_modem_process_command_done(dce, MODEM_STATE_SUCCESS);
-    } else if (strstr(line, MODEM_RESULT_CODE_NO_CARRIER)) {
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_NO_CARRIER))
+    {
         err = ESP_OK;
-    } else if (strstr(line, MODEM_RESULT_CODE_ERROR)) {
+    }
+    else if (strstr(line, MODEM_RESULT_CODE_ERROR))
+    {
         err = esp_modem_process_command_done(dce, MODEM_STATE_FAIL);
     }
     return err;
@@ -134,8 +144,12 @@ err:
  */
 modem_dce_t *sim7600_init(modem_dte_t *dte)
 {
-    modem_dce_t *dce = bg96_init(dte);
-    dte->dce->get_battery_status = sim7600_get_battery_status;
-    dte->dce->power_down = sim7600_power_down;
+    modem_dce_t *dce = bc26_init(dte);
+
+    if (dce != NULL)
+    {
+        dte->dce->get_battery_status = sim7600_get_battery_status;
+        dte->dce->power_down = sim7600_power_down;
+    }
     return dce;
 }
