@@ -1,7 +1,7 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
-//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG - не работает 
+// #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG - не работает
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
@@ -12,9 +12,8 @@
 
 #include "freertos/ringbuf.h"
 
-
-//размер кольцевого буфера (только степень 2)
-#define RINGBUFLEN 2048 
+// размер кольцевого буфера (только степень 2)
+#define RINGBUFLEN 2048
 
 #define ADC_COUNT_READ 5
 #define ADC_FREQ 50000
@@ -26,7 +25,12 @@
 #define ENABLE_PIN 19
 #define LED_PIN 18
 #define BTN_PIN GPIO_NUM_9
-#define INT_PIN GPIO_NUM_2
+
+#ifdef ADC1_ONLY
+    #define INT_PIN GPIO_NUM_5
+#else
+    #define INT_PIN GPIO_NUM_2
+#endif
 
 #if MULTICHAN
 #define I2C_MASTER_SDA_PIN 8
@@ -50,8 +54,8 @@
 
 typedef struct
 {
-    int cmd;     //причина измерения 1 - кнопка, 2 - внешний вход
-    int channel; //канал измерения
+    int cmd;     // причина измерения 1 - кнопка, 2 - внешний вход
+    int channel; // канал измерения
 } cmd_t;
 
 typedef struct
@@ -65,7 +69,7 @@ typedef struct
 
 typedef struct
 {
-    int channel; //канал измерения
+    int channel; // канал измерения
     int adc0;
     int adc1;
     int adc2;
@@ -74,7 +78,7 @@ typedef struct
     int Ubatt0;
     int Ubatt1;
     int U0;
-    int input; //состояние внешнего входа 0 - нет, 1-сработал, 2-проснулись от сработки
+    int input; // состояние внешнего входа 0 - нет, 1-сработал, 2-проснулись от сработки
     int time;
 } result_t;
 
@@ -102,15 +106,14 @@ extern menu_t menu[22];
 extern QueueHandle_t uicmd_queue;
 extern QueueHandle_t send_queue;
 extern QueueHandle_t set_lora_queue;
-//QueueHandle_t ws_send_queue;
+// QueueHandle_t ws_send_queue;
 extern RingbufHandle_t wsbuf_handle;
-
 
 // SemaphoreHandle_t i2c_mux;
 
 extern EventGroupHandle_t ready_event_group;
 
-//Конец измерений
+// Конец измерений
 #define END_MEASURE BIT0
 #define END_TRANSMIT BIT1
 #define END_WIFI_TIMEOUT BIT2
@@ -157,8 +160,8 @@ void start_measure(int reasone);
 
 int getResult_Data(char *line, int data_pos);
 
-//получаем 1 строку данных data_pos
-//возвращает длину строки
+// получаем 1 строку данных data_pos
+// возвращает длину строки
 int getADC_Data(char *line, int data_pos, bool filter);
 
 #endif

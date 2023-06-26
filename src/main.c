@@ -16,7 +16,9 @@
 #include "driver/temperature_sensor.h"
 #endif
 
-#include "pcf8575.h"
+// ##include "pcf8575.h"
+#include "driver/i2c.h"
+#define PCF8575_I2C_ADDR_BASE 0x20
 
 #include <string.h>
 
@@ -33,7 +35,7 @@ TaskHandle_t xHandleWifi = NULL;
 
 int i2c_err = 1;
 
-static i2c_dev_t pcf8575;
+// static i2c_dev_t pcf8575;
 
 menu_t menu[] = {
     {.id = "pulse", .name = "Время импульса", .val = 500, .min = -1, .max = 10000},
@@ -124,9 +126,10 @@ int pcf8575_read(uint16_t bit)
     if (i2c_err)
         return 0;
 
-    uint16_t port_val = UINT16_MAX;
-    pcf8575_port_read(&pcf8575, &port_val);
-    // return port_val;
+    static uint16_t port_val = UINT16_MAX;
+
+    ESP_ERROR_CHECK(i2c_master_read_from_device(0, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
+
     if ((port_val & BIT(bit)) == 0)
         return 1;
     return 0;
@@ -190,7 +193,9 @@ void pcf8575_set(int channel_cmd)
     }
 
     uint16_t port_val = ~(cmd_mask);
-    pcf8575_port_write(&pcf8575, port_val);
+
+    ESP_ERROR_CHECK(i2c_master_write_to_device(0, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
+    //ESP_LOGV("pcf8575", "pcf8575 set OK");
 }
 
 void go_sleep(void)
@@ -324,7 +329,7 @@ void app_main()
 
     ESP_LOGI("main", "flash: %dMB %s", spi_flash_get_chip_size() / (1024 * 1024),
              (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-*/
+    */
     esp_efuse_mac_get_default(mac);
     ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
@@ -375,16 +380,30 @@ void app_main()
 
     if (gpio_get_level(I2C_MASTER_SDA_PIN) == 1 && gpio_get_level(I2C_MASTER_SCL_PIN) == 1)
     {
-        // Init i2cdev library
-        ESP_ERROR_CHECK(i2cdev_init());
 
-        // Zero device descriptor
-        memset(&pcf8575, 0, sizeof(i2c_dev_t));
+        int i2c_master_port = 0;
 
-        // Init i2c device descriptor
-        ESP_ERROR_CHECK(pcf8575_init_desc(&pcf8575, PCF8575_I2C_ADDR_BASE, 0, I2C_MASTER_SDA_PIN, I2C_MASTER_SCL_PIN));
+        i2c_config_t conf = {
+            .mode = I2C_MODE_MASTER,
+            .sda_io_num = I2C_MASTER_SDA_PIN,
+            .scl_io_num = I2C_MASTER_SCL_PIN,
+            //.sda_pullup_en = GPIO_PULLUP_DISABLE, //GPIO_PULLUP_ENABLE,
+            //.scl_pullup_en = GPIO_PULLUP_DISABLE, //GPIO_PULLUP_ENABLE,
+            .sda_pullup_en = GPIO_PULLUP_ENABLE,
+            .scl_pullup_en = GPIO_PULLUP_ENABLE,
+            .master.clk_speed = 400000,
+        };
 
-        i2c_err = 0;
+        i2c_param_config(i2c_master_port, &conf);
+
+        if (i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0) == ESP_OK)
+        {
+            i2c_err = 0;
+        }
+        else
+        {
+            ESP_LOGE("i2c", "i2c_driver_install error!");
+        }
 
         // init
         pcf8575_set(0);
@@ -466,7 +485,7 @@ void app_main()
         END_TRANSMIT | END_RADIO_SLEEP, /* The bits within the event group to wait for. */
         pdFALSE,                        /* BIT_0 & BIT_1 should be cleared before returning. */
         pdFALSE,
-        60000 / portTICK_PERIOD_MS);
+        90000 / portTICK_PERIOD_MS);
 
     xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
 

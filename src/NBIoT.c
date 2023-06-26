@@ -1050,10 +1050,9 @@ void radio_task(void *arg)
                         };
                     }
 #endif
-
                     vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
                 }
-            }
+            } // данные для передачи - закончились
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);
             break;
         }

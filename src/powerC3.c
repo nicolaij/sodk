@@ -51,6 +51,14 @@ const measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_1, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
     {.channel = ADC1_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
 };
+#elif ADC1_ONLY
+const measure_t chan_r[] = {
+    {.channel = ADC_CHANNEL_1, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC_CHANNEL_2, .max = 1000},   // Напряжение источника питания
+    {.channel = ADC_CHANNEL_4, .max = 299999}, //
+    {.channel = ADC_CHANNEL_0, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
+};
 #else
 const measure_t chan_r[] = {
     {.channel = ADC_CHANNEL_1, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
@@ -62,32 +70,6 @@ const measure_t chan_r[] = {
 #endif
 
 extern int BattLow;
-
-void adc_select(int chan)
-{
-    // printf("PATT1: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
-    // printf("M: %8X\n", ((chan_r[chan].channel << 2) | ADC_ATTEN_DB_11));
-
-    REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, (REG_READ(APB_SARADC_SAR_PATT_TAB1_REG) & ~(0b111111 << 18)) | (((chan_r[chan].channel << 2) | chan_r[chan].k) << 18));
-
-    // REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, 0x001e30cf);
-    // REG_WRITE(APB_SARADC_SAR_PATT_TAB1_REG, 0x004e30cf);
-    // printf("PATT1: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
-    // printf("PATT2: %8X\n", REG_READ(APB_SARADC_SAR_PATT_TAB2_REG));
-};
-
-int adc_cur_chan()
-{
-    return (REG_READ(APB_SARADC_SAR_PATT_TAB1_REG) >> 20) & 0b111;
-};
-
-void adc_info()
-{
-    printf("APB_SARADC_SAR_PATT_TAB1_REG: %8lX\n", REG_READ(APB_SARADC_SAR_PATT_TAB1_REG));
-    // printf("APB_SARADC_APB_ADC_CLKM_CONF_REG: %8X\n", REG_READ(APB_SARADC_APB_ADC_CLKM_CONF_REG));
-    // printf("APB_SARADC_APB_TSENS_CTRL_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL_REG));
-    // printf("APB_SARADC_APB_TSENS_CTRL2_REG: %8X\n", REG_READ(APB_SARADC_APB_TSENS_CTRL2_REG));
-};
 
 // return mV
 int volt(int adc)
@@ -163,7 +145,11 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 
     adc_continuous_config_t dig_cfg = {
         .sample_freq_hz = ADC_FREQ,
+#ifdef ADC1_ONLY
+        .conv_mode = ADC_CONV_SINGLE_UNIT_1,
+#else
         .conv_mode = ADC_CONV_BOTH_UNIT,
+#endif
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
     };
     adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
@@ -172,27 +158,31 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
     // Note: Все atten при инициализации должны быть одинаковые!!!???
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[0].channel;
-    adc_pattern[n].unit = 0;
+    adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[1].channel;
-    adc_pattern[n].unit = 1;
+#ifdef ADC1_ONLY
+    adc_pattern[n].unit = ADC_UNIT_1;
+#else
+    adc_pattern[n].unit = ADC_UNIT_2;
+#endif
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[2].channel;
-    adc_pattern[n].unit = 0;
+    adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[3].channel;
-    adc_pattern[n].unit = 0;
+    adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
     adc_pattern[n].atten = ADC_ATTEN_DB_11;
     adc_pattern[n].channel = chan_r[4].channel;
-    adc_pattern[n].unit = 0;
+    adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
 
@@ -353,8 +343,11 @@ void btn_task(void *arg)
                         if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel) // ПОВТОР пропускаем
                             p++;
                     }
-
-                    if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
+#ifdef ADC1_ONLY
+                    if (p->type2.unit == ADC_UNIT_1 && p->type2.channel == chan_r[1].channel)
+#else
+                    if (p->type2.unit == ADC_UNIT_2 && p->type2.channel == chan_r[1].channel)
+#endif
                     {
                         current_adc.U = p->type2.data;
                         p++;
@@ -418,7 +411,6 @@ void btn_task(void *arg)
             {
                 pcf8575_set(NB_PWR_CMDOFF);
             }
-
         }
         // end работа с терминалом
     }
@@ -518,12 +510,13 @@ void dual_adc(void *arg)
             uint32_t req = ADC_BUFFER;
             uint32_t ret = 0;
             ptrb = ptr;
-            // printf("read adc: ");
+            // printf("adc: ");
             while (req > 0)
             {
                 ESP_ERROR_CHECK(adc_continuous_read(handle, ptr, req, &ret, ADC_MAX_DELAY));
                 ptr = ptr + ret;
                 req = req - ret;
+
                 // printf(" %ld", ret);
             }
             // printf(" %ld\n", ret);
@@ -566,8 +559,12 @@ void dual_adc(void *arg)
                     if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel) // ПОВТОР пропускаем
                         p++;
                 }
+#ifdef ADC1_ONLY
+                if (p->type2.unit == ADC_UNIT_1 && p->type2.channel == chan_r[1].channel)
+#else
+                if (p->type2.unit == ADC_UNIT_2 && p->type2.channel == chan_r[1].channel)
+#endif
 
-                if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
                 {
                     current_adc.U = p->type2.data;
                     p++;
@@ -1048,7 +1045,11 @@ int getADC_Data(char *line, int data_pos, bool filter)
                 p++;
         }
 
-        if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
+#ifdef ADC1_ONLY
+        if (p->type2.unit == ADC_UNIT_1 && p->type2.channel == chan_r[1].channel)
+#else
+        if (p->type2.unit == ADC_UNIT_2 && p->type2.channel == chan_r[1].channel)
+#endif
         {
             current_adc.U = p->type2.data;
             p++;
