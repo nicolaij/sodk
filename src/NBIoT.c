@@ -13,6 +13,8 @@
 #include "bc26.h"
 #include "sim7600.h"
 
+#include <string.h>
+
 #define TX_GPIO 6
 #define RX_GPIO 7
 
@@ -598,6 +600,7 @@ esp_err_t esp_modem_dce_handle_response_ok_wait(modem_dce_t *dce, const char *li
     return err;
 }
 
+#if NB == 7020
 /**
  * @brief Handle response from AT+CBC (Get battery status)
  *
@@ -624,6 +627,7 @@ static esp_err_t sim7020_handle_cbc(modem_dce_t *dce, const char *line)
     }
     return err;
 }
+#endif
 
 void radio_task(void *arg)
 {
@@ -924,7 +928,6 @@ void radio_task(void *arg)
 #if NB == 26
             do
             {
-                // dce->sync(dce);
                 connectID[0] = -1;
                 esp_dce->priv_resource = connectID;
                 dce->handle_line = esp_modem_dce_handle_quistate;
@@ -934,23 +937,16 @@ void radio_task(void *arg)
 
                 if (connectID[0] == -1)
                 {
-                    ESP_LOGI(TAG, "Open port");
+                    //ESP_LOGI(TAG, "Open port");
                     esp_dce->priv_resource = "+QIOPEN: ";
                     dce->handle_line = esp_modem_dce_handle_response_ok_wait;
 
                     snprintf(tx_buf, sizeof(tx_buf), "AT+QIOPEN=1,0,\"%s\",\"%s\",%d,0,0\r", (proto == 0) ? "TCP" : "UDP", serverip, port);
                     // 2. It is recommended to wait for 60 seconds for URC response “+QIOPEN: <connectID>,<err>”.
                     dte->send_cmd(dte, tx_buf, 30000);
+
+                    vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
                 }
-
-                if (dce->state != MODEM_STATE_SUCCESS)
-                {
-                    vTaskDelay(500 / portTICK_PERIOD_MS);
-
-                    if (counter < 5) // рестартуем
-                        continue;
-                }
-
             } while (connectID[3] != 2 && counter-- > 0);
 #endif
 

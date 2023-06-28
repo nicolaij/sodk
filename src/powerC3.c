@@ -6,7 +6,9 @@
 #include "esp_partition.h"
 
 #include "driver/gpio.h"
-#include "esp_adc/adc_continuous.h"
+
+// #include "esp_adc/adc_continuous.h" //esp-idf v5
+#include "driver/adc.h" //esp-idf v4
 
 #include "esp_timer.h"
 
@@ -135,6 +137,7 @@ int kOm2chan(int adc_u, int adc_r)
     return r;
 };
 
+/*
 static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
     adc_continuous_handle_t handle = NULL;
@@ -191,6 +194,77 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
     ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
 
     *out_handle = handle;
+}
+*/
+
+static void continuous_adc_init()
+{
+    esp_err_t ret = ESP_OK;
+    assert(ret == ESP_OK);
+
+    adc_digi_init_config_t adc_dma_config = {
+        .max_store_buf_size = ADC_BUFFER * 20, // ??? подобрано по количеству ошибок
+        .conv_num_each_intr = ADC_BUFFER * 4,  // подобрано по количеству ошибок
+#ifdef ADC1_ONLY
+        .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[1].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
+        .adc2_chan_mask = 0,
+#else
+        .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
+        .adc2_chan_mask = (1 << chan_r[1].channel),
+#endif
+
+    };
+
+    ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
+
+    adc_digi_configuration_t dig_cfg = {
+        .conv_limit_en = false,
+        .conv_limit_num = 0,
+        .sample_freq_hz = ADC_FREQ,
+#ifdef ADC1_ONLY
+        .conv_mode = ADC_CONV_SINGLE_UNIT_1,
+#else
+        .conv_mode = ADC_CONV_BOTH_UNIT,
+#endif
+        .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
+    };
+
+    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
+    int n = 0;
+    // Note: Все atten при инициализации должны быть одинаковые!!!???
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[n].channel;
+    adc_pattern[n].unit = 0;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[n].channel;
+#ifdef ADC1_ONLY
+    adc_pattern[n].unit = 0;
+#else
+    adc_pattern[n].unit = 1;
+#endif
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[n].channel;
+    adc_pattern[n].unit = 0;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[n].channel;
+    adc_pattern[n].unit = 0;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+    n++;
+    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].channel = chan_r[n].channel;
+    adc_pattern[n].unit = 0;
+    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+    n++;
+
+    dig_cfg.pattern_num = n;
+    dig_cfg.adc_pattern = adc_pattern;
+    ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
 }
 
 static QueueHandle_t gpio_evt_queue = NULL;
@@ -344,9 +418,9 @@ void btn_task(void *arg)
                             p++;
                     }
 #ifdef ADC1_ONLY
-                    if (p->type2.unit == ADC_UNIT_1 && p->type2.channel == chan_r[1].channel)
+                    if (p->type2.unit == 0 && p->type2.channel == chan_r[1].channel)
 #else
-                    if (p->type2.unit == ADC_UNIT_2 && p->type2.channel == chan_r[1].channel)
+                    if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
 #endif
                     {
                         current_adc.U = p->type2.data;
@@ -441,8 +515,11 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
 #endif
 
-    adc_continuous_handle_t handle = NULL;
-    continuous_adc_init(&handle);
+    /*
+        adc_continuous_handle_t handle = NULL;
+        continuous_adc_init(&handle);
+    */
+    continuous_adc_init();
 
     // сбрасывем буфер
     bhead = 0;
@@ -477,8 +554,10 @@ void dual_adc(void *arg)
         int overload = 0;
 
         int64_t timeout = menu[0].val * 1000LL;
-
-        ESP_ERROR_CHECK(adc_continuous_start(handle));
+        /*
+                ESP_ERROR_CHECK(adc_continuous_start(handle));
+        */
+        ESP_ERROR_CHECK(adc_digi_start());
 
         int64_t t1 = esp_timer_get_time();
         // int64_t t2 = 0, t3 = 0, time_off = 0;
@@ -513,7 +592,8 @@ void dual_adc(void *arg)
             // printf("adc: ");
             while (req > 0)
             {
-                ESP_ERROR_CHECK(adc_continuous_read(handle, ptr, req, &ret, ADC_MAX_DELAY));
+                //ESP_ERROR_CHECK(adc_continuous_read(handle, ptr, req, &ret, ADC_MAX_DELAY));
+                ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, req, &ret, ADC_MAX_DELAY));
                 ptr = ptr + ret;
                 req = req - ret;
 
@@ -560,11 +640,10 @@ void dual_adc(void *arg)
                         p++;
                 }
 #ifdef ADC1_ONLY
-                if (p->type2.unit == ADC_UNIT_1 && p->type2.channel == chan_r[1].channel)
+                if (p->type2.unit == 0 && p->type2.channel == chan_r[1].channel)
 #else
-                if (p->type2.unit == ADC_UNIT_2 && p->type2.channel == chan_r[1].channel)
+                if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
 #endif
-
                 {
                     current_adc.U = p->type2.data;
                     p++;
@@ -643,7 +722,7 @@ void dual_adc(void *arg)
                     if (overvolt >= 3)
                     {
                         // ВЫРУБАЕМ
-                        gpio_set_level(ENABLE_PIN, 1);
+                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         block_power_off = blocks;
                     }
                 }
@@ -668,7 +747,7 @@ void dual_adc(void *arg)
 
             if (n == 0)
             {
-                ESP_LOGE("adc", "%4d %d\n", blocks, n);
+                ESP_LOGE("adc", "Data error: %4d %d\n", blocks, n);
                 continue;
             }
 
@@ -689,7 +768,7 @@ void dual_adc(void *arg)
                 if ((esp_timer_get_time() - t1) > timeout)
                 {
                     // ВЫРУБАЕМ
-                    gpio_set_level(ENABLE_PIN, 1);
+                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                     block_power_off = blocks;
                 }
                 else
@@ -699,7 +778,7 @@ void dual_adc(void *arg)
                     {
                         // прекращаем измерения
                         // ВЫРУБАЕМ
-                        gpio_set_level(ENABLE_PIN, 1);
+                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         if (terminal_mode >= 0)
                             printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[13].val);
                         BattLow += 100;
@@ -711,7 +790,7 @@ void dual_adc(void *arg)
                         if (BattLow > 10)
                         {
                             // ВЫРУБАЕМ
-                            gpio_set_level(ENABLE_PIN, 1);
+                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                             // прекращаем измерения
                             if (terminal_mode >= 0)
                                 printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[12].val, BattLow);
@@ -867,7 +946,7 @@ void dual_adc(void *arg)
                     if (blocks == block_power_off_step)
                     {
                         // ВЫРУБАЕМ
-                        gpio_set_level(ENABLE_PIN, 1);
+                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         block_power_off = blocks;
 
                         if (sum_adc.R1 / n < 4000) // НЕТ ПЕРЕГРУЗКИ измерительного канала
@@ -960,11 +1039,12 @@ void dual_adc(void *arg)
             blocks++;
         } while (blocks < 10000); // ограничение 10 сек
 
-        ESP_ERROR_CHECK(adc_continuous_stop(handle));
+        //ESP_ERROR_CHECK(adc_continuous_stop(handle));
         // ESP_ERROR_CHECK(adc_continuous_deinit(handle));
+        ESP_ERROR_CHECK(adc_digi_stop());
 
         // ВЫРУБАЕМ (на всякий случай)
-        gpio_set_level(ENABLE_PIN, 1);
+        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
 
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
@@ -1046,9 +1126,9 @@ int getADC_Data(char *line, int data_pos, bool filter)
         }
 
 #ifdef ADC1_ONLY
-        if (p->type2.unit == ADC_UNIT_1 && p->type2.channel == chan_r[1].channel)
+        if (p->type2.unit == 0 && p->type2.channel == chan_r[1].channel)
 #else
-        if (p->type2.unit == ADC_UNIT_2 && p->type2.channel == chan_r[1].channel)
+        if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
 #endif
         {
             current_adc.U = p->type2.data;

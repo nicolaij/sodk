@@ -13,7 +13,8 @@
 #include "esp_timer.h"
 
 #if CONFIG_IDF_TARGET_ESP32C3
-#include "driver/temperature_sensor.h"
+// #include "driver/temperature_sensor.h" //esp-idf v5
+#include "driver/temp_sensor.h" //esp-idf v4
 #endif
 
 // ##include "pcf8575.h"
@@ -195,7 +196,7 @@ void pcf8575_set(int channel_cmd)
     uint16_t port_val = ~(cmd_mask);
 
     ESP_ERROR_CHECK(i2c_master_write_to_device(0, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
-    //ESP_LOGV("pcf8575", "pcf8575 set OK");
+    // ESP_LOGV("pcf8575", "pcf8575 set OK");
 }
 
 void go_sleep(void)
@@ -336,16 +337,27 @@ void app_main()
 #if CONFIG_IDF_TARGET_ESP32C3
     // ESP_LOGI(TAG, "Initializing Temperature sensor");
 
-    temperature_sensor_handle_t temp_sensor = NULL;
-    temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-30, 50);
+    /*
+        //esp-idf v5
+        temperature_sensor_handle_t temp_sensor = NULL;
+        temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-30, 50);
 
-    ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor_config, &temp_sensor));
-    ESP_ERROR_CHECK(temperature_sensor_enable(temp_sensor));
+        ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor_config, &temp_sensor));
+        ESP_ERROR_CHECK(temperature_sensor_enable(temp_sensor));
 
-    ESP_ERROR_CHECK(temperature_sensor_get_celsius(temp_sensor, &tsens_out));
+        ESP_ERROR_CHECK(temperature_sensor_get_celsius(temp_sensor, &tsens_out));
 
-    ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
-    ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
+        ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
+        ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
+    */
+    // esp-idf v4
+    temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
+    temp_sensor_get_config(&temp_sensor);
+    //temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
+    temp_sensor.dac_offset = TSENS_DAC_L3;     /*!< offset =  1, measure range:-30℃ ~  50℃, error < 2℃. */;
+    temp_sensor_set_config(temp_sensor);
+    temp_sensor_start();
+    temp_sensor_read_celsius(&tsens_out);
 
     ESP_LOGI("TempSensor", "Temperature out celsius %.01f°C", tsens_out);
 #endif
