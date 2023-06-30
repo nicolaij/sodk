@@ -669,11 +669,8 @@ void radio_task(void *arg)
 
     strlcpy(modem_status, "<b style=\"color:red\">NB-IoT error!</b>", sizeof(modem_status));
 
-    // vTaskDelay(pdMS_TO_TICKS(600));
-    //  gpio_set_level(POWER_GPIO, 1);
-    //  vTaskDelay(pdMS_TO_TICKS(600));
-    //  gpio_set_level(POWER_GPIO, 0);
-    //  vTaskDelay(pdMS_TO_TICKS(400));
+    TickType_t error_timeout = 10000;
+    int error_timeout_counter = 0;
 
     modem_dce_t *dce = NULL;
 
@@ -700,6 +697,9 @@ void radio_task(void *arg)
             // dte->send_cmd(dte, "AT+CPIN?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
 
             /* Get Module name */
+
+            error_timeout_counter = 0;
+
             buf[0] = '\0';
             counter = 2;
             while (counter-- > 0)
@@ -937,7 +937,7 @@ void radio_task(void *arg)
 
                 if (connectID[0] == -1)
                 {
-                    //ESP_LOGI(TAG, "Open port");
+                    // ESP_LOGI(TAG, "Open port");
                     esp_dce->priv_resource = "+QIOPEN: ";
                     dce->handle_line = esp_modem_dce_handle_response_ok_wait;
 
@@ -1052,7 +1052,14 @@ void radio_task(void *arg)
             xEventGroupSetBits(ready_event_group, END_TRANSMIT);
             break;
         }
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        else
+        {
+            // увеличиваем паузу при отсутствии модуля
+            error_timeout = 10000 + error_timeout_counter / 3 * 10000;
+            error_timeout_counter++;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(error_timeout));
     }
 
     if (dce)
