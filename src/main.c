@@ -12,11 +12,6 @@
 
 #include "esp_timer.h"
 
-#if CONFIG_IDF_TARGET_ESP32C3
-// #include "driver/temperature_sensor.h" //esp-idf v5
-#include "driver/temp_sensor.h" //esp-idf v4
-#endif
-
 // ##include "pcf8575.h"
 #include "driver/i2c.h"
 #define PCF8575_I2C_ADDR_BASE 0x20
@@ -47,8 +42,8 @@ menu_t menu[] = {
     {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -7925, .min = -100000, .max = 100000},
     {.id = "kR2", .name = "коэф. R (ch 2)", .val = 319, .min = 1, .max = 100000},
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = -1729, .min = -100000, .max = 100000},
-    {.id = "kUbat", .name = "коэф. U bat", .val = 5005, .min = 1, .max = 10000},
-    {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -100000, .max = 100000},
+    {.id = "kUbat", .name = "коэф. U bat", .val = 5005, .min = 1, .max = 100000},
+    {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -1000000, .max = 1000000},
     {.id = "kU0", .name = "коэф. U петли", .val = 1611, .min = 1, .max = 10000}, /*10*/
     {.id = "offsU0", .name = "смещ. U петли", .val = -539, .min = -100000, .max = 100000},
     {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
@@ -141,10 +136,10 @@ int pcf8575_read(uint16_t bit)
 //  POWER_BIT - всегда, кроме когда каналы выбраны
 void pcf8575_set(int channel_cmd)
 {
-    ESP_LOGD("pcf8575", "pcf8575 set (%d)", channel_cmd);
-
     if (i2c_err)
         return;
+
+    ESP_LOGD("pcf8575", "pcf8575 set (%d)", channel_cmd);
 
     const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
     static uint16_t current_mask = 0;
@@ -231,29 +226,34 @@ void go_sleep(void)
     esp_deep_sleep_start();
 }
 
-void start_measure(int reasone)
+/*
+channel - номер канала, если 0 - то по списку menu[18]
+*/
+void start_measure(int channel)
 {
     cmd_t cmd;
-
 #if MULTICHAN
     int pos = 100000000;
-    while (pos > 0)
+    if (channel >= 1 && channel <= 4)
     {
-        cmd.channel = (menu[18].val % (pos * 10)) / pos;
-        if (cmd.channel > 0)
-        {
-            if (cmd.channel == 1)
-                cmd.cmd = reasone;
-            else
-                cmd.cmd = 0;
-
-            xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
-        }
-        pos /= 10;
+        cmd.channel = channel;
+        xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
     }
+    else
+    {
+        while (pos > 0)
+        {
+            cmd.channel = (menu[18].val % (pos * 10)) / pos;
+            if (cmd.channel > 0)
+            {
+                xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
+            }
+            pos /= 10;
+        }
+    }
+
 #else
     cmd.channel = 1;
-    cmd.cmd = reasone;
     xQueueSend(uicmd_queue, &cmd, (portTickType)0);
 #endif
 }
@@ -337,29 +337,40 @@ void app_main()
 #if CONFIG_IDF_TARGET_ESP32C3
     // ESP_LOGI(TAG, "Initializing Temperature sensor");
 
-    /*
-        //esp-idf v5
-        temperature_sensor_handle_t temp_sensor = NULL;
-        temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-30, 50);
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include "driver\temperature_sensor.h"
+    // esp-idf v5
+    temperature_sensor_handle_t temp_sensor = NULL;
+    temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
 
-        ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor_config, &temp_sensor));
-        ESP_ERROR_CHECK(temperature_sensor_enable(temp_sensor));
+    ESP_ERROR_CHECK(temperature_sensor_install(&temp_sensor_config, &temp_sensor));
+    ESP_ERROR_CHECK(temperature_sensor_enable(temp_sensor));
 
-        ESP_ERROR_CHECK(temperature_sensor_get_celsius(temp_sensor, &tsens_out));
+    ESP_ERROR_CHECK(temperature_sensor_get_celsius(temp_sensor, &tsens_out));
 
-        ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
-        ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
-    */
+    ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
+    ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
+#else
+    #include "driver/temp_sensor.h" 
     // esp-idf v4
     temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
-    temp_sensor_get_config(&temp_sensor);
-    //temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
-    temp_sensor.dac_offset = TSENS_DAC_L3;     /*!< offset =  1, measure range:-30℃ ~  50℃, error < 2℃. */;
-    temp_sensor_set_config(temp_sensor);
-    temp_sensor_start();
-    temp_sensor_read_celsius(&tsens_out);
+    // temp_sensor_get_config(&temp_sensor);
+    // temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
+    // temp_sensor.dac_offset = TSENS_DAC_L3; /*!< offset =  1, measure range:-30℃ ~  50℃, error < 2℃. */
+    ESP_ERROR_CHECK(temp_sensor_set_config(temp_sensor));
+    ESP_ERROR_CHECK(temp_sensor_start());
+    vTaskDelay(1); // Влияет на измерения
+    ESP_ERROR_CHECK(temp_sensor_read_celsius(&tsens_out));
+    ESP_ERROR_CHECK(temp_sensor_stop());
+#endif
 
-    ESP_LOGI("TempSensor", "Temperature out celsius %.01f°C", tsens_out);
+    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
+
+    char buf[32];
+    int l = snprintf((char *)buf, sizeof(buf), "Temperature:  %.01f°C", tsens_out);
+    xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
+    ESP_LOGI("temperature_sensor", "%s", buf);
+
 #endif
 
     // go_sleep();
@@ -435,8 +446,6 @@ void app_main()
     // ws_send_queue = xQueueCreate(10, WS_BUF_SIZE);
     // i2c_mux = xSemaphoreCreateMutex();
 
-    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
-
     ready_event_group = xEventGroupCreate();
 
 #ifdef RECEIVER_ONLY
@@ -458,11 +467,7 @@ void app_main()
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 5, NULL, 10, NULL);
 
-    int reasone = 0;
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_GPIO)
-        reasone = 2;
-
-    start_measure(reasone);
+    start_measure(0);
 
 #endif
 

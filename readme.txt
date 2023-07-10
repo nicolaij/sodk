@@ -9,4 +9,5 @@ r - print block result
 p - print ADC buffer
 1 - NBIot power ON
 2 - NBIot power off
+z - старт измерений
 

@@ -1,6 +1,8 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
+#include "esp_idf_version.h"
+
 // #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG - не работает
 #include "esp_log.h"
 

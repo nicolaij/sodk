@@ -7,8 +7,11 @@
 
 #include "driver/gpio.h"
 
-// #include "esp_adc/adc_continuous.h" //esp-idf v5
+#if ESP_IDF_VERSION_MAJOR >= 5
+#include "esp_adc/adc_continuous.h" //esp-idf v5
+#else
 #include "driver/adc.h" //esp-idf v4
+#endif
 
 #include "esp_timer.h"
 
@@ -76,32 +79,46 @@ extern int BattLow;
 // return mV
 int volt(int adc)
 {
-    if (adc < 3)
+    //    if (adc < 3)
+    //        return 0;
+    int res = (adc * menu[2].val) / 10 + menu[3].val;
+    if (res < 0)
         return 0;
-    return ((adc * menu[2].val) / 10 + menu[3].val);
+    else
+        return res;
 };
 
 // return mV
 int voltBatt(int adc)
 {
-    if (adc < 3)
+    //    if (adc < 3)
+    //        return 0;
+    int res = ((adc * menu[8].val) + menu[9].val) / 1000;
+    if (res < 0)
         return 0;
-    return ((adc * menu[8].val) + menu[9].val) / 1000;
+    else
+        return res;
 };
 
 // return mV
 int volt0(int adc)
 {
-    if (adc < 3)
+    //    if (adc < 3)
+    //        return 0;
+    int res = (adc * menu[10].val) / 10 + menu[11].val;
+    if (res < 0)
         return 0;
-    return ((adc * menu[10].val) / 10 + menu[11].val);
+    else
+        return res;
 };
 
 int current(int adc)
 {
-    if (adc < 3)
-        return 0;
-    return ((adc * menu[4].val) / 10 + menu[5].val);
+    //    if (adc < 3)
+    //        return 0;
+    int res = (adc * menu[4].val) / 10 + menu[5].val;
+
+    return res;
 };
 
 int kOm(int adc_u, int adc_r)
@@ -109,9 +126,10 @@ int kOm(int adc_u, int adc_r)
     int u = volt(adc_u);
     if (adc_u < 10 || u < 4000)
         return 0;
-    if (adc_r < 10)
-        return chan_r[0].max;
-    int r = u * 1000 / ((menu[4].val * adc_r) / 10 + menu[5].val);
+    int c = current(adc_r);
+    if (c <= 0)
+        return 0;
+    int r = u * 1000 / c;
     if (r > chan_r[0].max || r < 0)
         return chan_r[0].max;
     return r;
@@ -119,25 +137,29 @@ int kOm(int adc_u, int adc_r)
 
 int current0(int adc)
 {
-    if (adc < 3)
-        return 0;
-    return ((menu[6].val * adc) / 10 + menu[7].val);
+    //    if (adc < 3)
+    //        return 0;
+    int res = (menu[6].val * adc) / 10 + menu[7].val;
+
+    return res;
 };
 
 int kOm2chan(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
-    if ((adc_u) < 10 || u < 6000)
+    if ((adc_u) < 10 || u < 4000)
         return 0;
-    if ((adc_r) < 10)
-        return chan_r[2].max;
-    int r = u * 1000 / ((menu[6].val * adc_r) / 10 + menu[7].val);
+    int c = current0(adc_r);
+    if (c <= 0)
+        return 0;
+    int r = u * 1000 / c;
     if (r > chan_r[2].max || r < 0)
         return chan_r[2].max;
     return r;
 };
 
-/*
+#if ESP_IDF_VERSION_MAJOR >= 5
+
 static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
     adc_continuous_handle_t handle = NULL;
@@ -195,8 +217,7 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 
     *out_handle = handle;
 }
-*/
-
+#else
 static void continuous_adc_init()
 {
     esp_err_t ret = ESP_OK;
@@ -266,6 +287,7 @@ static void continuous_adc_init()
     dig_cfg.adc_pattern = adc_pattern;
     ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
 }
+#endif
 
 static QueueHandle_t gpio_evt_queue = NULL;
 
@@ -352,18 +374,18 @@ void btn_task(void *arg)
 
         // работа с терминалом
         int ch = EOF;
-        int cmd = EOF;
+        int key_code = EOF;
         do
         {
-            cmd = ch;
+            key_code = ch;
             ch = fgetc(stdin);
             vTaskDelay(10 / portTICK_PERIOD_MS);
         } while (ch != EOF);
 
-        if (cmd != EOF)
+        if (key_code != EOF)
         {
-            // ESP_LOGI("terminal", "read: %x", cmd);
-            if (cmd == '\n')
+            // ESP_LOGI("terminal", "read: %x", key_code);
+            if (key_code == '\n')
             {
                 if (terminal_mode == -1)
                 {
@@ -377,12 +399,12 @@ void btn_task(void *arg)
                 }
             }
 
-            if (cmd == 'w' || cmd == 'W') // stop wifi
+            if (key_code == 'w' || key_code == 'W') // stop wifi
             {
                 esp_wifi_stop();
             }
 
-            if (cmd == 'r' || cmd == 'R') // print block result
+            if (key_code == 'r' || key_code == 'R') // print block result
             {
                 unsigned int p = btail;
                 int i = 0;
@@ -394,7 +416,7 @@ void btn_task(void *arg)
                 } while (p != bhead);
             }
 
-            if (cmd == 'p' || cmd == 'P') // print ADC buffer
+            if (key_code == 'p' || key_code == 'P') // print ADC buffer
             {
                 adc_digi_output_data_t *p = (void *)buffer_ADC_copy;
                 adc_digi_output_data_t *p_good = p;
@@ -477,13 +499,25 @@ void btn_task(void *arg)
                 }
             }
 
-            if (cmd == '1')
+            if (key_code == '1')
             {
-                pcf8575_set(NB_PWR_CMDON);
+                start_measure(1);
             }
-            if (cmd == '2')
+            if (key_code == '2')
             {
-                pcf8575_set(NB_PWR_CMDOFF);
+                start_measure(2);
+            }
+            if (key_code == '3')
+            {
+                start_measure(3);
+            }
+            if (key_code == '4')
+            {
+                start_measure(4);
+            }
+            if (key_code == '0')
+            {
+                start_measure(0);
             }
         }
         // end работа с терминалом
@@ -493,7 +527,7 @@ void btn_task(void *arg)
 void dual_adc(void *arg)
 {
 
-    cmd_t cmd = {};
+    cmd_t cmd_power = {};
 
     // zero-initialize the config structure.
     gpio_config_t io_conf = {};
@@ -515,11 +549,12 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
 #endif
 
-    /*
-        adc_continuous_handle_t handle = NULL;
-        continuous_adc_init(&handle);
-    */
+#if ESP_IDF_VERSION_MAJOR >= 5
+    adc_continuous_handle_t handle = NULL;
+    continuous_adc_init(&handle);
+#else
     continuous_adc_init();
+#endif
 
     // сбрасывем буфер
     bhead = 0;
@@ -528,14 +563,14 @@ void dual_adc(void *arg)
     while (1)
     {
 
-        xQueueReceive(uicmd_queue, &cmd, portMAX_DELAY);
+        xQueueReceive(uicmd_queue, &cmd_power, portMAX_DELAY);
 
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
         // включаем канал
 
-        result.channel = cmd.channel;
+        result.channel = cmd_power.channel;
 
-        pcf8575_set(cmd.channel);
+        pcf8575_set(cmd_power.channel);
 
 #ifndef NODEBUG
         ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 1));
@@ -554,10 +589,12 @@ void dual_adc(void *arg)
         int overload = 0;
 
         int64_t timeout = menu[0].val * 1000LL;
-        /*
-                ESP_ERROR_CHECK(adc_continuous_start(handle));
-        */
+
+#if ESP_IDF_VERSION_MAJOR >= 5
+        ESP_ERROR_CHECK(adc_continuous_start(handle));
+#else
         ESP_ERROR_CHECK(adc_digi_start());
+#endif
 
         int64_t t1 = esp_timer_get_time();
         // int64_t t2 = 0, t3 = 0, time_off = 0;
@@ -574,7 +611,6 @@ void dual_adc(void *arg)
 
         int exp_filter_k = menu[20].val;
         int exp_filter[5] = {0, 0, 0, 0, 0};
-        // int sum_adc_full[5] = {0, 0, 0, 0, 0};
 
         // сумма на всем измерении для расчета среднего для калибровки
         calcdata_t sum_adc_full = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
@@ -592,8 +628,11 @@ void dual_adc(void *arg)
             // printf("adc: ");
             while (req > 0)
             {
-                //ESP_ERROR_CHECK(adc_continuous_read(handle, ptr, req, &ret, ADC_MAX_DELAY));
+#if ESP_IDF_VERSION_MAJOR >= 5
+                ESP_ERROR_CHECK(adc_continuous_read(handle, ptr, req, &ret, ADC_MAX_DELAY));
+#else
                 ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, req, &ret, ADC_MAX_DELAY));
+#endif
                 ptr = ptr + ret;
                 req = req - ret;
 
@@ -606,19 +645,16 @@ void dual_adc(void *arg)
                 if (BattLow > 10)
                     break;
 
-                // adc_select(0);
-                if ((esp_timer_get_time() - t1) < timeout)
-                {
-                    // включаем источник питания
+                t1 = esp_timer_get_time();
+
+                // включаем источник питания
+                if (timeout > 0)
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
-                    // printf("on\n");
-                    block_power_on = blocks;
-                }
+                // printf("on\n");
+                block_power_on = blocks;
             }
 
-            // int sum_adc[5] = {0, 0, 0, 0, 0};
             calcdata_t sum_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
-
             calcdata_t current_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
 
             // расчет среднего каждую 1 мс
@@ -704,7 +740,7 @@ void dual_adc(void *arg)
 
                 n++;
                 sum_adc.R1 += exp_filter[0];
-                sum_adc.U0 += exp_filter[1];
+                sum_adc.U += exp_filter[1];
                 sum_adc.R2 += exp_filter[2];
                 sum_adc.Ubatt += exp_filter[3];
                 sum_adc.U0 += exp_filter[4];
@@ -768,8 +804,16 @@ void dual_adc(void *arg)
                 if ((esp_timer_get_time() - t1) > timeout)
                 {
                     // ВЫРУБАЕМ
-                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                    block_power_off = blocks;
+                    if (timeout > 0)
+                    {
+                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        block_power_off = blocks;
+                    }
+                    else
+                    {
+                        block_power_off = 1000; // для калибровки
+                        block_result = 1000;
+                    }
                 }
                 else
                 {
@@ -926,6 +970,7 @@ void dual_adc(void *arg)
 
                     if (blocks == block_power_off_step)
                     {
+
                         if (compare_ok == false) // если небыло успешного сравнения
                         {
                             step_time_switch[result.channel]++;
@@ -945,6 +990,8 @@ void dual_adc(void *arg)
 
                     if (blocks == block_power_off_step)
                     {
+                        ESP_LOGV("compare off", "%d\n", blocks);
+
                         // ВЫРУБАЕМ
                         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         block_power_off = blocks;
@@ -972,7 +1019,9 @@ void dual_adc(void *arg)
                             block_result = blocks;
                         }
                         else
+                        {
                             overload = 1;
+                        }
                     }
                 }
 
@@ -1037,11 +1086,14 @@ void dual_adc(void *arg)
                 btail = (btail + 1) & (RINGBUFLEN - 1);
 
             blocks++;
-        } while (blocks < 10000); // ограничение 10 сек
+        } while (blocks < 9000); // ограничение 9 сек
 
-        //ESP_ERROR_CHECK(adc_continuous_stop(handle));
-        // ESP_ERROR_CHECK(adc_continuous_deinit(handle));
+#if ESP_IDF_VERSION_MAJOR >= 5
+        ESP_ERROR_CHECK(adc_continuous_stop(handle));
+        //ESP_ERROR_CHECK(adc_continuous_deinit(handle));
+#else
         ESP_ERROR_CHECK(adc_digi_stop());
+#endif
 
         // ВЫРУБАЕМ (на всякий случай)
         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
