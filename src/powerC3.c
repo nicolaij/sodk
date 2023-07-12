@@ -48,6 +48,8 @@ typedef struct
     int max;
 } measure_t;
 
+int terminal_mode = -1;
+
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
     {.channel = ADC1_CHANNEL_0, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
@@ -128,7 +130,7 @@ int kOm(int adc_u, int adc_r)
         return 0;
     int c = current(adc_r);
     if (c <= 0)
-        return 0;
+        return chan_r[0].max;;
     int r = u * 1000 / c;
     if (r > chan_r[0].max || r < 0)
         return chan_r[0].max;
@@ -151,7 +153,7 @@ int kOm2chan(int adc_u, int adc_r)
         return 0;
     int c = current0(adc_r);
     if (c <= 0)
-        return 0;
+        return chan_r[2].max;
     int r = u * 1000 / c;
     if (r > chan_r[2].max || r < 0)
         return chan_r[2].max;
@@ -297,7 +299,6 @@ static void IRAM_ATTR pcf_int_handler(void *arg)
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
-int terminal_mode = -1;
 void btn_task(void *arg)
 {
     gpio_config_t io_conf = {};
@@ -1122,7 +1123,6 @@ void dual_adc(void *arg)
         printf("%s\n", buf);
         printf("Avg ADC 0:%d, 1:%d, 2:%d, 3:%d, 4:%d\n", sum_adc_full.R1 / count_adc_full, sum_adc_full.U / count_adc_full, sum_adc_full.R2 / count_adc_full, sum_adc_full.Ubatt / count_adc_full, sum_adc_full.U0 / count_adc_full);
 
-        // printf("Time:\n3 block: %lld\n3 block off: %lld\noff: %lld\n", t2 - t1, t3 - t2, time_off - t1);
         vTaskDelay(10 / portTICK_PERIOD_MS);
     };
 }

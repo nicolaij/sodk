@@ -933,7 +933,8 @@ void radio_task(void *arg)
                 dce->handle_line = esp_modem_dce_handle_quistate;
                 dte->send_cmd(dte, "AT+QISTATE?\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
 
-                ESP_LOGI(TAG, "try %d, connectID: %d, %d, %d, %d", counter, connectID[0], connectID[1], connectID[2], connectID[3]);
+                if (terminal_mode > -1)
+                    ESP_LOGI(TAG, "try %d, connectID: %d, %d, %d, %d", counter, connectID[0], connectID[1], connectID[2], connectID[3]);
 
                 if (connectID[0] == -1)
                 {
@@ -987,7 +988,9 @@ void radio_task(void *arg)
             time_t n = time(0);
             struct tm *localtm = localtime(&n);
             strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
-            ESP_LOGI(TAG, "Current date/time: %s", datetime);
+
+            if (terminal_mode > -1)
+                ESP_LOGI(TAG, "Current date/time: %s", datetime);
 
             int len_data = 0;
             while (pdTRUE == xQueueReceive(send_queue, &result, 20000 / portTICK_PERIOD_MS))
