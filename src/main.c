@@ -28,6 +28,8 @@ uint8_t mac[6];
 TaskHandle_t xHandleRadio = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
+TaskHandle_t xHandleADC = NULL;
+TaskHandle_t xHandleBtn = NULL;
 
 int i2c_err = 1;
 
@@ -351,7 +353,7 @@ void app_main()
     ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
     ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
 #else
-    #include "driver/temp_sensor.h" 
+#include "driver/temp_sensor.h"
     // esp-idf v4
     temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
     // temp_sensor_get_config(&temp_sensor);
@@ -456,20 +458,23 @@ void app_main()
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 #else
-    xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, NULL);
+    xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, &xHandleBtn);
 
-    xTaskCreate(radio_task, "radio_task", 1024 * 6, NULL, 5, &xHandleRadio);
+    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
     {
         vTaskDelay(3000 / portTICK_PERIOD_MS);
     };
 
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 5, NULL, 10, NULL);
+    xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
 
     start_measure(0);
 
 #endif
+
+    if (terminal_mode > -1)
+        ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
 
     // BIT0 - окончание измерения
     // BIT1 - окончание передачи
@@ -497,6 +502,16 @@ void app_main()
             portMAX_DELAY);
     }
 
+    if (terminal_mode > -1)
+    {
+
+        ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
+
+        ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
+        ESP_LOGI("dual_adc", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
+        ESP_LOGI("radio_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleRadio));
+        ESP_LOGI("btn_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleBtn));
+    }
     xEventGroupWaitBits(
         ready_event_group,              /* The event group being tested. */
         END_TRANSMIT | END_RADIO_SLEEP, /* The bits within the event group to wait for. */
@@ -512,6 +527,9 @@ void app_main()
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
         2000 / portTICK_PERIOD_MS);
+
+    if (terminal_mode > -1)
+        ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
 
     // засыпаем...
     go_sleep();

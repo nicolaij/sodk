@@ -15,7 +15,7 @@
 #include "freertos/ringbuf.h"
 
 // размер кольцевого буфера (только степень 2)
-#define RINGBUFLEN 2048
+#define RINGBUFLEN 4096
 
 #define ADC_COUNT_READ 5
 #define ADC_FREQ 50000
@@ -153,13 +153,13 @@ void cur_time(char *buf);
 
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on, int channel);
 
-// void power_on(int channel_mask);
-// void power_off(void);
 void pcf8575_set(int channel_cmd);
 int pcf8575_read(uint16_t bit);
 
 void start_measure(int reasone);
 
+// получаем 1 строку данных data_pos
+// возвращает длину строки
 int getResult_Data(char *line, int data_pos);
 
 // получаем 1 строку данных data_pos

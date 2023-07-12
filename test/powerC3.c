@@ -35,7 +35,7 @@ unsigned int bhead = 0;
 unsigned int btail = 0;
 
 uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
-uint8_t buffer_ADC_copy[ADC_BUFFER * 300];
+uint8_t buffer_ADC_copy[ADC_BUFFER * 200];
 
 result_t result = {};
 
@@ -397,12 +397,6 @@ void btn_task(void *arg)
                     terminal_mode = -1;
                     ESP_LOGW("terminal", "Вывод в терминал отключен");
                 }
-
-                if (terminal_mode > -1)
-                {
-                    ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
-                    ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
-                }
             }
 
             if (key_code == 'w' || key_code == 'W') // stop wifi
@@ -416,7 +410,7 @@ void btn_task(void *arg)
                 int i = 0;
                 do
                 {
-                    printf(" %4d %4d %4d %4d\n", i, bufferR[p].R1, bufferR[p].U, bufferR[p].R2);
+                    printf("%4d %4d %4d %4d\n", i, bufferR[p].R1, bufferR[p].U, bufferR[p].R2);
                     p = (p + 1) & (RINGBUFLEN - 1);
                     i++;
                 } while (p != bhead);
@@ -496,7 +490,7 @@ void btn_task(void *arg)
                     fill_data_line = 0;
                     p_good = p;
 
-                    printf(" %4d %4d %4d %4d %4d %4d\t", n / ADC_COUNT_READ, current_adc.R1, current_adc.U, current_adc.R2, current_adc.Ubatt, current_adc.U0);
+                    printf("%4d %4d %4d %4d %4d %4d\t", n / ADC_COUNT_READ, current_adc.R1, current_adc.U, current_adc.R2, current_adc.Ubatt, current_adc.U0);
                     printf("= %6d %6d %6d\n", kOm(current_adc.U, current_adc.R1), volt(current_adc.U), kOm2chan(current_adc.U, current_adc.R2));
 
                     // избежать task_wdt: Task watchdog got triggered.
@@ -663,10 +657,18 @@ void dual_adc(void *arg)
             calcdata_t sum_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
             calcdata_t current_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
 
+            calcdata_t max_adc = {.R1 = INT32_MIN, .U = INT32_MIN, .R2 = INT32_MIN, .Ubatt = INT32_MIN, .U0 = INT32_MIN};
+            calcdata_t min_adc = {.R1 = INT32_MAX, .U = INT32_MAX, .R2 = INT32_MAX, .Ubatt = INT32_MAX, .U0 = INT32_MAX};
+
+            calcdata_t current_adcdata[10];
+            calcdata_t sortpos_adc[10] = {{0, 0, 0, 0, 0}, {1, 1, 1, 1, 1}, {2, 2, 2, 2, 2}, {3, 3, 3, 3, 3}, {4, 4, 4, 4, 4}, {5, 5, 5, 5, 5}, {6, 6, 6, 6, 6}, {7, 7, 7, 7, 7}, {8, 8, 8, 8, 8}, {9, 9, 9, 9, 9}};
+            int position_adcdata[10];
+
             // расчет среднего каждую 1 мс
             calcdata_t sum_avg01 = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
 
             int n = 0;
+            int count_adcdata = n;
             int overvolt = 0;
             uint8_t fill_data_line = 0;
             adc_digi_output_data_t *p = (void *)buffer_ADC;
@@ -722,9 +724,39 @@ void dual_adc(void *arg)
                     continue;
                 }
 
+                current_adcdata[n].R1 = current_adc.R1;
+                current_adcdata[n].R2 = current_adc.R2;
+                current_adcdata[n].U = current_adc.U;
+                current_adcdata[n].U0 = current_adc.U0;
+                current_adcdata[n].Ubatt = current_adc.Ubatt;
+
                 // все данные заполнены
                 fill_data_line = 0;
                 ptr_adc_begin = (void *)p;
+
+                // обрывок данных
+                size_t d = (ptr - ptr_adc_begin) % (ADC_COUNT_READ * sizeof(adc_digi_output_data_t));
+                if (d > 0)
+                {
+                    memcpy(buffer_ADC, ptr_adc_begin, d);
+                    ptr = buffer_ADC + d;
+                    // printf("Обрывок: %d\n", (int)d);
+                }
+                else
+                {
+                    ptr = buffer_ADC;
+                }
+
+                if (n == 0)
+                {
+                    ESP_LOGE("adc", "Data error: %4d %d\n", blocks, n);
+                    continue;
+                }
+
+                if (n != 10)
+                {
+                    // ESP_LOGE("adc", "%4d %d\n", blocks, n);
+                }
 
                 if (filter_initialize == true)
                 {
@@ -774,35 +806,13 @@ void dual_adc(void *arg)
                 }
             };
 
-            // обрывок данных
-            size_t d = (ptr - ptr_adc_begin) % (ADC_COUNT_READ * sizeof(adc_digi_output_data_t));
-            if (d > 0)
-            {
-                memcpy(buffer_ADC, ptr_adc_begin, d);
-                ptr = buffer_ADC + d;
-                // printf("Обрывок: %d\n", (int)d);
-            }
-            else
-            {
-                ptr = buffer_ADC;
-            }
+            count_adcdata = n;
 
-            if (n == 0)
-            {
-                ESP_LOGE("adc", "Data error: %4d %d\n", blocks, n);
-                continue;
-            }
-
-            if (n != 10)
-            {
-                // ESP_LOGE("adc", "%4d %d\n", blocks, n);
-            }
-
-            bufferR[bhead].U = sum_avg01.U / n / 1000;
-            bufferR[bhead].R1 = sum_avg01.R1 / n;
-            bufferR[bhead].R2 = sum_avg01.R2 / n;
-            bufferR[bhead].Ubatt = sum_avg01.Ubatt / n;
-            bufferR[bhead].U0 = sum_avg01.U0 / n / 1000;
+            bufferR[bhead].U = sum_avg01.U / count_adcdata / 1000;
+            bufferR[bhead].R1 = sum_avg01.R1 / count_adcdata;
+            bufferR[bhead].R2 = sum_avg01.R2 / count_adcdata;
+            bufferR[bhead].Ubatt = sum_avg01.Ubatt / count_adcdata;
+            bufferR[bhead].U0 = sum_avg01.U0 / count_adcdata / 1000;
 
             if (blocks > ON_BLOCK && block_power_off == 0)
             {
@@ -853,7 +863,7 @@ void dual_adc(void *arg)
             // считаем среднее
             if (blocks > ON_BLOCK)
             {
-                count_adc_full += n; // сумма на всем интервале измерения для калибровки
+                count_adc_full += count_adcdata; // сумма на всем интервале измерения для калибровки
                 sum_adc_full.R1 += sum_adc.R1;
                 sum_adc_full.R2 += sum_adc.R2;
                 sum_adc_full.U += sum_adc.U;
@@ -1002,7 +1012,7 @@ void dual_adc(void *arg)
                         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         block_power_off = blocks;
 
-                        if (sum_adc.R1 / n < 4000) // НЕТ ПЕРЕГРУЗКИ измерительного канала
+                        if (sum_adc.R1 / count_adcdata < 4000) // НЕТ ПЕРЕГРУЗКИ измерительного канала
                             block_result = blocks;
                         else
                             overload = 1;
@@ -1012,7 +1022,7 @@ void dual_adc(void *arg)
                 {
                     if (block_result == 0) // была перегрузка или отключились по timeout
                     {
-                        if (sum_adc.R1 / n < 4000)
+                        if (sum_adc.R1 / count_adcdata < 4000)
                         {
                             if (overload > 0) // при выходе из перегрузки среднее не действительно
                             {
@@ -1041,9 +1051,9 @@ void dual_adc(void *arg)
                 // запоминаем результат
                 if (blocks == block_result)
                 {
-                    result.adc0 = sum_adc.R1 / n;
-                    result.adc1 = sum_adc.U / n;
-                    result.adc2 = sum_adc.R2 / n;
+                    result.adc0 = sum_adc.R1 / count_adcdata;
+                    result.adc1 = sum_adc.U / count_adcdata;
+                    result.adc2 = sum_adc.R2 / count_adcdata;
 
                     if (result.adc0 > 100) //~ 150 uA
                     {

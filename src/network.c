@@ -798,9 +798,9 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
             {
                 ESP_LOGE(TAG, "File sending failed!");
                 /* Abort sending file */
-                httpd_resp_sendstr_chunk(req, NULL);
+                ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_sendstr_chunk(req, NULL));
                 /* Respond with 500 Internal Server Error */
-                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+                ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file"));
                 return ESP_FAIL;
             }
 
@@ -811,11 +811,19 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
 
     if (l > 0)
     {
-        httpd_resp_send_chunk(req, buf, l);
+        if (httpd_resp_send_chunk(req, buf, l) != ESP_OK)
+        {
+            ESP_LOGE(TAG, "File sending failed!");
+            /* Abort sending file */
+            ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_sendstr_chunk(req, NULL));
+            /* Respond with 500 Internal Server Error */
+            ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file"));
+            return ESP_FAIL;
+        }
     }
 
     /* Respond with an empty chunk to signal HTTP response completion */
-    httpd_resp_send_chunk(req, NULL, 0);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
 }
 
@@ -966,7 +974,7 @@ static httpd_handle_t start_webserver(void)
         return server;
     }
 
-    ESP_LOGI(TAG, "Error starting server!");
+    ESP_LOGE(TAG, "Error starting server!");
     return NULL;
 }
 
