@@ -138,7 +138,7 @@ esp_err_t get_network_status(modem_dce_t *dce, uint32_t *n, uint32_t *stat)
     uint32_t *resource[2] = {n, stat};
     esp_dce->priv_resource = resource;
     dce->handle_line = esp_modem_dce_handle_cereg;
-    DCE_CHECK(dte->send_cmd(dte, "AT+CEREG?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK, "send command failed", err);
+    DCE_CHECK(dte->send_cmd(dte, "AT+CEREG?\r", MODEM_COMMAND_TIMEOUT_DEFAULT * 2) == ESP_OK, "send command failed", err);
     DCE_CHECK(dce->state == MODEM_STATE_SUCCESS, "inquire EPS Network Registration Status", err);
     ESP_LOGD(DCE_TAG, "inquire EPS Network Registration Status ok");
     return ESP_OK;

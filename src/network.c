@@ -1062,7 +1062,8 @@ void wifi_task(void *arg)
             need_ws_send = false;
         }
         */
-        if (esp_timer_get_time() - timeout_begin > StoUS(menu[15].val))
+       //WiFi timeout
+        if (esp_timer_get_time() - timeout_begin > StoUS(menu[21].val))
         {
             esp_wifi_stop();
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);

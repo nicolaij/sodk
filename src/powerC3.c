@@ -7,9 +7,10 @@
 
 #include "driver/gpio.h"
 
-#if ESP_IDF_VERSION_MAJOR >= 5
+#if ESP_IDF_VERSION_MAJOR == 5
 #include "esp_adc/adc_continuous.h" //esp-idf v5
-#else
+#endif
+#if ESP_IDF_VERSION_MAJOR == 4
 #include "driver/adc.h" //esp-idf v4
 #endif
 
@@ -24,8 +25,8 @@
 
 // RTC_DATA_ATTR int last_chan;
 
-RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0};
-RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0};
+RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 const int step_time_const[] = {0, 125, 250, 500, 1000, 2000, 4000, 8000};
 #define STEP_TIME_COUNT 3
 
@@ -48,7 +49,11 @@ typedef struct
     int max;
 } measure_t;
 
+#ifdef NODEBUG
 int terminal_mode = -1;
+#else
+int terminal_mode = 1;
+#endif
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
@@ -91,11 +96,23 @@ int volt(int adc)
 };
 
 // return mV
+int voltlv(int adc)
+{
+    //    if (adc < 3)
+    //        return 0;
+    int res = (adc * menu[4].val) / 10 + menu[5].val;
+    if (res < 0)
+        return 0;
+    else
+        return res;
+};
+
+// return mV
 int voltBatt(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = ((adc * menu[8].val) + menu[9].val) / 1000;
+    int res = ((adc * menu[14].val) + menu[15].val) / 1000;
     if (res < 0)
         return 0;
     else
@@ -114,11 +131,23 @@ int volt0(int adc)
         return res;
 };
 
+// return mV
+int volt0lv(int adc)
+{
+    //    if (adc < 3)
+    //        return 0;
+    int res = (adc * menu[12].val) / 10 + menu[13].val;
+    if (res < 0)
+        return 0;
+    else
+        return res;
+};
+
 int current(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (adc * menu[4].val) / 10 + menu[5].val;
+    int res = (adc * menu[6].val) / 10 + menu[7].val;
 
     return res;
 };
@@ -130,18 +159,34 @@ int kOm(int adc_u, int adc_r)
         return 0;
     int c = current(adc_r);
     if (c <= 0)
-        return chan_r[0].max;;
+        return chan_r[0].max;
+
     int r = u * 1000 / c;
     if (r > chan_r[0].max || r < 0)
         return chan_r[0].max;
     return r;
 };
 
-int current0(int adc)
+int kOmlv(int adc_u, int adc_r)
+{
+    int u = voltlv(adc_u);
+    if (adc_u < 10 || u < 4000)
+        return 0;
+    int c = current(adc_r);
+    if (c <= 0)
+        return chan_r[0].max;
+
+    int r = u * 1000 / c;
+    if (r > chan_r[0].max || r < 0)
+        return chan_r[0].max;
+    return r;
+};
+
+int current2chan(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (menu[6].val * adc) / 10 + menu[7].val;
+    int res = (menu[8].val * adc) / 10 + menu[9].val;
 
     return res;
 };
@@ -151,7 +196,7 @@ int kOm2chan(int adc_u, int adc_r)
     int u = volt(adc_u);
     if ((adc_u) < 10 || u < 4000)
         return 0;
-    int c = current0(adc_r);
+    int c = current2chan(adc_r);
     if (c <= 0)
         return chan_r[2].max;
     int r = u * 1000 / c;
@@ -160,6 +205,19 @@ int kOm2chan(int adc_u, int adc_r)
     return r;
 };
 
+int kOm2chanlv(int adc_u, int adc_r)
+{
+    int u = voltlv(adc_u);
+    if ((adc_u) < 10 || u < 4000)
+        return 0;
+    int c = current2chan(adc_r);
+    if (c <= 0)
+        return chan_r[2].max;
+    int r = u * 1000 / c;
+    if (r > chan_r[2].max || r < 0)
+        return chan_r[2].max;
+    return r;
+};
 #if ESP_IDF_VERSION_MAJOR >= 5
 
 static void continuous_adc_init(adc_continuous_handle_t *out_handle)
@@ -310,9 +368,7 @@ void btn_task(void *arg)
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
-#if MULTICHAN
-    // result.input = pcf8575_read(IN1_BIT);
-
+    // Interrupt from PCF8575
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
     io_conf.pin_bit_mask = BIT64(INT_PIN);
     io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
@@ -325,16 +381,17 @@ void btn_task(void *arg)
     gpio_install_isr_service(0);
     // hook isr handler for specific gpio pin
     gpio_isr_handler_add(INT_PIN, pcf_int_handler, (void *)INT_PIN);
-#endif
 
     int old_btn_state = gpio_get_level(BTN_PIN);
     int new_btn_state = old_btn_state;
 
     int d_in = -1;
 
+    int terminal_nbiot = 0;
+
     while (1)
     {
-#if MULTICHAN
+
         uint32_t io_num;
         if (xQueueReceive(gpio_evt_queue, &io_num, 100 / portTICK_PERIOD_MS) == pdTRUE)
         {
@@ -348,9 +405,6 @@ void btn_task(void *arg)
                 d_in = result.input;
             }
         }
-#else
-        vTaskDelay(pdMS_TO_TICKS(100));
-#endif
 
         new_btn_state = gpio_get_level(BTN_PIN);
         if (old_btn_state != new_btn_state)
@@ -366,7 +420,7 @@ void btn_task(void *arg)
                 else
                 {
                     d_in = -1;
-                    start_measure(1);
+                    // start_measure(1);
                 }
             }
 
@@ -508,23 +562,28 @@ void btn_task(void *arg)
 
             if (key_code == '1')
             {
-                start_measure(1);
+                start_measure(1, 0);
             }
             if (key_code == '2')
             {
-                start_measure(2);
+                start_measure(2, 0);
             }
             if (key_code == '3')
             {
-                start_measure(3);
+                start_measure(3, 0);
             }
             if (key_code == '4')
             {
-                start_measure(4);
+                start_measure(4, 0);
             }
             if (key_code == '0')
             {
-                start_measure(0);
+                start_measure(0, 0);
+            }
+
+            if (key_code == 'a' || key_code == 'A') // AT terminal NBIot
+            {
+                terminal_nbiot = 1;
             }
         }
         // end работа с терминалом
@@ -549,13 +608,6 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
 
-#ifndef NODEBUG
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pin_bit_mask = BIT64(LED_PIN);
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
-    ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
-#endif
-
 #if ESP_IDF_VERSION_MAJOR >= 5
     adc_continuous_handle_t handle = NULL;
     continuous_adc_init(&handle);
@@ -574,14 +626,16 @@ void dual_adc(void *arg)
 
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
         // включаем канал
-
-        result.channel = cmd_power.channel;
-
+        if (cmd_power.channel > 10) // LV
+        {
+            result.channel = cmd_power.channel - 6; // 1..4, 5..8(LV)
+        }
+        else
+        {
+            result.channel = cmd_power.channel;
+        }
         pcf8575_set(cmd_power.channel);
 
-#ifndef NODEBUG
-        ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 1));
-#endif
         uint8_t *ptr = (uint8_t *)buffer_ADC;
         uint8_t *ptr_adc_begin = (uint8_t *)buffer_ADC;
         // uint8_t *ptre = (uint8_t *)buffer_ADC;
@@ -612,11 +666,11 @@ void dual_adc(void *arg)
         calcdata_t bref = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
         uint16_t avg_len = 0;
-        int compare_counter = menu[16].val;
+        int compare_counter = menu[22].val;
         const int compare_delta = 1;
         bool compare_ok = false;
 
-        int exp_filter_k = menu[20].val;
+        const int exp_filter_k = menu[25].val;
         int exp_filter[5] = {0, 0, 0, 0, 0};
 
         // сумма на всем измерении для расчета среднего для калибровки
@@ -655,7 +709,7 @@ void dual_adc(void *arg)
                 t1 = esp_timer_get_time();
 
                 // включаем источник питания
-                if (timeout > 0)
+                if (timeout > 0 && (cmd_power.channel < 10))
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
                 // printf("on\n");
                 block_power_on = blocks;
@@ -752,12 +806,25 @@ void dual_adc(void *arg)
                 sum_adc.Ubatt += exp_filter[3];
                 sum_adc.U0 += exp_filter[4];
 
-                sum_avg01.R1 += kOm(exp_filter[1], exp_filter[0]);
-                sum_avg01.R2 += kOm2chan(exp_filter[1], exp_filter[2]);
-                int v = volt(exp_filter[1]);
-                sum_avg01.U += v;
+                int v = 0;
                 sum_avg01.Ubatt += voltBatt(exp_filter[3]);
-                sum_avg01.U0 += volt0(exp_filter[4]);
+
+                if (cmd_power.channel > 10)
+                {
+                    sum_avg01.R1 += kOmlv(exp_filter[1], exp_filter[0]);
+                    sum_avg01.R2 += kOm2chanlv(exp_filter[1], exp_filter[2]);
+                    v = voltlv(exp_filter[1]);
+                    sum_avg01.U += v;
+                    sum_avg01.U0 += volt0lv(exp_filter[4]);
+                }
+                else
+                {
+                    sum_avg01.R1 += kOm(exp_filter[1], exp_filter[0]);
+                    sum_avg01.R2 += kOm2chan(exp_filter[1], exp_filter[2]);
+                    v = volt(exp_filter[1]);
+                    sum_avg01.U += v;
+                    sum_avg01.U0 += volt0(exp_filter[4]);
+                }
 
                 if (v > menu[1].val * 1000)
                 {
@@ -825,17 +892,17 @@ void dual_adc(void *arg)
                 else
                 {
                     // отсечка по напряжению, Ubatt
-                    if (bufferR[bhead].Ubatt < menu[13].val)
+                    if (bufferR[bhead].Ubatt < menu[17].val)
                     {
                         // прекращаем измерения
                         // ВЫРУБАЕМ
                         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         if (terminal_mode >= 0)
-                            printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[13].val);
+                            printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[17].val);
                         BattLow += 100;
                         break;
                     }
-                    else if (bufferR[bhead].Ubatt < menu[12].val)
+                    else if (bufferR[bhead].Ubatt < menu[16].val)
                     {
                         BattLow += 1;
                         if (BattLow > 10)
@@ -844,7 +911,7 @@ void dual_adc(void *arg)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                             // прекращаем измерения
                             if (terminal_mode >= 0)
-                                printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[12].val, BattLow);
+                                printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[16].val, BattLow);
                             break;
                         }
                     }
@@ -867,7 +934,7 @@ void dual_adc(void *arg)
                 sum_bavg.U0 += bufferR[bhead].U0;
                 avg_len++;
 
-                if (avg_len > menu[17].val)
+                if (avg_len > menu[23].val)
                 {
                     avg_len--;
                     unsigned int delpos = (bhead - avg_len) & (RINGBUFLEN - 1);
@@ -930,7 +997,7 @@ void dual_adc(void *arg)
                     bref.R2 = r2;
                     bref.U = u;
                     bref.U0 = u0;
-                    compare_counter = menu[16].val;
+                    compare_counter = menu[22].val;
                 }
 
                 // окончание измерений
@@ -1058,6 +1125,9 @@ void dual_adc(void *arg)
                     result.U0 = u0;
                     result.time = block_result;
 
+                    if (result.channel > 4)
+                        result.channel = cmd_power.channel;
+
                     xQueueSend(send_queue, (void *)&result, (TickType_t)0);
                 }
             }
@@ -1072,7 +1142,7 @@ void dual_adc(void *arg)
                         memcpy(&buffer_ADC_copy[ADC_BUFFER * counter_block_ADC_buffer], ptrb, ADC_BUFFER);
                         counter_block_ADC_buffer++;
                     }
-                    else if (block_result > 0 && blocks > (block_result + menu[19].val))
+                    else if (block_result > 0 && blocks > (block_result + menu[24].val))
                     {
                         // заканчиваем измерение
                         break;
@@ -1110,14 +1180,11 @@ void dual_adc(void *arg)
         {
             pcf8575_set(POWER_CMDOFF);
             xEventGroupSetBits(ready_event_group, END_MEASURE);
-#ifndef NODEBUG
-            ESP_ERROR_CHECK(gpio_set_level(LED_PIN, 0));
-#endif
         }
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, result.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
+        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, cmd_power.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
         xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
 
         printf("%s\n", buf);
@@ -1156,7 +1223,7 @@ int getADC_Data(char *line, int data_pos, bool filter)
     char *pos = line;
     int l = 0;
 
-    int exp_filter_k = menu[20].val;
+    const int exp_filter_k = menu[25].val;
     static int exp_filter[5] = {0, 0, 0, 0, 0};
 
     calcdata_t current_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};

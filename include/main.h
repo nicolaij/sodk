@@ -24,8 +24,8 @@
 #define RESET_BIT 0x1
 #define SLEEP_BIT 0x2
 
-#define ENABLE_PIN 19
-#define LED_PIN 18
+#define ENABLE_PIN GPIO_NUM_19
+
 #define BTN_PIN GPIO_NUM_9
 
 #ifdef ADC1_ONLY
@@ -34,21 +34,20 @@
     #define INT_PIN GPIO_NUM_2
 #endif
 
-#if MULTICHAN
-#define I2C_MASTER_SDA_PIN 8
-#define I2C_MASTER_SCL_PIN 10
+#define I2C_MASTER_SDA_PIN GPIO_NUM_8
+#define I2C_MASTER_SCL_PIN GPIO_NUM_10
 #define POWER_BIT 8
 #define NB_PWR_BIT 9
 #define PSM_BIT 10
+#define LV_BIT 13
 #define IN1_BIT 15
-#define NB_RESET_BIT 12
-#endif
+//#define NB_RESET_BIT 12
 
-#define NB_PWR_CMDON 100
-#define NB_PWR_CMDOFF 101
-#define POWER_CMDON 102
-#define POWER_CMDOFF 103
-#define NB_RESET_CMD 105
+#define NB_PWR_CMDON 200
+#define NB_PWR_CMDOFF 201
+#define POWER_CMDON 202
+#define POWER_CMDOFF 203
+#define NB_RESET_CMD 205
 
 #define WS_BUF_SIZE 160
 
@@ -71,7 +70,7 @@ typedef struct
 
 typedef struct
 {
-    int channel; // канал измерения
+    int channel; // канал измерения 1..4(HV), 5..8(LV)
     int adc0;
     int adc1;
     int adc2;
@@ -99,11 +98,11 @@ typedef struct
     const char id[10];
     const char name[48];
     int32_t val;
-    int32_t min;
-    int32_t max;
+    const int32_t min;
+    const int32_t max;
 } menu_t;
 
-extern menu_t menu[22];
+extern menu_t menu[26];
 
 extern QueueHandle_t uicmd_queue;
 extern QueueHandle_t send_queue;
@@ -156,7 +155,7 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
 void pcf8575_set(int channel_cmd);
 int pcf8575_read(uint16_t bit);
 
-void start_measure(int reasone);
+void start_measure(int reasone, int lv);
 
 // получаем 1 строку данных data_pos
 // возвращает длину строки

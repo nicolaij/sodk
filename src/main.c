@@ -12,11 +12,18 @@
 
 #include "esp_timer.h"
 
-// ##include "pcf8575.h"
 #include "driver/i2c.h"
 #define PCF8575_I2C_ADDR_BASE 0x20
 
 #include <string.h>
+
+#if ESP_IDF_VERSION_MAJOR == 5
+#include "driver/temperature_sensor.h"
+#endif
+
+#if ESP_IDF_VERSION_MAJOR == 4
+#include "driver/temp_sensor.h"
+#endif
 
 RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR int BattLow = 0; // Счетчик разряда батареи
@@ -40,24 +47,28 @@ menu_t menu[] = {
     {.id = "Volt", .name = "Ограничение U", .val = 600, .min = 0, .max = 1000},
     {.id = "kU", .name = "коэф. U", .val = 1690, .min = 1, .max = 10000},
     {.id = "offsU", .name = "смещ. U", .val = -7794, .min = -100000, .max = 100000},
+    {.id = "kUlv", .name = "коэф. U низ.", .val = 1690, .min = 1, .max = 10000},
+    {.id = "offsUlv", .name = "смещ. U низ.", .val = -7794, .min = -100000, .max = 100000},
     {.id = "kR1", .name = "коэф. R (ch 1)", .val = 15000, .min = 1, .max = 100000},
     {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -7925, .min = -100000, .max = 100000},
     {.id = "kR2", .name = "коэф. R (ch 2)", .val = 319, .min = 1, .max = 100000},
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = -1729, .min = -100000, .max = 100000},
-    {.id = "kUbat", .name = "коэф. U bat", .val = 5005, .min = 1, .max = 100000},
-    {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -1000000, .max = 1000000},
     {.id = "kU0", .name = "коэф. U петли", .val = 1611, .min = 1, .max = 10000}, /*10*/
     {.id = "offsU0", .name = "смещ. U петли", .val = -539, .min = -100000, .max = 100000},
+    {.id = "kU0lv", .name = "коэф. U петли низ.", .val = 1611, .min = 1, .max = 10000},
+    {.id = "offsU0lv", .name = "смещ. U петли низ.", .val = -539, .min = -100000, .max = 100000},
+    {.id = "kUbat", .name = "коэф. U bat", .val = 5005, .min = 1, .max = 100000},
+    {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -1000000, .max = 1000000},
     {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
     {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
-    {.id = "Trepeat", .name = "Интервал измер.", .val = 60, .min = 1, .max = 1000000},
+    {.id = "Trepeat", .name = "Интервал измер. низ.", .val = 60, .min = 1, .max = 1000000},
+    {.id = "Krepeathv", .name = "Множ. измер. выс.", .val = 60, .min = 1, .max = 1000000},
+    {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999}, /*20*/
     {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 1, .max = 10000},
     {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 1000},
-    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000}, /*17*/
-    {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999},
+    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "blocks", .name = "График после результ.", .val = 100, .min = 0, .max = 2000},
     {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
-    {.id = "Kfilter2", .name = "", .val = 10, .min = 1, .max = 100},
 };
 
 QueueHandle_t uicmd_queue;
@@ -143,7 +154,7 @@ void pcf8575_set(int channel_cmd)
 
     ESP_LOGD("pcf8575", "pcf8575 set (%d)", channel_cmd);
 
-    const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
+    // const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
     static uint16_t current_mask = 0;
 
     uint16_t cmd_mask = 0;
@@ -175,17 +186,71 @@ void pcf8575_set(int channel_cmd)
         cmd_mask = current_mask;
         break;
     case NB_RESET_CMD:
-        cmd_mask = current_mask | BIT(NB_RESET_BIT);
+        // cmd_mask = current_mask | BIT(NB_RESET_BIT);
         break;
     case POWER_CMDOFF:
-        current_mask |= BIT(POWER_BIT);
-        current_mask &= ~(0x0f); // очищаем каналы
+        current_mask |= BIT(POWER_BIT); // Off HV power
+        current_mask &= ~(0xff);        // очищаем каналы 0..7 bit
         cmd_mask = current_mask;
         break;
-    default: // каналы
-        current_mask &= ~BIT(POWER_BIT);
-        current_mask &= ~(0x0f); // очищаем каналы
-        current_mask |= pcf_output_map[channel_cmd];
+    case 1:
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask |= BIT(6);          // ADC R
+        current_mask |= BIT(7);          // Uout + U0    default: // каналы
+        cmd_mask = current_mask;
+        break;
+    case 11:                             // LV Measure
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask |= BIT(LV_BIT);
+        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
+        current_mask |= BIT(6);  // ADC R
+        current_mask |= BIT(7);  // Uout + U0    default: // каналы
+        cmd_mask = current_mask;
+        break;
+    case 2:
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask |= BIT(4);          // ADC R
+        current_mask |= BIT(5);          // Uout + U0    default: // каналы
+        cmd_mask = current_mask;
+        break;
+    case 12:                             // LV Measure
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask |= BIT(LV_BIT);
+        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
+        current_mask |= BIT(4);  // ADC R
+        current_mask |= BIT(5);  // Uout + U0    default: // каналы
+        cmd_mask = current_mask;
+        break;
+    case 3:
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask |= BIT(2);          // ADC R
+        current_mask |= BIT(3);          // Uout + U0    default: // каналы
+        cmd_mask = current_mask;
+        break;
+    case 13:                             // LV Measure
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask |= BIT(LV_BIT);
+        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
+        current_mask |= BIT(2);  // ADC R
+        current_mask |= BIT(3);  // Uout + U0    default: // каналы
+        cmd_mask = current_mask;
+        break;
+    case 4:
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask |= BIT(0);          // ADC R
+        current_mask |= BIT(1);          // Uout + U0    default: // каналы
+        cmd_mask = current_mask;
+        break;
+    case 14:                             // LV Measure
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        current_mask |= BIT(LV_BIT);
+        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
+        current_mask |= BIT(0);  // ADC R
+        current_mask |= BIT(1);  // Uout + U0    default: // каналы
         cmd_mask = current_mask;
         break;
     }
@@ -203,14 +268,12 @@ void go_sleep(void)
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
 #endif
 
-#if MULTICHAN
     ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
-#endif
 
     ESP_LOGW("main", "Go sleep...");
     fflush(stdout);
 
-    uint64_t time_in_us = StoUS(menu[14].val);
+    uint64_t time_in_us = StoUS(menu[18].val);
 
     if (BattLow > 200)
     {
@@ -222,42 +285,52 @@ void go_sleep(void)
     }
 
     // коррекция на время работы
-    time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[14].val));
+    time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[18].val));
 
     esp_sleep_enable_timer_wakeup(time_in_us);
     esp_deep_sleep_start();
 }
 
 /*
-channel - номер канала, если 0 - то по списку menu[18]
+channel - номер канала, если 0 - то по списку menu[20]
 */
-void start_measure(int channel)
+void start_measure(int channel, int lv_only)
 {
     cmd_t cmd;
-#if MULTICHAN
-    int pos = 100000000;
-    if (channel >= 1 && channel <= 4)
+    int pos;
+    if (channel >= 1 && channel <= 14)
     {
         cmd.channel = channel;
         xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
     }
     else
     {
-        while (pos > 0)
+        pos = 100000000;
+        while (pos > 0) // First LV
         {
-            cmd.channel = (menu[18].val % (pos * 10)) / pos;
+            cmd.channel = (menu[20].val % (pos * 10)) / pos;
             if (cmd.channel > 0)
             {
+                cmd.channel += 10;
                 xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
             }
             pos /= 10;
+        };
+
+        if (lv_only != 1)
+        {
+            pos = 100000000;
+            while (pos > 0) // HV
+            {
+                cmd.channel = (menu[20].val % (pos * 10)) / pos;
+                if (cmd.channel > 0)
+                {
+                    xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
+                }
+                pos /= 10;
+            };
         }
     }
-
-#else
-    cmd.channel = 1;
-    xQueueSend(uicmd_queue, &cmd, (portTickType)0);
-#endif
 }
 
 void app_main()
@@ -315,7 +388,7 @@ void app_main()
         break;
     }
 
-    ++bootCount;
+    bootCount++;
     //  "Количество загрузок: "
     ESP_LOGI("main", "Boot number: %d", bootCount);
 
@@ -337,11 +410,9 @@ void app_main()
     ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
 #if CONFIG_IDF_TARGET_ESP32C3
-    // ESP_LOGI(TAG, "Initializing Temperature sensor");
+    ESP_LOGD("main", "Initializing Temperature sensor");
 
-#if ESP_IDF_VERSION_MAJOR >= 5
-#include "driver\temperature_sensor.h"
-    // esp-idf v5
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
     temperature_sensor_handle_t temp_sensor = NULL;
     temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
 
@@ -352,9 +423,8 @@ void app_main()
 
     ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
     ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
-#else
-#include "driver/temp_sensor.h"
-    // esp-idf v4
+#endif
+#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
     temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
     // temp_sensor_get_config(&temp_sensor);
     // temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
@@ -389,13 +459,10 @@ void app_main()
 
     read_nvs_menu();
 
-#if MULTICHAN
-
     gpio_config_t io_conf = {};
 
-    // disable interrupt
+    // Check I2C bus is connected
     io_conf.intr_type = GPIO_INTR_DISABLE;
-    // set as output mode
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = (1 << I2C_MASTER_SDA_PIN) | (1 << I2C_MASTER_SCL_PIN);
     io_conf.pull_down_en = 0;
@@ -412,8 +479,6 @@ void app_main()
             .mode = I2C_MODE_MASTER,
             .sda_io_num = I2C_MASTER_SDA_PIN,
             .scl_io_num = I2C_MASTER_SCL_PIN,
-            //.sda_pullup_en = GPIO_PULLUP_DISABLE, //GPIO_PULLUP_ENABLE,
-            //.scl_pullup_en = GPIO_PULLUP_DISABLE, //GPIO_PULLUP_ENABLE,
             .sda_pullup_en = GPIO_PULLUP_ENABLE,
             .scl_pullup_en = GPIO_PULLUP_ENABLE,
             .master.clk_speed = 400000,
@@ -438,9 +503,7 @@ void app_main()
         ESP_LOGE("i2c", "i2c bus error state!");
     }
 
-#endif
-
-    uicmd_queue = xQueueCreate(10, sizeof(cmd_t));
+    uicmd_queue = xQueueCreate(16, sizeof(cmd_t));
     // adc1_queue = xQueueCreate(2, sizeof(result_t));
 
     send_queue = xQueueCreate(10, sizeof(result_t));
@@ -469,7 +532,14 @@ void app_main()
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
 
-    start_measure(0);
+    if (bootCount % menu[19].val == 1)
+    {
+        start_measure(0, 0);
+    }
+    else
+    {
+        start_measure(0, 1); // LV only
+    }
 
 #endif
 

@@ -19,7 +19,6 @@
 #define RX_GPIO 7
 
 char apn[32] = {"mogenergo"};
-
 char serverip[16] = {"10.179.40.11"};
 
 uint16_t port = 48884;
@@ -42,7 +41,7 @@ struct stringreturn_t
     char *s;
 };
 
-static char tx_buf[WS_BUF_SIZE * 2];
+static char tx_buf[512];
 static char buf[WS_BUF_SIZE];
 
 int read_nvs_nbiot()
@@ -418,7 +417,7 @@ esp_err_t esp_modem_dce_handle_response_cgpaddr(modem_dce_t *dce, const char *li
     return err;
 }
 
-esp_err_t esp_modem_dce_handle_response_cgpaddr1(modem_dce_t *dce, const char *line)
+esp_err_t esp_modem_dce_handle_response_cgpaddr7020(modem_dce_t *dce, const char *line)
 {
     esp_err_t err = ESP_FAIL;
     esp_modem_dce_t *esp_dce = __containerof(dce, esp_modem_dce_t, parent);
@@ -674,11 +673,24 @@ void radio_task(void *arg)
 
     modem_dce_t *dce = NULL;
 
+    gpio_config_t io_conf = {};
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_OUTPUT_OD;
+    io_conf.pin_bit_mask = (1 << GPIO_NUM_18);
+    io_conf.pull_down_en = 0;
+    io_conf.pull_up_en = 0;
+    // configure GPIO with the given settings
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+
     while (1)
     {
+        ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_18, 0)); // для отладки отдельно от базовой платы
         pcf8575_set(NB_PWR_CMDON);
+
         vTaskDelay(1000 / portTICK_PERIOD_MS); // ждем включения NBIOT модуля
+
         pcf8575_set(NB_PWR_CMDOFF);
+        ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_18, 1)); // для отладки отдельно от базовой платы
 
         vTaskDelay(100 / portTICK_PERIOD_MS);
 
@@ -709,7 +721,7 @@ void radio_task(void *arg)
                 if (dte->send_cmd(dte, "AT+CGMM\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
                     if (dce->state == MODEM_STATE_SUCCESS)
                     {
-                        snprintf(dce->name, MODEM_MAX_NAME_LENGTH, "%s", d.s);
+                        strncpy(dce->name, d.s, MODEM_MAX_NAME_LENGTH - 1);
                         break;
                     }
 
@@ -773,17 +785,23 @@ void radio_task(void *arg)
             // ждем регистрации в сети
             uint32_t nn = 0;
             uint32_t stat = 0;
-            int i = 10;
+            int i = 20;
             do
             {
-                vTaskDelay(200 * (10 - i) / portTICK_PERIOD_MS);
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-                get_network_status(dce, &nn, &stat);
+                esp_err_t err = ESP_FAIL;
+                err = get_network_status(dce, &nn, &stat);
                 dce->stat = stat;
 
-            } while (i-- > 0 && stat != 1);
+                if (err == ESP_FAIL)
+                {
+                    dce->handle_line = esp_modem_dce_handle_response_default;
+                    dte->send_cmd(dte, "AT\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                }
+            } while (i-- > 0 && stat != MODEM_STATE_SUCCESS);
 
-            if (i > 0) // региcтрация успешна
+            if (stat == 1) // Registered, home network
             {
                 /* Get operator name */
                 esp_modem_dce_get_operator_name(dce);
@@ -794,28 +812,23 @@ void radio_task(void *arg)
             }
             else
             {
-                ESP_LOGE(TAG, "Not registered on network");
-                strlcpy(modem_status, "<b style=\"color:red\">NB-IoT Not registered on network</b>", sizeof(modem_status));
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                ESP_LOGE(TAG, "EPS registration status: %" PRIu32 "", stat);
+                snprintf(modem_status, sizeof(modem_status), "<b style=\"color:red\">EPS registration status: %" PRIu32 "</b>", stat);
                 break; // STOP NBIOT
             }
 
             /* Get signal quality */
             uint32_t rssi;
             uint32_t ber;
-            counter = 2;
-            while (counter-- > 0)
+            counter = 3;
+            do
             {
                 rssi = 0;
                 ber = 0;
-                if (dce->get_signal_quality(dce, &rssi, &ber) == ESP_OK)
-                    if (dce->state == MODEM_STATE_SUCCESS)
-                    {
-                        break;
-                    }
-
+                dce->get_signal_quality(dce, &rssi, &ber);
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
-            }
+
+            } while (counter-- > 0 && dce->state != MODEM_STATE_SUCCESS);
 
             /* Get battery voltage */
             uint32_t voltage = 0, bcs = 0, bcl = 0;
@@ -829,7 +842,15 @@ void radio_task(void *arg)
 #endif
 #if NB == 26
             /* Get battery voltage */
-            ESP_ERROR_CHECK_WITHOUT_ABORT(dce->get_battery_status(dce, &bcs, &bcl, &voltage));
+            counter = 3;
+            do
+            {
+                rssi = 0;
+                ber = 0;
+                dce->get_battery_status(dce, &bcs, &bcl, &voltage);
+                vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+
+            } while (counter-- > 0 && dce->state != MODEM_STATE_SUCCESS);
             // ESP_LOGI(TAG, "Battery voltage: %d mV", voltage);
 #endif
 
@@ -860,21 +881,17 @@ void radio_task(void *arg)
             while (counter-- > 0)
             {
 #if NB == 7020
-                dce->handle_line = esp_modem_dce_handle_response_cgpaddr1;
+                dce->handle_line = esp_modem_dce_handle_response_cgpaddr7020;
                 if (dte->send_cmd(dte, "AT+CGPADDR=1\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
-                    if (dce->state == MODEM_STATE_SUCCESS)
-                    {
-                        break;
-                    }
-#endif
-#if NB == 26
+#else
                 dce->handle_line = esp_modem_dce_handle_response_cgpaddr;
                 if (dte->send_cmd(dte, "AT+CGPADDR?\r", MODEM_COMMAND_TIMEOUT_DEFAULT) == ESP_OK)
+#endif
                     if (dce->state == MODEM_STATE_SUCCESS)
                     {
                         break;
                     }
-#endif
+
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
             }
             snprintf(modem_status, sizeof(modem_status), "Operator:%s, IMEI:%s, IMSI:%s, rssi:%ddBm, ber:%lu, IP:%ld.%ld.%ld.%ld, Voltage:%lumV", dce->oper, dce->imei, dce->imsi, (int)rssi * 2 + -113, ber, pdpaddr[0], pdpaddr[1], pdpaddr[2], pdpaddr[3], voltage);
@@ -886,8 +903,11 @@ void radio_task(void *arg)
 
             // vTaskDelay(5000 / portTICK_PERIOD_MS);
 
-            counter = 10;
 
+            //dce->handle_line = esp_modem_dce_handle_response_all_ok;
+            //dte->send_cmd(dte, "AT+CSOSENDFLAG=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+            counter = 10;
             // wait connect
 
 #if NB == 7020
@@ -946,7 +966,7 @@ void radio_task(void *arg)
                     // 2. It is recommended to wait for 60 seconds for URC response “+QIOPEN: <connectID>,<err>”.
                     dte->send_cmd(dte, tx_buf, 30000);
 
-                    vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
+                    vTaskDelay((MODEM_COMMAND_TIMEOUT_DEFAULT + 100 * (10 - counter)) / portTICK_PERIOD_MS); // pause 500...1500 ms
                 }
             } while (connectID[3] != 2 && counter-- > 0);
 #endif
@@ -979,7 +999,8 @@ void radio_task(void *arg)
                         struct timeval now = {.tv_sec = t};
                         settimeofday(&now, NULL);
                         // printf("The local date and time is: %s", asctime(&tm));
-                        break;
+                        if (tm.tm_year < 123)
+                            break;
                     }
 
                 vTaskDelay(MODEM_COMMAND_TIMEOUT_DEFAULT / portTICK_PERIOD_MS);
@@ -989,8 +1010,7 @@ void radio_task(void *arg)
             struct tm *localtm = localtime(&n);
             strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
 
-            if (terminal_mode > -1)
-                ESP_LOGI(TAG, "Current date/time: %s", datetime);
+            ESP_LOGI(TAG, "Current date/time: %s", datetime);
 
             int len_data = 0;
             while (pdTRUE == xQueueReceive(send_queue, &result, 20000 / portTICK_PERIOD_MS))
@@ -1008,23 +1028,18 @@ void radio_task(void *arg)
                 {
 #if NB == 7020
                     esp_dce->priv_resource = "SEND:";
-                    dce->handle_line = esp_modem_dce_handle_response_all_ok;
-                    int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSOSEND=0,0,");
+                    dce->handle_line = esp_modem_dce_handle_response_all_ok; // dont wait end transmit
+                    int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSOSEND=0,%d,", len_data * 2);
                     char *pos = tx_buf + len_cmd;
+                    //*pos++ = '\"';
                     int i = 0;
-                    *pos++ = '\"';
-                    // Экранируем \"
+                    // to HEX
                     for (i = 0; i < len_data; i++)
                     {
-                        if (buf[i] == '\"')
-                        {
-                            *pos++ = '\\';
-                        }
-
-                        *pos++ = buf[i];
+                        snprintf(pos, 3, "%02x", buf[i]);
+                        pos = pos + 2;
                     }
-
-                    *pos++ = '\"';
+                    //*pos++ = '\"';
                     *pos++ = '\r';
                     *pos++ = '\0';
 
@@ -1033,8 +1048,34 @@ void radio_task(void *arg)
                         if (dce->state == MODEM_STATE_SUCCESS)
                         {
                             break;
-                        };
+                        }
                     }
+
+                    // dce->handle_line = esp_modem_dce_handle_response_all_ok;
+                    // dte->send_cmd(dte, "AT+CSOERR\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                    // dte->send_cmd(dte, "AT+CSOASK=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+
+                    /*
+                                        esp_dce->priv_resource = ">";
+                                        dce->handle_line = esp_modem_dce_handle_response_ok_wait;
+                                        int len_cmd = snprintf(tx_buf, sizeof(tx_buf), "AT+CSODSEND=0,%d\r", len_data);
+
+                                        if (dte->send_cmd(dte, tx_buf, 10000) == ESP_OK)
+                                        {
+                                                //dte->send_wait(dte, buf, len_data, "DATA ACCEPT", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                                                dte->send_data(dte, buf, len_data);
+                                                dte->send_wait(dte, "\r", len_data, "DATA ACCEPT", 10000);
+
+                                            if (dce->state == MODEM_STATE_SUCCESS)
+                                            {
+                                                break;
+                                            }
+                                        }
+                                        dce->handle_line = esp_modem_dce_handle_response_all_ok;
+                                        // dte->send_cmd(dte, "AT+CSOERR\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                                        dte->send_cmd(dte, "AT+CSOASK=0\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
+                    */
+
 #endif
 #if NB == 26
                     esp_dce->priv_resource = "SEND";
