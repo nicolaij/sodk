@@ -40,6 +40,7 @@
 #define NB_PWR_BIT 9
 #define PSM_BIT 10
 #define LV_BIT 13
+#define LV_POWER_BIT 14
 #define IN1_BIT 15
 //#define NB_RESET_BIT 12
 
@@ -48,6 +49,8 @@
 #define POWER_CMDON 202
 #define POWER_CMDOFF 203
 #define NB_RESET_CMD 205
+#define LV_CMDON 206
+#define LV_CMDOFF 207
 
 #define WS_BUF_SIZE 160
 

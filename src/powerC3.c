@@ -25,9 +25,9 @@
 
 // RTC_DATA_ATTR int last_chan;
 
-RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-const int step_time_const[] = {0, 125, 250, 500, 1000, 2000, 4000, 8000};
+RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+const int step_time_const[] = {0, 50, 125, 250, 500, 1000, 2000, 4000, 8000};
 #define STEP_TIME_COUNT 3
 
 // кольцевой буфер для визуализации
@@ -47,6 +47,7 @@ typedef struct
     adc_channel_t channel;
     adc_atten_t k;
     int max;
+    int maxlv;
 } measure_t;
 
 #ifdef NODEBUG
@@ -65,11 +66,11 @@ const measure_t chan_r[] = {
 };
 #elif ADC1_ONLY
 const measure_t chan_r[] = {
-    {.channel = ADC_CHANNEL_1, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC_CHANNEL_2, .max = 1000},   // Напряжение источника питания
-    {.channel = ADC_CHANNEL_4, .max = 299999}, //
-    {.channel = ADC_CHANNEL_0, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
-    {.channel = ADC_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
+    {.channel = ADC_CHANNEL_1, .max = 6999, .maxlv = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC_CHANNEL_2, .max = 1000, .maxlv = 1000},   // Напряжение источника питания
+    {.channel = ADC_CHANNEL_4, .max = 299999, .maxlv = 9999}, //
+    {.channel = ADC_CHANNEL_0, .max = 15000, .maxlv = 15000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC_CHANNEL_3, .max = 1000, .maxlv = 15},     // Напряжение 0 проводника
 };
 #else
 const measure_t chan_r[] = {
@@ -174,11 +175,11 @@ int kOmlv(int adc_u, int adc_r)
         return 0;
     int c = current(adc_r);
     if (c <= 0)
-        return chan_r[0].max;
+        return chan_r[0].maxlv;
 
     int r = u * 1000 / c;
-    if (r > chan_r[0].max || r < 0)
-        return chan_r[0].max;
+    if (r > chan_r[0].maxlv || r < 0)
+        return chan_r[0].maxlv;
     return r;
 };
 
@@ -212,10 +213,10 @@ int kOm2chanlv(int adc_u, int adc_r)
         return 0;
     int c = current2chan(adc_r);
     if (c <= 0)
-        return chan_r[2].max;
+        return chan_r[2].maxlv;
     int r = u * 1000 / c;
-    if (r > chan_r[2].max || r < 0)
-        return chan_r[2].max;
+    if (r > chan_r[2].maxlv || r < 0)
+        return chan_r[2].maxlv;
     return r;
 };
 #if ESP_IDF_VERSION_MAJOR >= 5
@@ -365,7 +366,7 @@ void btn_task(void *arg)
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = BIT64(BTN_PIN);
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
     // Interrupt from PCF8575
@@ -420,7 +421,8 @@ void btn_task(void *arg)
                 else
                 {
                     d_in = -1;
-                    // start_measure(1);
+                    // pcf8575_set(11);
+                    start_measure(1, 1);
                 }
             }
 
@@ -435,10 +437,12 @@ void btn_task(void *arg)
             key_code = ch;
             ch = fgetc(stdin);
             vTaskDelay(10 / portTICK_PERIOD_MS);
+
         } while (ch != EOF);
 
         if (key_code != EOF)
         {
+
             // ESP_LOGI("terminal", "read: %x", key_code);
             if (key_code == '\n')
             {
@@ -555,7 +559,7 @@ void btn_task(void *arg)
                     printf("= %6d %6d %6d\n", kOm(current_adc.U, current_adc.R1), volt(current_adc.U), kOm2chan(current_adc.U, current_adc.R2));
 
                     // избежать task_wdt: Task watchdog got triggered.
-                    if ((n / ADC_COUNT_READ) % 500 == 0)
+                    if ((n / ADC_COUNT_READ) % 100 == 0)
                         vTaskDelay(1);
                 }
             }
@@ -576,14 +580,51 @@ void btn_task(void *arg)
             {
                 start_measure(4, 0);
             }
+            if (key_code == '5')
+            {
+                start_measure(1, 1);
+            }
+            if (key_code == '6')
+            {
+                start_measure(2, 1);
+            }
+            if (key_code == '7')
+            {
+                start_measure(3, 1);
+            }
+            if (key_code == '8')
+            {
+                start_measure(4, 1);
+            }
             if (key_code == '0')
             {
                 start_measure(0, 0);
             }
 
-            if (key_code == 'a' || key_code == 'A') // AT terminal NBIot
+            if (key_code == 37) // Open LV mode for testing Shift-5
             {
-                terminal_nbiot = 1;
+                pcf8575_set(11);
+                pcf8575_set(LV_CMDON);
+            }
+            if (key_code == 94) // Open LV mode for testing Shift-6
+            {
+                pcf8575_set(12);
+                pcf8575_set(LV_CMDON);
+            }
+            if (key_code == 38) // Open LV mode for testing Shift-7
+            {
+                pcf8575_set(13);
+                pcf8575_set(LV_CMDON);
+            }
+            if (key_code == 42) // Open LV mode for testing Shift-8
+            {
+                pcf8575_set(14);
+                pcf8575_set(LV_CMDON);
+            }
+
+            if (key_code == '0')
+            {
+                start_measure(0, 0);
             }
         }
         // end работа с терминалом
@@ -634,6 +675,7 @@ void dual_adc(void *arg)
         {
             result.channel = cmd_power.channel;
         }
+
         pcf8575_set(cmd_power.channel);
 
         uint8_t *ptr = (uint8_t *)buffer_ADC;
@@ -709,8 +751,14 @@ void dual_adc(void *arg)
                 t1 = esp_timer_get_time();
 
                 // включаем источник питания
-                if (timeout > 0 && (cmd_power.channel < 10))
-                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                if (timeout > 0)
+                {
+                    if (cmd_power.channel < 10)
+                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                    else
+                        pcf8575_set(LV_CMDON);
+                }
+
                 // printf("on\n");
                 block_power_on = blocks;
             }
@@ -806,8 +854,8 @@ void dual_adc(void *arg)
                 sum_adc.Ubatt += exp_filter[3];
                 sum_adc.U0 += exp_filter[4];
 
-                int v = 0;
-                sum_avg01.Ubatt += voltBatt(exp_filter[3]);
+                int v = voltBatt(exp_filter[3]);
+                sum_avg01.Ubatt += v;
 
                 if (cmd_power.channel > 10)
                 {
@@ -832,7 +880,11 @@ void dual_adc(void *arg)
                     if (overvolt >= 3)
                     {
                         // ВЫРУБАЕМ
-                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        if (cmd_power.channel < 10)
+                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        else
+                            pcf8575_set(LV_CMDOFF);
+
                         block_power_off = blocks;
                     }
                 }
@@ -866,11 +918,11 @@ void dual_adc(void *arg)
                 // ESP_LOGE("adc", "%4d %d\n", blocks, n);
             }
 
-            bufferR[bhead].U = sum_avg01.U / n / 1000;
+            bufferR[bhead].U = sum_avg01.U / n;
             bufferR[bhead].R1 = sum_avg01.R1 / n;
             bufferR[bhead].R2 = sum_avg01.R2 / n;
             bufferR[bhead].Ubatt = sum_avg01.Ubatt / n;
-            bufferR[bhead].U0 = sum_avg01.U0 / n / 1000;
+            bufferR[bhead].U0 = sum_avg01.U0 / n;
 
             if (blocks > ON_BLOCK && block_power_off == 0)
             {
@@ -880,7 +932,11 @@ void dual_adc(void *arg)
                     // ВЫРУБАЕМ
                     if (timeout > 0)
                     {
-                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        if (cmd_power.channel < 10)
+                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        else
+                            pcf8575_set(LV_CMDOFF);
+
                         block_power_off = blocks;
                     }
                     else
@@ -896,7 +952,11 @@ void dual_adc(void *arg)
                     {
                         // прекращаем измерения
                         // ВЫРУБАЕМ
-                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        if (cmd_power.channel < 10)
+                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        else
+                            pcf8575_set(LV_CMDOFF);
+
                         if (terminal_mode >= 0)
                             printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[17].val);
                         BattLow += 100;
@@ -908,7 +968,10 @@ void dual_adc(void *arg)
                         if (BattLow > 10)
                         {
                             // ВЫРУБАЕМ
-                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                            if (cmd_power.channel < 10)
+                                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                            else
+                                pcf8575_set(LV_CMDOFF);
                             // прекращаем измерения
                             if (terminal_mode >= 0)
                                 printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[16].val, BattLow);
@@ -918,8 +981,8 @@ void dual_adc(void *arg)
                 }
             }
 
-            // считаем среднее
-            if (blocks > ON_BLOCK)
+            // считаем среднее для калибровки
+            if (blocks > ON_BLOCK + 10)
             {
                 count_adc_full += n; // сумма на всем интервале измерения для калибровки
                 sum_adc_full.R1 += sum_adc.R1;
@@ -927,7 +990,11 @@ void dual_adc(void *arg)
                 sum_adc_full.U += sum_adc.U;
                 sum_adc_full.Ubatt += sum_adc.Ubatt;
                 sum_adc_full.U0 += sum_adc.U0;
+            };
 
+            // считаем среднее
+            if (blocks > ON_BLOCK)
+            {
                 sum_bavg.R1 += bufferR[bhead].R1;
                 sum_bavg.R2 += bufferR[bhead].R2;
                 sum_bavg.U += bufferR[bhead].U;
@@ -1067,7 +1134,11 @@ void dual_adc(void *arg)
                         ESP_LOGV("compare off", "%d\n", blocks);
 
                         // ВЫРУБАЕМ
-                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        if (cmd_power.channel < 10)
+                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                        else
+                            pcf8575_set(LV_CMDOFF);
+
                         block_power_off = blocks;
 
                         if (sum_adc.R1 / n < 4000) // НЕТ ПЕРЕГРУЗКИ измерительного канала
@@ -1173,7 +1244,10 @@ void dual_adc(void *arg)
 #endif
 
         // ВЫРУБАЕМ (на всякий случай)
-        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+        if (cmd_power.channel < 10)
+            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+        else
+            pcf8575_set(LV_CMDOFF);
 
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
@@ -1184,7 +1258,7 @@ void dual_adc(void *arg)
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%d,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%d,\"in\":%d", block_power_on, block_result, data_errors, cmd_power.channel, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input);
+        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"in\":%d", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.input);
         xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
 
         printf("%s\n", buf);

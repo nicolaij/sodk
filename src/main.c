@@ -156,7 +156,6 @@ void pcf8575_set(int channel_cmd)
 
     // const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
     static uint16_t current_mask = 0;
-
     uint16_t cmd_mask = 0;
 
     switch (channel_cmd)
@@ -185,72 +184,80 @@ void pcf8575_set(int channel_cmd)
 #endif
         cmd_mask = current_mask;
         break;
+    case LV_CMDON:
+        current_mask |= BIT(LV_POWER_BIT);
+        cmd_mask = current_mask;
+        break;
+    case LV_CMDOFF:
+        current_mask &= ~BIT(LV_POWER_BIT);
+        cmd_mask = current_mask;
+        break;
     case NB_RESET_CMD:
         // cmd_mask = current_mask | BIT(NB_RESET_BIT);
         break;
     case POWER_CMDOFF:
         current_mask |= BIT(POWER_BIT); // Off HV power
-        current_mask &= ~(0xff);        // очищаем каналы 0..7 bit
+        current_mask &= ~(0x60ff);      // очищаем каналы 0..7 bit + LV
         cmd_mask = current_mask;
         break;
     case 1:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(6);          // ADC R
-        current_mask |= BIT(7);          // Uout + U0    default: // каналы
+        current_mask |= BIT(7);          // Uout + U0
         cmd_mask = current_mask;
         break;
     case 11:                             // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask |= BIT(LV_BIT);
-        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
-        current_mask |= BIT(6);  // ADC R
-        current_mask |= BIT(7);  // Uout + U0    default: // каналы
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(6);          // ADC R
+        current_mask |= BIT(7);          // Uout + U0
         cmd_mask = current_mask;
         break;
     case 2:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(4);          // ADC R
-        current_mask |= BIT(5);          // Uout + U0    default: // каналы
+        current_mask |= BIT(5);          // Uout + U0
         cmd_mask = current_mask;
         break;
     case 12:                             // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask |= BIT(LV_BIT);
-        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
-        current_mask |= BIT(4);  // ADC R
-        current_mask |= BIT(5);  // Uout + U0    default: // каналы
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(4);          // ADC R
+        current_mask |= BIT(5);          // Uout + U0
         cmd_mask = current_mask;
         break;
     case 3:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(2);          // ADC R
-        current_mask |= BIT(3);          // Uout + U0    default: // каналы
+        current_mask |= BIT(3);          // Uout + U0
         cmd_mask = current_mask;
         break;
     case 13:                             // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask |= BIT(LV_BIT);
-        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
-        current_mask |= BIT(2);  // ADC R
-        current_mask |= BIT(3);  // Uout + U0    default: // каналы
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(2);          // ADC R
+        current_mask |= BIT(3);          // Uout + U0
         cmd_mask = current_mask;
         break;
     case 4:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask &= ~(0xff);         // очищаем каналы 0..7 bit
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(0);          // ADC R
-        current_mask |= BIT(1);          // Uout + U0    default: // каналы
+        current_mask |= BIT(1);          // Uout + U0
         cmd_mask = current_mask;
         break;
     case 14:                             // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
-        current_mask |= BIT(LV_BIT);
-        current_mask &= ~(0xff); // очищаем каналы 0..7 bit
-        current_mask |= BIT(0);  // ADC R
-        current_mask |= BIT(1);  // Uout + U0    default: // каналы
+        current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(0);          // ADC R
+        current_mask |= BIT(1);          // Uout + U0
         cmd_mask = current_mask;
         break;
     }
@@ -301,6 +308,8 @@ void start_measure(int channel, int lv_only)
     if (channel >= 1 && channel <= 14)
     {
         cmd.channel = channel;
+        if (lv_only == 1 && channel >= 1 && channel <= 4)
+            cmd.channel += 10;
         xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
     }
     else
@@ -481,7 +490,7 @@ void app_main()
             .scl_io_num = I2C_MASTER_SCL_PIN,
             .sda_pullup_en = GPIO_PULLUP_ENABLE,
             .scl_pullup_en = GPIO_PULLUP_ENABLE,
-            .master.clk_speed = 400000,
+            .master.clk_speed = 100000,
         };
 
         i2c_param_config(i2c_master_port, &conf);
@@ -527,7 +536,7 @@ void app_main()
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
     {
-        vTaskDelay(3000 / portTICK_PERIOD_MS);
+        //vTaskDelay(3000 / portTICK_PERIOD_MS);
     };
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
