@@ -8,6 +8,8 @@
 */
 #include "main.h"
 
+#include <esp_ota_ops.h>
+
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -259,8 +261,8 @@ static esp_err_t settings_handler(httpd_req_t *req)
                        "<meta http-equiv=\"Content-type\" content=\"text/html; charset=utf-8\">"
                        "<meta name=\"viewport\" content=\"width=device-width\">"
                        "<link rel=\"shortcut icon\" href=\"/favicon.ico\">"
-                       "<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"/favicon-32x32.png\">"
-                       "<link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"/favicon-16x16.png\">"
+                       /*"<link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" href=\"/favicon-32x32.png\">"
+                       "<link rel=\"icon\" type=\"image/png\" sizes=\"16x16\" href=\"/favicon-16x16.png\">"*/
                        "<title>Settings</title></head><body>";
     const char *sodkstartform1 = "<form><fieldset><legend>"; // СОДК</legend><table>";
     const char *sodkstartform2 = "</legend><table>";
@@ -825,6 +827,122 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     /* Respond with an empty chunk to signal HTTP response completion */
     ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
+};
+
+/*
+ * Handle OTA file upload
+ */
+esp_err_t update_post_handler(httpd_req_t *req)
+{
+    int file_id = -1;
+    esp_ota_handle_t ota_handle;
+    int remaining = req->content_len;
+
+    int block = 0;
+
+    reset_sleep_timeout();
+
+    /* Пишем в next_ota и прошивку и spiffs.bin*/
+    const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
+
+    while (remaining > 0)
+    {
+        int recv_len = httpd_req_recv(req, buf, MIN(remaining, sizeof(buf)));
+
+        // Timeout Error: Just retry
+        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT)
+        {
+            continue;
+
+            // Serious Error: Abort OTA
+        }
+        else if (recv_len <= 0)
+        {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Protocol Error");
+            return ESP_FAIL;
+        }
+
+        if (file_id == -1) // first data block
+        {
+            file_id = buf[0];
+
+            if (file_id == ESP_IMAGE_HEADER_MAGIC)
+            {
+                ESP_ERROR_CHECK(esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle));
+            }
+            else if (remaining == 0x80000)
+            {
+                file_id = remaining;
+                ESP_ERROR_CHECK(esp_partition_erase_range(ota_partition, 0, 0x80000));
+            }
+            else
+            {
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File Error");
+                return ESP_FAIL;
+            }
+        }
+
+        // firmware.bin
+        if (file_id == ESP_IMAGE_HEADER_MAGIC)
+        {
+            // Successful Upload: Flash firmware chunk
+            if (esp_ota_write(ota_handle, (const void *)buf, recv_len) != ESP_OK)
+            {
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash Error");
+                return ESP_FAIL;
+            }
+            vTaskDelay(1);
+        }
+        else
+            // spiffs.bin
+            if (file_id == 0x80000)
+            {
+                ESP_ERROR_CHECK(esp_partition_write(ota_partition, (req->content_len - remaining), (const void *)buf, recv_len));
+                vTaskDelay(1);
+            }
+
+        remaining -= recv_len;
+    }
+
+    if (file_id == ESP_IMAGE_HEADER_MAGIC)
+    {
+        // Validate and switch to new OTA image and reboot
+        if (esp_ota_end(ota_handle) != ESP_OK || esp_ota_set_boot_partition(ota_partition) != ESP_OK)
+        {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Validation / Activation Error");
+            return ESP_FAIL;
+        }
+
+        httpd_resp_sendstr(req, "Firmware update complete, rebooting now!\n");
+        ESP_LOGW(TAG, "Firmware update complete, rebooting now!");
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        restart = true;
+    }
+    else if (file_id == 0x80000)
+    {
+        const esp_partition_t *storage_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
+        ESP_ERROR_CHECK(esp_partition_erase_range(storage_partition, 0, 0x80000));
+
+        remaining = req->content_len;
+        int recv_len = sizeof(buf);
+        while (remaining > 0)
+        {
+            recv_len = MIN(remaining, sizeof(buf));
+            if (esp_partition_read(ota_partition, (req->content_len - remaining), (void *)buf, recv_len) == ESP_OK)
+            {
+                ESP_ERROR_CHECK(esp_partition_write(storage_partition, (req->content_len - remaining), (const void *)buf, recv_len));
+                vTaskDelay(1);
+            }
+            remaining -= recv_len;
+        }
+
+        httpd_resp_sendstr(req, "SPIFFS update complete, rebooting now!\n");
+        ESP_LOGW(TAG, "SPIFFS update complete, rebooting now!");
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        restart = true;
+    }
+
+    return ESP_OK;
 }
 
 httpd_handle_t ws_hd;
@@ -887,7 +1005,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     return ret;
 }
 
-static const httpd_uri_t lora_set = {
+static const httpd_uri_t main_page = {
     .uri = PAGE_LORA_SET,
     .method = HTTP_GET,
     .handler = settings_handler,
@@ -910,12 +1028,26 @@ static const httpd_uri_t file_download = {
     .is_websocket = false,
 };
 
+httpd_uri_t update_get = {
+    .uri = "/update",
+    .method = HTTP_GET,
+    .handler = download_get_handler,
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/update.html", .content = "text/html"}),
+    .is_websocket = false};
+
+httpd_uri_t update_post = {
+    .uri = "/update",
+    .method = HTTP_POST,
+    .handler = update_post_handler,
+    .user_ctx = NULL};
+
 static const httpd_uri_t favicon_ico = {
     .uri = "/favicon.ico",
     .method = HTTP_GET,
     .handler = download_get_handler,
     .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon.ico", .content = "image/x-icon"}),
     .is_websocket = false};
+/*
 static const httpd_uri_t favicon_png16 = {
     .uri = "/favicon-16x16.png",
     .method = HTTP_GET,
@@ -928,7 +1060,7 @@ static const httpd_uri_t favicon_png32 = {
     .handler = download_get_handler,
     .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon-32x32.png", .content = "image/png"}),
     .is_websocket = false};
-
+*/
 static const httpd_uri_t d3_get = {
     .uri = "/d3",
     .method = HTTP_GET,
@@ -960,14 +1092,17 @@ static httpd_handle_t start_webserver(void)
     {
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &lora_set);
+        httpd_register_uri_handler(server, &main_page);
         httpd_register_uri_handler(server, &ws);
         httpd_register_uri_handler(server, &file_download);
         httpd_register_uri_handler(server, &d3_get);
         httpd_register_uri_handler(server, &d3_get_gz);
         httpd_register_uri_handler(server, &favicon_ico);
-        httpd_register_uri_handler(server, &favicon_png16);
-        httpd_register_uri_handler(server, &favicon_png32);
+        // httpd_register_uri_handler(server, &favicon_png16);
+        // httpd_register_uri_handler(server, &favicon_png32);
+
+        httpd_register_uri_handler(server, &update_post);
+        httpd_register_uri_handler(server, &update_get);
 
         ws_fd = 0;
 
@@ -1030,6 +1165,20 @@ void wifi_task(void *arg)
     /* Start the server for the first time */
     start_webserver();
 
+    /* Mark current app as valid */
+    const esp_partition_t *partition = esp_ota_get_running_partition();
+    // printf("Currently running partition: %s\r\n", partition->label);
+    ESP_LOGI(TAG, "Currently running partition: %s", partition->label);
+
+    esp_ota_img_states_t ota_state;
+    if (esp_ota_get_state_partition(partition, &ota_state) == ESP_OK)
+    {
+        if (ota_state == ESP_OTA_IMG_PENDING_VERIFY)
+        {
+            esp_ota_mark_app_valid_cancel_rollback();
+        }
+    }
+
     reset_sleep_timeout();
 
     while (1)
@@ -1062,7 +1211,7 @@ void wifi_task(void *arg)
             need_ws_send = false;
         }
         */
-       //WiFi timeout
+        // WiFi timeout
         if (esp_timer_get_time() - timeout_begin > StoUS(menu[21].val))
         {
             esp_wifi_stop();

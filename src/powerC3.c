@@ -23,7 +23,23 @@
 
 #include "esp_wifi.h"
 
-// RTC_DATA_ATTR int last_chan;
+/*
+    БИТ
+    1 - пред. состояние петли 1-го канала, при высоковольт. измерении
+    2 - пред. состояние петли 2-го канала, при высоковольт. измерении
+    3 - пред. состояние петли 3-го канала, при высоковольт. измерении
+    4 - пред. состояние петли 4-го канала, при высоковольт. измерении
+    5 - пред. состояние петли 1-го канала, при низквольт. измерении
+    6 - пред. состояние петли 2-го канала, при низквольт. измерении
+    7 - пред. состояние петли 3-го канала, при низквольт. измерении
+    8 - пред. состояние петли 4-го канала, при низквольт. измерении
+*/
+RTC_DATA_ATTR unsigned int measure_flags = 0;
+
+/*
+    Предыдущее значение сопротивления при низковольтном измерении
+*/
+RTC_DATA_ATTR int measure_chan[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -361,8 +377,8 @@ static void IRAM_ATTR pcf_int_handler(void *arg)
 void btn_task(void *arg)
 {
     gpio_config_t io_conf = {};
+
     io_conf.intr_type = GPIO_INTR_DISABLE;
-    // set as output mode
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = BIT64(BTN_PIN);
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
@@ -372,6 +388,7 @@ void btn_task(void *arg)
     // Interrupt from PCF8575
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
     io_conf.pin_bit_mask = BIT64(INT_PIN);
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
@@ -667,14 +684,7 @@ void dual_adc(void *arg)
 
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
         // включаем канал
-        if (cmd_power.channel > 10) // LV
-        {
-            result.channel = cmd_power.channel - 6; // 1..4, 5..8(LV)
-        }
-        else
-        {
-            result.channel = cmd_power.channel;
-        }
+        result.channel = cmd_power.channel; // 1..4, 5..8(LV)
 
         pcf8575_set(cmd_power.channel);
 
@@ -723,6 +733,11 @@ void dual_adc(void *arg)
 
         int data_errors = 0;
 
+        int Ubatt0counter = 0;
+        result.Ubatt0 = 0;
+        int Ubatt1counter = 0;
+        result.Ubatt1 = 0;
+
         do
         {
             uint32_t req = ADC_BUFFER;
@@ -753,7 +768,7 @@ void dual_adc(void *arg)
                 // включаем источник питания
                 if (timeout > 0)
                 {
-                    if (cmd_power.channel < 10)
+                    if (cmd_power.channel < 5)
                         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
                     else
                         pcf8575_set(LV_CMDON);
@@ -857,7 +872,7 @@ void dual_adc(void *arg)
                 int v = voltBatt(exp_filter[3]);
                 sum_avg01.Ubatt += v;
 
-                if (cmd_power.channel > 10)
+                if (cmd_power.channel >= 5)
                 {
                     sum_avg01.R1 += kOmlv(exp_filter[1], exp_filter[0]);
                     sum_avg01.R2 += kOm2chanlv(exp_filter[1], exp_filter[2]);
@@ -880,7 +895,7 @@ void dual_adc(void *arg)
                     if (overvolt >= 3)
                     {
                         // ВЫРУБАЕМ
-                        if (cmd_power.channel < 10)
+                        if (cmd_power.channel < 5)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         else
                             pcf8575_set(LV_CMDOFF);
@@ -932,7 +947,7 @@ void dual_adc(void *arg)
                     // ВЫРУБАЕМ
                     if (timeout > 0)
                     {
-                        if (cmd_power.channel < 10)
+                        if (cmd_power.channel < 5)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         else
                             pcf8575_set(LV_CMDOFF);
@@ -952,7 +967,7 @@ void dual_adc(void *arg)
                     {
                         // прекращаем измерения
                         // ВЫРУБАЕМ
-                        if (cmd_power.channel < 10)
+                        if (cmd_power.channel < 5)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         else
                             pcf8575_set(LV_CMDOFF);
@@ -968,10 +983,11 @@ void dual_adc(void *arg)
                         if (BattLow > 10)
                         {
                             // ВЫРУБАЕМ
-                            if (cmd_power.channel < 10)
+                            if (cmd_power.channel < 5)
                                 ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                             else
                                 pcf8575_set(LV_CMDOFF);
+
                             // прекращаем измерения
                             if (terminal_mode >= 0)
                                 printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[16].val, BattLow);
@@ -1134,7 +1150,7 @@ void dual_adc(void *arg)
                         ESP_LOGV("compare off", "%d\n", blocks);
 
                         // ВЫРУБАЕМ
-                        if (cmd_power.channel < 10)
+                        if (cmd_power.channel < 5)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         else
                             pcf8575_set(LV_CMDOFF);
@@ -1171,10 +1187,15 @@ void dual_adc(void *arg)
                 }
 
                 // запоминаем напряжение батареи
-                if (blocks == ON_BLOCK + 5)
+                if (blocks >= (ON_BLOCK - 5) && blocks < ON_BLOCK)
                 {
-                    result.Ubatt1 = (bufferR[(unsigned int)(bhead - 1) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - 2) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - 3) & (RINGBUFLEN - 1)].Ubatt) / 3;
-                    result.Ubatt0 = (bufferR[(unsigned int)(bhead - blocks + ON_BLOCK - 1) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - blocks + ON_BLOCK - 2) & (RINGBUFLEN - 1)].Ubatt + bufferR[(unsigned int)(bhead - blocks + ON_BLOCK - 3) & (RINGBUFLEN - 1)].Ubatt) / 3;
+                    result.Ubatt0 += bufferR[bhead].Ubatt;
+                    Ubatt0counter++;
+                }
+                else if (blocks >= (ON_BLOCK + 2) && blocks < (ON_BLOCK + 5))
+                {
+                    result.Ubatt1 += bufferR[bhead].Ubatt;
+                    Ubatt1counter++;
                 }
 
                 // запоминаем результат
@@ -1196,8 +1217,8 @@ void dual_adc(void *arg)
                     result.U0 = u0;
                     result.time = block_result;
 
-                    if (result.channel > 4)
-                        result.channel = cmd_power.channel;
+                    result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
+                    result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
 
                     xQueueSend(send_queue, (void *)&result, (TickType_t)0);
                 }
@@ -1244,7 +1265,7 @@ void dual_adc(void *arg)
 #endif
 
         // ВЫРУБАЕМ (на всякий случай)
-        if (cmd_power.channel < 10)
+        if (cmd_power.channel < 5)
             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
         else
             pcf8575_set(LV_CMDOFF);

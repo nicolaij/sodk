@@ -26,7 +26,9 @@
 #endif
 
 RTC_DATA_ATTR int bootCount = 0;
-RTC_DATA_ATTR int BattLow = 0; // Счетчик разряда батареи
+
+// Счетчик разряда батареи
+RTC_DATA_ATTR int BattLow = 0;
 
 float tsens_out = 0;
 
@@ -69,6 +71,9 @@ menu_t menu[] = {
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "blocks", .name = "График после результ.", .val = 100, .min = 0, .max = 2000},
     {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
+    {.id = "percU0lv", .name = "\% U петли низ.", .val = 50, .min = 0, .max = 100},
+    /*26*/                                                                   /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
+    {.id = "percRlv", .name = "\% R низ.", .val = 50, .min = 0, .max = 100}, /*Процент изменения от предыдущего значения сопротивления, ниже которого считаем нормой, выше - проводим высоковольтные измерения. 100% - не проводим высоковольтные измерения по изменению сопротивления*/
 };
 
 QueueHandle_t uicmd_queue;
@@ -154,7 +159,6 @@ void pcf8575_set(int channel_cmd)
 
     ESP_LOGD("pcf8575", "pcf8575 set (%d)", channel_cmd);
 
-    // const uint16_t pcf_output_map[5] = {0, BIT(3), BIT(2), BIT(1), BIT(0)};
     static uint16_t current_mask = 0;
     uint16_t cmd_mask = 0;
 
@@ -207,7 +211,7 @@ void pcf8575_set(int channel_cmd)
         current_mask |= BIT(7);          // Uout + U0
         cmd_mask = current_mask;
         break;
-    case 11:                             // LV Measure
+    case 5:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(LV_BIT);     // LV
@@ -222,7 +226,7 @@ void pcf8575_set(int channel_cmd)
         current_mask |= BIT(5);          // Uout + U0
         cmd_mask = current_mask;
         break;
-    case 12:                             // LV Measure
+    case 6:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(LV_BIT);     // LV
@@ -237,7 +241,7 @@ void pcf8575_set(int channel_cmd)
         current_mask |= BIT(3);          // Uout + U0
         cmd_mask = current_mask;
         break;
-    case 13:                             // LV Measure
+    case 7:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(LV_BIT);     // LV
@@ -252,7 +256,7 @@ void pcf8575_set(int channel_cmd)
         current_mask |= BIT(1);          // Uout + U0
         cmd_mask = current_mask;
         break;
-    case 14:                             // LV Measure
+    case 8:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
         current_mask |= BIT(LV_BIT);     // LV
@@ -305,11 +309,9 @@ void start_measure(int channel, int lv_only)
 {
     cmd_t cmd;
     int pos;
-    if (channel >= 1 && channel <= 14)
+    if (channel >= 1 && channel <= 8)
     {
         cmd.channel = channel;
-        if (lv_only == 1 && channel >= 1 && channel <= 4)
-            cmd.channel += 10;
         xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
     }
     else
@@ -320,7 +322,6 @@ void start_measure(int channel, int lv_only)
             cmd.channel = (menu[20].val % (pos * 10)) / pos;
             if (cmd.channel > 0)
             {
-                cmd.channel += 10;
                 xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
             }
             pos /= 10;
@@ -332,7 +333,7 @@ void start_measure(int channel, int lv_only)
             while (pos > 0) // HV
             {
                 cmd.channel = (menu[20].val % (pos * 10)) / pos;
-                if (cmd.channel > 0)
+                if (cmd.channel > 0 && cmd.channel <= 4)
                 {
                     xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
                 }
@@ -401,20 +402,6 @@ void app_main()
     //  "Количество загрузок: "
     ESP_LOGI("main", "Boot number: %d", bootCount);
 
-    /* Print chip information */
-    /*
-    esp_chip_info_t chip_info;
-    esp_chip_info(&chip_info);
-    ESP_LOGI("main", "This is ESP32 chip with %d CPU cores, WiFi%s%s, silicon revision %d",
-             chip_info.cores,
-             (chip_info.features & CHIP_FEATURE_BT) ? "/BT" : "",
-             (chip_info.features & CHIP_FEATURE_BLE) ? "/BLE" : "",
-             chip_info.revision);
-
-
-    ESP_LOGI("main", "flash: %dMB %s", spi_flash_get_chip_size() / (1024 * 1024),
-             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
-    */
     esp_efuse_mac_get_default(mac);
     ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
@@ -454,8 +441,7 @@ void app_main()
 
 #endif
 
-    // go_sleep();
-    //  Initialize NVS
+    // Initialize NVS
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
@@ -466,16 +452,21 @@ void app_main()
     }
     ESP_ERROR_CHECK(err);
 
+    // Example of nvs_get_stats() to get the number of used entries and free entries:
+    nvs_stats_t nvs_stats;
+    nvs_get_stats(NULL, &nvs_stats);
+    ESP_LOGI("NVS", "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
+
     read_nvs_menu();
 
     gpio_config_t io_conf = {};
 
-    // Check I2C bus is connected
+    // Check I2C bus resistor to +3v3 is connected
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = (1 << I2C_MASTER_SDA_PIN) | (1 << I2C_MASTER_SCL_PIN);
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     // configure GPIO with the given settings
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
@@ -504,7 +495,7 @@ void app_main()
             ESP_LOGE("i2c", "i2c_driver_install error!");
         }
 
-        // init
+        // init pcf outs
         pcf8575_set(0);
     }
     else
@@ -512,13 +503,9 @@ void app_main()
         ESP_LOGE("i2c", "i2c bus error state!");
     }
 
-    uicmd_queue = xQueueCreate(16, sizeof(cmd_t));
-    // adc1_queue = xQueueCreate(2, sizeof(result_t));
+    uicmd_queue = xQueueCreate(8, sizeof(cmd_t));
 
     send_queue = xQueueCreate(10, sizeof(result_t));
-
-    // ws_send_queue = xQueueCreate(10, WS_BUF_SIZE);
-    // i2c_mux = xSemaphoreCreateMutex();
 
     ready_event_group = xEventGroupCreate();
 
@@ -536,7 +523,7 @@ void app_main()
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
     {
-        //vTaskDelay(3000 / portTICK_PERIOD_MS);
+        // vTaskDelay(3000 / portTICK_PERIOD_MS);
     };
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
@@ -558,6 +545,7 @@ void app_main()
     // BIT0 - окончание измерения
     // BIT1 - окончание передачи
     // BIT2 - timeout работы wifi
+    /* Ждем окончания измерений */
     xEventGroupWaitBits(
         ready_event_group, /* The event group being tested. */
         END_MEASURE,       /* The bits within the event group to wait for. */
@@ -596,7 +584,7 @@ void app_main()
         END_TRANSMIT | END_RADIO_SLEEP, /* The bits within the event group to wait for. */
         pdFALSE,                        /* BIT_0 & BIT_1 should be cleared before returning. */
         pdFALSE,
-        90000 / portTICK_PERIOD_MS);
+        100000 / portTICK_PERIOD_MS);
 
     xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
 
@@ -605,7 +593,7 @@ void app_main()
         END_RADIO_SLEEP,   /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        2000 / portTICK_PERIOD_MS);
+        4000 / portTICK_PERIOD_MS);
 
     if (terminal_mode > -1)
         ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());

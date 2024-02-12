@@ -59,7 +59,7 @@
 typedef struct
 {
     int cmd;     // причина измерения 1 - кнопка, 2 - внешний вход
-    int channel; // канал измерения
+    int channel; // канал измерения 1-4 высоковольтные, 5-8 - низковольные
 } cmd_t;
 
 typedef struct
@@ -105,7 +105,7 @@ typedef struct
     const int32_t max;
 } menu_t;
 
-extern menu_t menu[26];
+extern menu_t menu[28];
 
 extern QueueHandle_t uicmd_queue;
 extern QueueHandle_t send_queue;
