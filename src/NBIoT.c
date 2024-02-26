@@ -785,8 +785,7 @@ void radio_task(void *arg)
             {
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-                esp_err_t err = ESP_FAIL;
-                err = get_network_status(dce, &nn, &stat);
+                get_network_status(dce, &nn, &stat);
                 dce->stat = stat;
 
             } while (--counter > 0 && stat != MODEM_STATE_SUCCESS);
@@ -825,7 +824,7 @@ void radio_task(void *arg)
             } while (--counter > 0);
 
             /* Get battery voltage */
-            uint32_t voltage = 0, bcs = 0, bcl = 0;
+            uint32_t voltage = 0, bcl = 0;
 
 #if NB == 7020
             /* Get battery voltage */
@@ -835,6 +834,7 @@ void radio_task(void *arg)
             dte->send_cmd(dte, "AT+CBC\r", MODEM_COMMAND_TIMEOUT_DEFAULT);
 #endif
 #if NB == 26
+            uint32_t bcs = 0;
             /* Get battery voltage */
             counter = 3;
             do

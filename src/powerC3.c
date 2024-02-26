@@ -37,10 +37,13 @@
 RTC_DATA_ATTR unsigned int measure_flags = 0;
 
 /*
-    Предыдущее значение сопротивления при низковольтном измерении
+    Предыдущее значение сопротивления
 */
-RTC_DATA_ATTR int measure_chan[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+RTC_DATA_ATTR int measure_chan[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
+/*
+    Переменные для переключения времени измерений
+*/
 RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const int step_time_const[] = {0, 50, 125, 250, 500, 1000, 2000, 4000, 8000};
@@ -599,19 +602,19 @@ void btn_task(void *arg)
             }
             if (key_code == '5')
             {
-                start_measure(1, 1);
+                start_measure(5, 1);
             }
             if (key_code == '6')
             {
-                start_measure(2, 1);
+                start_measure(6, 1);
             }
             if (key_code == '7')
             {
-                start_measure(3, 1);
+                start_measure(7, 1);
             }
             if (key_code == '8')
             {
-                start_measure(4, 1);
+                start_measure(8, 1);
             }
             if (key_code == '0')
             {
@@ -1186,18 +1189,6 @@ void dual_adc(void *arg)
                     }
                 }
 
-                // запоминаем напряжение батареи
-                if (blocks >= (ON_BLOCK - 5) && blocks < ON_BLOCK)
-                {
-                    result.Ubatt0 += bufferR[bhead].Ubatt;
-                    Ubatt0counter++;
-                }
-                else if (blocks >= (ON_BLOCK + 2) && blocks < (ON_BLOCK + 5))
-                {
-                    result.Ubatt1 += bufferR[bhead].Ubatt;
-                    Ubatt1counter++;
-                }
-
                 // запоминаем результат
                 if (blocks == block_result)
                 {
@@ -1222,6 +1213,18 @@ void dual_adc(void *arg)
 
                     xQueueSend(send_queue, (void *)&result, (TickType_t)0);
                 }
+            }
+
+            // запоминаем напряжение батареи
+            if (blocks >= (ON_BLOCK - 5) && blocks < ON_BLOCK)
+            {
+                result.Ubatt0 += bufferR[bhead].Ubatt;
+                Ubatt0counter++;
+            }
+            else if (blocks >= (ON_BLOCK + 2) && blocks < (ON_BLOCK + 5))
+            {
+                result.Ubatt1 += bufferR[bhead].Ubatt;
+                Ubatt1counter++;
             }
 
             // буферезируем после включения последнее измерение
@@ -1265,10 +1268,8 @@ void dual_adc(void *arg)
 #endif
 
         // ВЫРУБАЕМ (на всякий случай)
-        if (cmd_power.channel < 5)
-            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-        else
-            pcf8575_set(LV_CMDOFF);
+        pcf8575_set(LV_CMDOFF);
+        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
 
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
@@ -1276,6 +1277,16 @@ void dual_adc(void *arg)
             pcf8575_set(POWER_CMDOFF);
             xEventGroupSetBits(ready_event_group, END_MEASURE);
         }
+
+        // запоминаем данные для сравнения
+        measure_chan[cmd_power.channel] = result.R;
+
+        // определяем процент напряжение на обратном проводе
+        int pr = (result.U0 * 100) / result.U;
+        if (pr > 75) // 75%
+            measure_flags |= BIT(cmd_power.channel);
+        else
+            measure_flags &= ~BIT(cmd_power.channel);
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];

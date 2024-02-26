@@ -322,6 +322,10 @@ void start_measure(int channel, int lv_only)
             cmd.channel = (menu[20].val % (pos * 10)) / pos;
             if (cmd.channel > 0)
             {
+                if (cmd.channel <= 4)
+                {
+                    cmd.channel += 4;
+                }
                 xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
             }
             pos /= 10;
