@@ -23,7 +23,6 @@
 
 #include "esp_wifi.h"
 
-
 // Счетчик разряда батареи
 RTC_DATA_ATTR unsigned int BattLow = 1;
 
@@ -1230,16 +1229,16 @@ void dual_adc(void *arg)
                     result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
                     result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
 
-                    //увеличивем интервал при низком напряжении 
+                    // увеличивем интервал при низком напряжении
                     if (result.Ubatt1 < menu[16].val)
                     {
                         BattLow += 1;
-                    }
-                    
-                    //отключаем
-                    if (BattLow > 20 && result.Ubatt1 < menu[17].val)
-                    {
-                        BattLow = 1000000;
+
+                        // отключаем если при lv измерении напряжение упало ниже минимума
+                        if (cmd_power.channel > 4 && result.Ubatt1 < menu[17].val)
+                        {
+                            BattLow = 1000000;
+                        }
                     }
 
                     xQueueSend(send_queue, &result, (TickType_t)0);
@@ -1336,7 +1335,7 @@ void dual_adc(void *arg)
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"in\":%d", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, d_input);
+        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0);
         xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
 
         printf("%s\n", buf);

@@ -519,7 +519,7 @@ void app_main()
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
 
-    if (bootCount % (menu[19].val / menu[18].val) == 1)
+    if (bootCount % (menu[19].val / menu[18].val) == 1 && BattLow < 10)
     {
         start_measure(0, 0);
     }
