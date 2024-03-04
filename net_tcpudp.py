@@ -8,14 +8,10 @@ import os
 import logging
 import sys
 
-HOST = '10.179.40.11'
+HOST = '10.179.40.20'
 PORT = 48884
 FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
 DATASIZE = 1024
-#тэги historian которые создаются только для первого канала
-#ONLYONECHAN = 1
-ONLYONECHAN = -1
-ONLYONE = ['in','T','rssi']
 
 def get_non_blocking_server_socket(type):
     # Создаем сокет, который работает без блокирования основного потока
@@ -51,7 +47,7 @@ def parse_msg(msg):
 
 def write_csv(js):
     
-    dataname = ['dt', 'num', 'U', 'R', 'time', 'U0', 'Ub0', 'Ub1', 'T', 'rssi', 'in']
+    dataname = ['dt', 'num', 'U', 'R', 'time', 'U0', 'Ulv', 'Rlv', 'U0lv', 'Ub0', 'Ub1', 'T', 'rssi', 'in']
     for d in dataname:
         try:
             if js[d] == '':
@@ -66,12 +62,12 @@ def write_csv(js):
             n = csvfile.read(1)
     except:
         with open(csvFilename, 'w', newline='') as csvfile:
-            csvfile.write('Datetime;Counter;U;R;time;U0;Ub0;Ub1;T;RSSI;in\n')
+            csvfile.write('Datetime;Counter;U;R;time;U0;Ulv;Rlv;U0lv;Ub0;Ub1;T;RSSI;in\n')
         pass
     
     try:
         with open(csvFilename, 'a', newline='') as csvfile:
-            csvfile.write('{};{};{};{};{};{};{};{};{};{};{}\n'.format(js[str("dt")], js["num"], str(js["U"]).replace('.',','), str(js["R"]).replace('.',','), js["time"], str(js["U0"]).replace('.',','), str(js["Ub0"]).replace('.',','), str(js["Ub1"]).replace('.',','), str(js["T"]).replace('.',','), js["rssi"], js["in"]))
+            csvfile.write('{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n'.format(js[str("dt")], js["num"], str(js["U"]).replace('.',','), str(js["R"]).replace('.',','), js["time"], str(js["U0"]).replace('.',','), str(js["Ulv"]).replace('.',','), str(js["Rlv"]).replace('.',','), str(js["U0lv"]).replace('.',','), str(js["Ub0"]).replace('.',','), str(js["Ub1"]).replace('.',','), str(js["T"]).replace('.',','), js["rssi"], js["in"]))
     except Exception as e:
         logging.error(e)
         pass
@@ -89,22 +85,32 @@ def write_historian(js):
             f.write("SODK,1,Server Local,1,1\n")
             dt = datetime.datetime.strptime(js["dt"], "%Y-%m-%d %H:%M:%S")
             time_and_date = '{:%Y/%m/%d,%H:%M:%S}.000'.format(dt)
-            f.write("Sodk_ZRTS{}_U,0,{},0,{},192\n".format(id, time_and_date, js["U"]))
-            f.write("Sodk_ZRTS{}_R,0,{},0,{},192\n".format(id, time_and_date, js["R"]))
-            f.write("Sodk_ZRTS{}_U0,0,{},0,{},192\n".format(id, time_and_date, js["U0"]))
-            f.write("Sodk_ZRTS{}_UBatt0,0,{},0,{},192\n".format(id, time_and_date, js["Ub0"]))
-            f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(id, time_and_date, js["Ub1"]))
-            if not ('T' in ONLYONE and ONLYONECHAN != chan):
-                f.write("Sodk_ZRTS{}_Tcpu,0,{},0,{},192\n".format(id, time_and_date, js["T"]))
-            if not ('rssi' in ONLYONE and ONLYONECHAN != chan):
-                f.write("Sodk_ZRTS{}_rssi,0,{},0,{},192\n".format(id, time_and_date, js["rssi"]))
-            if not ('in' in ONLYONE and ONLYONECHAN != chan):
-                f.write("Sodk_ZRTS{}_in,0,{},0,{},192\n".format(id, time_and_date, js["in"]))
+            if (("U" in js) and (js["U"] != '')):
+                f.write("Sodk_ZRTS{}_U,0,{},0,{},192\n".format(id, time_and_date, js["U"]))
+            if (("R" in js) and (js["R"] != '')):
+                f.write("Sodk_ZRTS{}_R,0,{},0,{},192\n".format(id, time_and_date, js["R"]))
+            if (("U0" in js) and (js["U0"] != '')):
+                f.write("Sodk_ZRTS{}_U0,0,{},0,{},192\n".format(id, time_and_date, js["U0"]))
+            if (("Ulv" in js) and (js["Ulv"] != '')):
+                f.write("Sodk_ZRTS{}_Ulv,0,{},0,{},192\n".format(id, time_and_date, js["Ulv"]))
+            if (("Rlv" in js) and (js["Rlv"] != '')):
+                f.write("Sodk_ZRTS{}_Rlv,0,{},0,{},192\n".format(id, time_and_date, js["Rlv"]))
+            if (("U0lv" in js) and (js["U0lv"] != '')):
+                f.write("Sodk_ZRTS{}_U0lv,0,{},0,{},192\n".format(id, time_and_date, js["U0lv"]))
+            if (("Ub0" in js) and (js["Ub0"] != '')):
+                f.write("Sodk_ZRTS{}_UBatt0,0,{},0,{},192\n".format(id, time_and_date, js["Ub0"]))
+            if (("Ub1" in js) and (js["Ub1"] != '')):
+                f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(id, time_and_date, js["Ub1"]))
+            if (("T" in js) and (js["T"] != '')):
+                f.write("Sodk_ZRTS{}.1_Tcpu,0,{},0,{},192\n".format(idn[0], time_and_date, js["T"]))
+            if (("rssi" in js) and (js["rssi"] != '')):
+                f.write("Sodk_ZRTS{}.1_rssi,0,{},0,{},192\n".format(idn[0], time_and_date, js["rssi"]))
+            if (("in" in js) and (js["in"] != '')):
+                f.write("Sodk_ZRTS{}.1_in,0,{},0,{},192\n".format(idn[0], time_and_date, js["in"]))
     except Exception as e:
         #print('File error! {}'.format(e))
         logging.error(e)
         pass
-
 
 if __name__ == '__main__':
 

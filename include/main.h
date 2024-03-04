@@ -58,8 +58,8 @@
 
 typedef struct
 {
-    int cmd;     // причина измерения 1 - кнопка, 2 - внешний вход
-    int channel; // канал измерения 1-4 высоковольтные, 5-8 - низковольные
+    int cmd;     // причина измерения 1 - по таймеру низковольные, 2 - по таймеру высоковольные, 
+    int channel; // канал измерения 1-4, 5-8
 } cmd_t;
 
 typedef struct
@@ -82,8 +82,8 @@ typedef struct
     int Ubatt0;
     int Ubatt1;
     int U0;
-    int input; // состояние внешнего входа 0 - нет, 1-сработал, 2-проснулись от сработки
     int time;
+    int input;
 } result_t;
 
 typedef enum
@@ -158,7 +158,11 @@ void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t 
 void pcf8575_set(int channel_cmd);
 int pcf8575_read(uint16_t bit);
 
-void start_measure(int reasone, int lv);
+/*
+channel - номер канала, если 0 - то по списку menu[20]
+flag - 0: lv,hv; 1:hv only, 2:lv only; 
+*/
+void start_measure(int channel, int flag);
 
 // получаем 1 строку данных data_pos
 // возвращает длину строки

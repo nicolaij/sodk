@@ -33,6 +33,8 @@ static const char *TAG = "nbiot";
 
 extern float tsens_out;
 
+extern int d_input; // состояние внешнего входа (-1 - состояние отправлено через модем)
+
 char modem_status[200];
 
 struct stringreturn_t
@@ -631,9 +633,6 @@ static esp_err_t sim7020_handle_cbc(modem_dce_t *dce, const char *line)
 void radio_task(void *arg)
 {
 
-    // результат измерений
-    result_t result;
-
     read_nvs_nbiot();
 
     // ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -996,11 +995,9 @@ void radio_task(void *arg)
                         dt[6] = timezone; // FORCE TIMEZONE
 
                         time_t t = mktime(&tm) + dt[6] * 3600; // UNIX time + timezone offset
-                        // printf("Setting time: %s", asctime(&tm));
                         struct timeval now = {.tv_sec = t};
                         settimeofday(&now, NULL);
-                        // printf("The local date and time is: %s", asctime(&tm));
-
+                        ESP_LOGV(TAG, "The local date and time is: %s", asctime(&tm));
                         break;
                     }
 
@@ -1014,12 +1011,35 @@ void radio_task(void *arg)
             ESP_LOGI(TAG, "Current date/time: %s", datetime);
 
             int len_data = 0;
+
+            // результат измерений
+            result_t result = {.input = d_input};
+
             while (pdTRUE == xQueueReceive(send_queue, &result, 20000 / portTICK_PERIOD_MS))
             {
                 n = time(0);
                 localtm = localtime(&n);
                 strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
-                len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"in\":%d,\"T\":%.1f,\"rssi\":%d,\"time\":%d}", id, result.channel, bootCount, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.input, tsens_out, (int)rssi * 2 + -113, result.time);
+
+                if (result.channel == 1 && (result.input == 100 || result.input == 101)) // Input, Tcpu, RSSI
+                {
+                    len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, datetime, d_input, tsens_out, (int)rssi * 2 + -113);
+                }
+                else
+                {
+                    /*
+                        Низковольные каналы передаем с добавлением lv (Ulv, Rlv, U0lv) и такими же номерами как и высоковольные 1..4
+                    */
+                    if (result.channel > 4) // LV
+                    {
+                        result.channel = result.channel - 4;
+                        len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"num\":%d,\"dt\":\"%s\",\"Ulv\":%.1f,\"Rlv\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0lv\":%.1f,\"time\":%d}", id, result.channel, bootCount, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
+                    }
+                    else
+                    {
+                        len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d}", id, result.channel, bootCount, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
+                    }
+                }
                 // len_data = snprintf((char *)buf, sizeof(buf), "{'id':'%d.%d','num':%d,'dt':'%s','U':%d,'R':%d,'Ub1':%.3f,'Ub0':%.3f,'U0':%d,'in':%d,'T':%.1f,'rssi':%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
@@ -1048,6 +1068,9 @@ void radio_task(void *arg)
                     {
                         if (dce->state == MODEM_STATE_SUCCESS)
                         {
+                            if (result.channel == 1)
+                                d_input = -1; // состояние входа "отправлено"
+
                             break;
                         }
                     }

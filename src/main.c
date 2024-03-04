@@ -63,17 +63,16 @@ menu_t menu[] = {
     {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -1000000, .max = 1000000},
     {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
     {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
-    {.id = "Trepeat", .name = "Интервал измер. низ.", .val = 60, .min = 1, .max = 1000000},
-    {.id = "Krepeathv", .name = "Множ. измер. выс.", .val = 60, .min = 1, .max = 1000000},
+    {.id = "Trepeatlv", .name = "Интервал измерений", .val = 120, .min = 1, .max = 1000000},
+    {.id = "Trepeathv", .name = "Интервал измер. выс.", .val = 3600, .min = 1, .max = 1000000},
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999}, /*20*/
     {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 1, .max = 10000},
     {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "blocks", .name = "График после результ.", .val = 100, .min = 0, .max = 2000},
     {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
-    {.id = "percU0lv", .name = "\% U петли низ.", .val = 50, .min = 0, .max = 100},
-    /*26*/                                                                   /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
-    {.id = "percRlv", .name = "\% R низ.", .val = 50, .min = 0, .max = 100}, /*Процент изменения от предыдущего значения сопротивления, ниже которого считаем нормой, выше - проводим высоковольтные измерения. 100% - не проводим высоковольтные измерения по изменению сопротивления*/
+    {.id = "percU0lv", .name = "\% U петли низ.", .val = 50, .min = 0, .max = 100}, /*26 Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
+    {.id = "percRlv", .name = "\% R низ.", .val = 50, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого считаем нормой, выше - проводим высоковольтные измерения. 100% - не проводим высоковольтные измерения по изменению сопротивления*/
 };
 
 QueueHandle_t uicmd_queue;
@@ -302,10 +301,7 @@ void go_sleep(void)
     esp_deep_sleep_start();
 }
 
-/*
-channel - номер канала, если 0 - то по списку menu[20]
-*/
-void start_measure(int channel, int lv_only)
+void start_measure(int channel, int flag)
 {
     cmd_t cmd;
     int pos;
@@ -316,22 +312,25 @@ void start_measure(int channel, int lv_only)
     }
     else
     {
-        pos = 100000000;
-        while (pos > 0) // First LV
+        if (flag != 1)
         {
-            cmd.channel = (menu[20].val % (pos * 10)) / pos;
-            if (cmd.channel > 0)
+            pos = 100000000;
+            while (pos > 0) // First LV
             {
-                if (cmd.channel <= 4)
+                cmd.channel = (menu[20].val % (pos * 10)) / pos;
+                if (cmd.channel > 0)
                 {
-                    cmd.channel += 4;
+                    if (cmd.channel <= 4)
+                    {
+                        cmd.channel += 4;
+                    }
+                    xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
                 }
-                xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
+                pos /= 10;
             }
-            pos /= 10;
-        };
+        }
 
-        if (lv_only != 1)
+        if (flag != 2)
         {
             pos = 100000000;
             while (pos > 0) // HV
@@ -342,7 +341,7 @@ void start_measure(int channel, int lv_only)
                     xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
                 }
                 pos /= 10;
-            };
+            }
         }
     }
 }
@@ -532,13 +531,13 @@ void app_main()
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
 
-    if (bootCount % menu[19].val == 1)
+    if (bootCount % (menu[19].val / menu[18].val) == 1)
     {
         start_measure(0, 0);
     }
     else
     {
-        start_measure(0, 1); // LV only
+        start_measure(0, 2); // LV only
     }
 
 #endif

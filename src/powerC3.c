@@ -25,6 +25,7 @@
 
 /*
     БИТ
+    0 - пред. состояние входа in
     1 - пред. состояние петли 1-го канала, при высоковольт. измерении
     2 - пред. состояние петли 2-го канала, при высоковольт. измерении
     3 - пред. состояние петли 3-го канала, при высоковольт. измерении
@@ -57,7 +58,7 @@ unsigned int btail = 0;
 uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
 uint8_t buffer_ADC_copy[ADC_BUFFER * 300];
 
-result_t result = {};
+int d_input; // состояние внешнего входа (-1 - состояние отправлено через модем)
 
 #define ON_BLOCK 10
 
@@ -398,6 +399,9 @@ void btn_task(void *arg)
     // create a queue to handle gpio event from isr
     gpio_evt_queue = xQueueCreate(1, sizeof(uint32_t));
 
+    uint32_t io_num = 0;
+    xQueueSend(gpio_evt_queue, &io_num, 0);
+
     // install gpio isr service
     gpio_install_isr_service(0);
     // hook isr handler for specific gpio pin
@@ -406,24 +410,33 @@ void btn_task(void *arg)
     int old_btn_state = gpio_get_level(BTN_PIN);
     int new_btn_state = old_btn_state;
 
+    result_t result = {.channel = 1, .input = -1};
     int d_in = -1;
-
-    int terminal_nbiot = 0;
 
     while (1)
     {
-
-        uint32_t io_num;
-        if (xQueueReceive(gpio_evt_queue, &io_num, 100 / portTICK_PERIOD_MS) == pdTRUE)
+        if (xQueueReceive(gpio_evt_queue, &io_num, 0) == pdTRUE)
         {
+            ESP_LOGV("pcf8575", "read pcf8575");
+
             char buf[10];
-            result.input = pcf8575_read(IN1_BIT);
-            if (result.input != d_in)
+            d_input = pcf8575_read(IN1_BIT);
+            if (d_input != d_in)
             {
-                int l = snprintf((char *)buf, sizeof(buf), "IN: %d", result.input);
+                d_in = d_input;
+                int l = snprintf((char *)buf, sizeof(buf), "IN: %d", d_input);
                 ESP_LOGI("pcf8575", "%s", buf);
                 xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
-                d_in = result.input;
+                if (d_input)
+                {
+                    measure_flags |= 0b1;
+                }
+                else
+                {
+                    measure_flags &= ~0b1;
+                }
+                result.input = d_input + 100;
+                xQueueSend(send_queue, &result, 0);
             }
         }
 
@@ -442,7 +455,7 @@ void btn_task(void *arg)
                 {
                     d_in = -1;
                     // pcf8575_set(11);
-                    start_measure(1, 1);
+                    start_measure(1, 2);
                 }
             }
 
@@ -462,8 +475,6 @@ void btn_task(void *arg)
 
         if (key_code != EOF)
         {
-
-            // ESP_LOGI("terminal", "read: %x", key_code);
             if (key_code == '\n')
             {
                 if (terminal_mode == -1)
@@ -586,35 +597,35 @@ void btn_task(void *arg)
 
             if (key_code == '1')
             {
-                start_measure(1, 0);
+                start_measure(1, 1);
             }
             if (key_code == '2')
             {
-                start_measure(2, 0);
+                start_measure(2, 1);
             }
             if (key_code == '3')
             {
-                start_measure(3, 0);
+                start_measure(3, 1);
             }
             if (key_code == '4')
             {
-                start_measure(4, 0);
+                start_measure(4, 1);
             }
             if (key_code == '5')
             {
-                start_measure(5, 1);
+                start_measure(5, 2);
             }
             if (key_code == '6')
             {
-                start_measure(6, 1);
+                start_measure(6, 2);
             }
             if (key_code == '7')
             {
-                start_measure(7, 1);
+                start_measure(7, 2);
             }
             if (key_code == '8')
             {
-                start_measure(8, 1);
+                start_measure(8, 2);
             }
             if (key_code == '0')
             {
@@ -641,13 +652,10 @@ void btn_task(void *arg)
                 pcf8575_set(14);
                 pcf8575_set(LV_CMDON);
             }
-
-            if (key_code == '0')
-            {
-                start_measure(0, 0);
-            }
         }
         // end работа с терминалом
+
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 }
 
@@ -655,6 +663,12 @@ void dual_adc(void *arg)
 {
 
     cmd_t cmd_power = {};
+    result_t result = {};
+
+    unsigned int measure_current_flags = measure_flags;
+
+    // признак высоковольтных измерений
+    int hv_measure = 0;
 
     // zero-initialize the config structure.
     gpio_config_t io_conf = {};
@@ -682,7 +696,6 @@ void dual_adc(void *arg)
 
     while (1)
     {
-
         xQueueReceive(uicmd_queue, &cmd_power, portMAX_DELAY);
 
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
@@ -772,7 +785,10 @@ void dual_adc(void *arg)
                 if (timeout > 0)
                 {
                     if (cmd_power.channel < 5)
+                    {
                         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                        hv_measure = 1;
+                    }
                     else
                         pcf8575_set(LV_CMDON);
                 }
@@ -1211,7 +1227,7 @@ void dual_adc(void *arg)
                     result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
                     result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
 
-                    xQueueSend(send_queue, (void *)&result, (TickType_t)0);
+                    xQueueSend(send_queue, &result, (TickType_t)0);
                 }
             }
 
@@ -1271,26 +1287,41 @@ void dual_adc(void *arg)
         pcf8575_set(LV_CMDOFF);
         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
 
-        // выключаем питание, если больше нет каналов в очереди
-        if (uxQueueMessagesWaiting(uicmd_queue) == 0)
-        {
-            pcf8575_set(POWER_CMDOFF);
-            xEventGroupSetBits(ready_event_group, END_MEASURE);
-        }
-
         // запоминаем данные для сравнения
         measure_chan[cmd_power.channel] = result.R;
 
         // определяем процент напряжение на обратном проводе
         int pr = (result.U0 * 100) / result.U;
         if (pr > 75) // 75%
-            measure_flags |= BIT(cmd_power.channel);
+        {
+            measure_current_flags |= BIT(cmd_power.channel);
+        }
         else
-            measure_flags &= ~BIT(cmd_power.channel);
+        {
+            measure_current_flags &= ~BIT(cmd_power.channel);
+        }
+
+        // проверяем изменения U0lv и запускаем hv измерения
+        // выключаем питание, если больше нет каналов в очереди
+        if (uxQueueMessagesWaiting(uicmd_queue) == 0)
+        {
+            if (hv_measure == 0 && measure_current_flags != measure_flags)
+            {
+                start_measure(0, 1);
+            }
+
+            // если номера каналов измерения только низковольные 5-8, в очередь ничего не будет добавлено и завершаем
+            if (uxQueueMessagesWaiting(uicmd_queue) == 0)
+            {
+                measure_flags = measure_current_flags;
+                pcf8575_set(POWER_CMDOFF);
+                xEventGroupSetBits(ready_event_group, END_MEASURE);
+            }
+        }
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"in\":%d", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.input);
+        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"in\":%d", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, d_input);
         xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
 
         printf("%s\n", buf);
