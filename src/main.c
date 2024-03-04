@@ -27,9 +27,6 @@
 
 RTC_DATA_ATTR int bootCount = 0;
 
-// Счетчик разряда батареи
-RTC_DATA_ATTR int BattLow = 0;
-
 float tsens_out = 0;
 
 uint8_t mac[6];
@@ -285,19 +282,10 @@ void go_sleep(void)
 
     uint64_t time_in_us = StoUS(menu[18].val);
 
-    if (BattLow > 200)
-    {
-        time_in_us = StoUS(60 * 60 * 24 * 365); // 365 days
-    }
-    else if (BattLow > 100)
-    {
-        time_in_us = StoUS(60 * 60 * 24 * 30); // 30 days
-    }
-
     // коррекция на время работы
     time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[18].val));
 
-    esp_sleep_enable_timer_wakeup(time_in_us);
+    esp_sleep_enable_timer_wakeup(time_in_us * BattLow);
     esp_deep_sleep_start();
 }
 

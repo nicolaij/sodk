@@ -127,6 +127,8 @@ extern EventGroupHandle_t ready_event_group;
 extern int bootCount;
 extern int terminal_mode;
 
+extern unsigned int BattLow;
+
 void ui_task(void *arg);
 void dual_adc(void *arg);
 void btn_task(void *arg);

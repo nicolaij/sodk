@@ -23,6 +23,10 @@
 
 #include "esp_wifi.h"
 
+
+// Счетчик разряда батареи
+RTC_DATA_ATTR unsigned int BattLow = 1;
+
 /*
     БИТ
     0 - пред. состояние входа in
@@ -101,8 +105,6 @@ const measure_t chan_r[] = {
     {.channel = ADC_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
 };
 #endif
-
-extern int BattLow;
 
 // return mV
 int volt(int adc)
@@ -963,9 +965,9 @@ void dual_adc(void *arg)
                 // отсечка по времени
                 if ((esp_timer_get_time() - t1) > timeout)
                 {
-                    // ВЫРУБАЕМ
                     if (timeout > 0)
                     {
+                        // ВЫРУБАЕМ
                         if (cmd_power.channel < 5)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                         else
@@ -981,6 +983,7 @@ void dual_adc(void *arg)
                 }
                 else
                 {
+                    /*
                     // отсечка по напряжению, Ubatt
                     if (bufferR[bhead].Ubatt < menu[17].val)
                     {
@@ -1012,7 +1015,7 @@ void dual_adc(void *arg)
                                 printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[16].val, BattLow);
                             break;
                         }
-                    }
+                    }*/
                 }
             }
 
@@ -1226,6 +1229,18 @@ void dual_adc(void *arg)
 
                     result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
                     result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
+
+                    //увеличивем интервал при низком напряжении 
+                    if (result.Ubatt1 < menu[16].val)
+                    {
+                        BattLow += 1;
+                    }
+                    
+                    //отключаем
+                    if (BattLow > 20 && result.Ubatt1 < menu[17].val)
+                    {
+                        BattLow = 1000000;
+                    }
 
                     xQueueSend(send_queue, &result, (TickType_t)0);
                 }
