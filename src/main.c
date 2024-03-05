@@ -28,6 +28,8 @@
 RTC_DATA_ATTR int bootCount = 0;
 
 float tsens_out = 0;
+int temperature = 0;
+int humidity = 0;
 
 uint8_t mac[6];
 
@@ -336,6 +338,8 @@ void start_measure(int channel, int flag)
 
 void app_main()
 {
+    char buf[40];
+
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
     switch (wakeup_reason)
@@ -396,6 +400,8 @@ void app_main()
     esp_efuse_mac_get_default(mac);
     ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
+    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
+
 #if CONFIG_IDF_TARGET_ESP32C3
     ESP_LOGD("main", "Initializing Temperature sensor");
 
@@ -423,9 +429,6 @@ void app_main()
     ESP_ERROR_CHECK(temp_sensor_stop());
 #endif
 
-    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
-
-    char buf[32];
     int l = snprintf((char *)buf, sizeof(buf), "Temperature:  %.01f°C", tsens_out);
     xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
     ESP_LOGI("temperature_sensor", "%s", buf);
@@ -488,6 +491,7 @@ void app_main()
 
         // init pcf outs
         pcf8575_set(0);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     else
     {
@@ -499,6 +503,40 @@ void app_main()
     send_queue = xQueueCreate(10, sizeof(result_t));
 
     ready_event_group = xEventGroupCreate();
+
+#if defined(SHT4x_SENSOR)
+
+#define SHT4X_CMD_MEASURE_HPM 0xFD
+#define SHT4X_ADDRESS 0x44
+
+    static uint8_t sht4x_cmd_measure = SHT4X_CMD_MEASURE_HPM;
+    if (i2c_err == 0 && i2c_master_write_to_device(0, SHT4X_ADDRESS, (uint8_t *)&sht4x_cmd_measure, 1, 500 / portTICK_PERIOD_MS) == ESP_OK)
+    {
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        uint8_t sensor_data[6];
+        if (i2c_master_read_from_device(0, SHT4X_ADDRESS, (uint8_t *)sensor_data, 6, 500 / portTICK_PERIOD_MS) == ESP_OK)
+        {
+            int t_ticks = sensor_data[0] * 256 + sensor_data[1];
+            int rh_ticks = sensor_data[3] * 256 + sensor_data[4];
+
+            /**
+             * formulas for conversion of the sensor signals, optimized for fixed point
+             * algebra:
+             * Temperature = 175 * S_T / 65535 - 45
+             * Relative Humidity = 125 * (S_RH / 65535) - 6
+             */
+            temperature = ((21875 * t_ticks) >> 13) - 45000;
+            humidity = ((15625 * rh_ticks) >> 13) - 6000;
+
+            l = snprintf((char *)buf, sizeof(buf), "SHT4x \"T2\":%.01f°C,\"H2\":%.01f%%", temperature / 1000.0, humidity / 1000.0);
+            xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
+            ESP_LOGI("SHT4x", "%s", buf);
+        }
+        else
+            ESP_LOGE("SHT4x", "Read error");
+    }
+
+#endif
 
 #ifdef RECEIVER_ONLY
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);

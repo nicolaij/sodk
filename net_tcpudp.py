@@ -13,6 +13,7 @@ PORT = 48884
 FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
 DATASIZE = 1024
 
+
 def get_non_blocking_server_socket(type):
     # Создаем сокет, который работает без блокирования основного потока
     server = socket.socket(socket.AF_INET, type)
@@ -34,10 +35,10 @@ def parse_msg(msg):
     st = 0
     fi = 0
     rez = []
-    while (st >=0 and fi >= 0):
+    while (st >= 0 and fi >= 0):
         st = msg.find('{', fi)
         fi = msg.find('}', st)
-        if (st >=0 and fi > 0):
+        if (st >= 0 and fi > 0):
             rez.append(json.loads(msg[st:fi+1]))
     return rez
 
@@ -46,8 +47,8 @@ def parse_msg(msg):
 # {"id":"12.1","num":1,"dt":"2000-12-12 00:00:58","U":542,"R":299999,"Ub1":9.764,"Ub0":12.035,"U0":0,"in":1,"T":28.7,"rssi":-63}
 
 def write_csv(js):
-    
-    dataname = ['dt', 'num', 'U', 'R', 'time', 'U0', 'Ulv', 'Rlv', 'U0lv', 'Ub0', 'Ub1', 'T', 'rssi', 'in']
+
+    dataname = ['dt', 'num', 'U', 'R', 'time', 'U0', 'Ulv', 'Rlv', 'U0lv', 'Ub0', 'Ub1', 'T', 'rssi', 'in', 'T2', 'H2']
     for d in dataname:
         try:
             if js[d] == '':
@@ -62,12 +63,12 @@ def write_csv(js):
             n = csvfile.read(1)
     except:
         with open(csvFilename, 'w', newline='') as csvfile:
-            csvfile.write('Datetime;Counter;U;R;time;U0;Ulv;Rlv;U0lv;Ub0;Ub1;T;RSSI;in\n')
+            csvfile.write('Datetime;Counter;U;R;time;U0;Ulv;Rlv;U0lv;Ub0;Ub1;T;RSSI;in;T2;H2\n')
         pass
-    
+
     try:
         with open(csvFilename, 'a', newline='') as csvfile:
-            csvfile.write('{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n'.format(js[str("dt")], js["num"], str(js["U"]).replace('.',','), str(js["R"]).replace('.',','), js["time"], str(js["U0"]).replace('.',','), str(js["Ulv"]).replace('.',','), str(js["Rlv"]).replace('.',','), str(js["U0lv"]).replace('.',','), str(js["Ub0"]).replace('.',','), str(js["Ub1"]).replace('.',','), str(js["T"]).replace('.',','), js["rssi"], js["in"]))
+            csvfile.write('{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n'.format(js[str("dt")], js["num"], str(js["U"]).replace('.', ','), str(js["R"]).replace('.', ','), js["time"], str(js["U0"]).replace('.', ','), str(js["Ulv"]).replace('.', ','), str(js["Rlv"]).replace('.', ','), str(js["U0lv"]).replace('.', ','), str(js["Ub0"]).replace('.', ','), str(js["Ub1"]).replace('.', ','), str(js["T"]).replace('.', ','), js["rssi"], js["in"], str(js["T2"]).replace('.', ','), str(js["H2"]).replace('.', ',')))
     except Exception as e:
         logging.error(e)
         pass
@@ -78,7 +79,8 @@ def write_historian(js):
     id = js["id"]
     idn = id.split('.')
     chan = int(idn[1], base=10)
-    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(FASTLOADDIR, id, datetime.datetime.now())
+    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(
+        FASTLOADDIR, id, datetime.datetime.now())
     try:
         with open(IntouchFilename, 'w', encoding="latin-1") as f:
             f.write("ASCII\n,\n")
@@ -103,32 +105,37 @@ def write_historian(js):
                 f.write("Sodk_ZRTS{}_UBatt1,0,{},0,{},192\n".format(id, time_and_date, js["Ub1"]))
             if (("T" in js) and (js["T"] != '')):
                 f.write("Sodk_ZRTS{}.1_Tcpu,0,{},0,{},192\n".format(idn[0], time_and_date, js["T"]))
+            if (("T2" in js) and (js["T2"] != '')):
+                f.write("Sodk_ZRTS{}.1_T2,0,{},0,{},192\n".format(idn[0], time_and_date, js["T2"]))
+            if (("H2" in js) and (js["H2"] != '')):
+                f.write("Sodk_ZRTS{}.1_H2,0,{},0,{},192\n".format(idn[0], time_and_date, js["H2"]))
             if (("rssi" in js) and (js["rssi"] != '')):
                 f.write("Sodk_ZRTS{}.1_rssi,0,{},0,{},192\n".format(idn[0], time_and_date, js["rssi"]))
             if (("in" in js) and (js["in"] != '')):
                 f.write("Sodk_ZRTS{}.1_in,0,{},0,{},192\n".format(idn[0], time_and_date, js["in"]))
     except Exception as e:
-        #print('File error! {}'.format(e))
+        # print('File error! {}'.format(e))
         logging.error(e)
         pass
+
 
 if __name__ == '__main__':
 
     logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)-5.5s] %(message)s",
-    handlers=[
-        logging.FileHandler("debug.log"),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)-5.5s] %(message)s",
+        handlers=[
+            logging.FileHandler("debug.log"),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
     wonderware = False
     if os.path.isdir(FASTLOADDIR):
         wonderware = True
     else:
         logging.error("Wonderware Historian fastload disable.")
-        #print("Wonderware Historian fastload disable.")
- 
+        # print("Wonderware Historian fastload disable.")
+
     # Откуда и куда записывать информацию
     outputs = []
     xinputs = []
@@ -137,41 +144,43 @@ if __name__ == '__main__':
     server_socket_tcp = get_non_blocking_server_socket(socket.SOCK_STREAM)
     server_socket_udp = get_non_blocking_server_socket(socket.SOCK_DGRAM)
     inputs = [server_socket_tcp, server_socket_udp]
-    #print("TCP/UDP server is running")
+    # print("TCP/UDP server is running")
     logging.info("TCP/UDP server is running")
     logging.debug("New: {}".format(str(server_socket_tcp)))
     logging.debug("New: {}".format(str(server_socket_udp)))
 
     while inputs:
-        readables, writables, exceptional = select.select(inputs, outputs, xinputs)
+        readables, writables, exceptional = select.select(
+            inputs, outputs, xinputs)
         message = b''
-        client_address = ('',0)
-        #print("readadle len: " + str(len(readables)))
+        client_address = ('', 0)
+        # print("readadle len: " + str(len(readables)))
         for s in readables:
-            #print("protocol: " + str(s.proto))
+            # print("protocol: " + str(s.proto))
             if s == server_socket_tcp:
                 connection, client_address = s.accept()
                 connection.setblocking(False)
                 inputs.append(connection)
                 logging.debug("New: {}".format(str(s)))
                 continue
-            else: #UDP or connection
-                #print("readadle: " + str(s))                
+            else:  # UDP or connection
+                # print("readadle: " + str(s))
                 logging.debug("Msg: {}".format(str(s)))
                 try:
                     (message, client_address) = s.recvfrom(DATASIZE)
-                    #print("readadle: " + str(s.type))
+                    # print("readadle: " + str(s.type))
                     if s.type == socket.SOCK_STREAM:
                         client_address = s.getpeername()
                 except Exception as e:
-                    #print(e)
+                    # print(e)
                     logging.error(e)
                     pass
 
             if message:
                 # Вывод полученных данных на консоль
-                #print("{}: {}".format(str(client_address), str(message)))
-                logging.info("{}: {}".format(str(client_address), str(message)))
+                # print("{}: {}".format(str(client_address), str(message)))
+                logging.info("{}: {}".format(
+                    str(client_address), str(message)))
                 try:
                     for js in parse_msg(message.decode(encoding="latin-1", errors="ignore")):
                         if js["id"]:
@@ -179,13 +188,12 @@ if __name__ == '__main__':
                             if wonderware:
                                 write_historian(js)
                 except Exception as e:
-                    #print(e)
+                    # print(e)
                     logging.error(e)
                     pass
             else:
-                #print("close: " + str(s))
+                # print("close: " + str(s))
                 if s not in [server_socket_tcp, server_socket_udp]:
                     inputs.remove(s)
                 logging.debug("Cls: {}".format(str(s)))
                 s.close()
-

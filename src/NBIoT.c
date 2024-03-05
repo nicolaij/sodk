@@ -33,6 +33,9 @@ static const char *TAG = "nbiot";
 
 extern float tsens_out;
 
+extern int temperature;
+extern int humidity;
+
 extern int d_input; // состояние внешнего входа (-1 - состояние отправлено через модем)
 
 char modem_status[200];
@@ -1023,7 +1026,11 @@ void radio_task(void *arg)
 
                 if (result.channel == 1 && (result.input == 100 || result.input == 101)) // Input, Tcpu, RSSI
                 {
+#if defined(SHT4x_SENSOR)
+                    len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d,\"T2\":%.1f,\"H2\":%.1f}", id, result.channel, datetime, d_input, tsens_out, (int)rssi * 2 + -113, temperature / 1000.0, humidity / 1000.0);
+#else
                     len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, datetime, d_input, tsens_out, (int)rssi * 2 + -113);
+#endif
                 }
                 else
                 {
@@ -1040,7 +1047,6 @@ void radio_task(void *arg)
                         len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d}", id, result.channel, bootCount, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
                     }
                 }
-                // len_data = snprintf((char *)buf, sizeof(buf), "{'id':'%d.%d','num':%d,'dt':'%s','U':%d,'R':%d,'Ub1':%.3f,'Ub0':%.3f,'U0':%d,'in':%d,'T':%.1f,'rssi':%d}", id, result.channel, bootCount, datetime, result.U, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0, result.input, tsens_out, (int)rssi * 2 + -113);
 
                 ESP_LOGI(TAG, "Send data: %s", buf);
 
