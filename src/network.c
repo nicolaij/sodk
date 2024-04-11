@@ -8,6 +8,7 @@
 */
 #include "main.h"
 
+#include "esp_partition.h"
 #include <esp_ota_ops.h>
 
 #include "esp_mac.h"
@@ -829,6 +830,8 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     return ESP_OK;
 };
 
+#define ESP_IMAGE_HEADER_MAGIC 0xE9 /*!< The magic word for the esp_image_header_t structure. */
+
 /*
  * Handle OTA file upload
  */
@@ -837,8 +840,6 @@ esp_err_t update_post_handler(httpd_req_t *req)
     int file_id = -1;
     esp_ota_handle_t ota_handle;
     int remaining = req->content_len;
-
-    int block = 0;
 
     reset_sleep_timeout();
 

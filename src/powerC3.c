@@ -23,6 +23,8 @@
 
 #include "esp_wifi.h"
 
+static const char *TAG = "power";
+
 // Счетчик разряда батареи
 RTC_DATA_ATTR unsigned int BattLow = 1;
 
@@ -245,9 +247,11 @@ int kOm2chanlv(int adc_u, int adc_r)
 static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 {
     adc_continuous_handle_t handle = NULL;
+
     adc_continuous_handle_cfg_t adc_config = {
         .max_store_buf_size = ADC_BUFFER * 4,
-        .conv_frame_size = ADC_BUFFER * 4};
+        .conv_frame_size = ADC_BUFFER};
+
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
 
     adc_continuous_config_t dig_cfg = {
@@ -263,12 +267,12 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 
     int n = 0;
     // Note: Все atten при инициализации должны быть одинаковые!!!???
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].atten = ADC_ATTEN_DB_12;
     adc_pattern[n].channel = chan_r[0].channel;
     adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].atten = ADC_ATTEN_DB_12;
     adc_pattern[n].channel = chan_r[1].channel;
 #ifdef ADC1_ONLY
     adc_pattern[n].unit = ADC_UNIT_1;
@@ -277,17 +281,17 @@ static void continuous_adc_init(adc_continuous_handle_t *out_handle)
 #endif
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].atten = ADC_ATTEN_DB_12;
     adc_pattern[n].channel = chan_r[2].channel;
     adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].atten = ADC_ATTEN_DB_12;
     adc_pattern[n].channel = chan_r[3].channel;
     adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
+    adc_pattern[n].atten = ADC_ATTEN_DB_12;
     adc_pattern[n].channel = chan_r[4].channel;
     adc_pattern[n].unit = ADC_UNIT_1;
     adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
@@ -392,9 +396,9 @@ void btn_task(void *arg)
 
     // Interrupt from PCF8575
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
-    io_conf.pin_bit_mask = BIT64(INT_PIN);
+    io_conf.pin_bit_mask = BIT64(PCF_INT_PIN);
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
     // create a queue to handle gpio event from isr
@@ -406,7 +410,7 @@ void btn_task(void *arg)
     // install gpio isr service
     gpio_install_isr_service(0);
     // hook isr handler for specific gpio pin
-    gpio_isr_handler_add(INT_PIN, pcf_int_handler, (void *)INT_PIN);
+    gpio_isr_handler_add(PCF_INT_PIN, pcf_int_handler, (void *)PCF_INT_PIN);
 
     int old_btn_state = gpio_get_level(BTN_PIN);
     int new_btn_state = old_btn_state;
@@ -416,7 +420,7 @@ void btn_task(void *arg)
 
     while (1)
     {
-        if (xQueueReceive(gpio_evt_queue, &io_num, 0) == pdTRUE)
+        if (xQueueReceive(gpio_evt_queue, &io_num, 200 / portTICK_PERIOD_MS) == pdTRUE)
         {
             ESP_LOGV("pcf8575", "read pcf8575");
 
@@ -656,7 +660,7 @@ void btn_task(void *arg)
         }
         // end работа с терминалом
 
-        vTaskDelay(200 / portTICK_PERIOD_MS);
+        vTaskDelay(1);
     }
 }
 
@@ -685,8 +689,8 @@ void dual_adc(void *arg)
     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
 
 #if ESP_IDF_VERSION_MAJOR >= 5
-    adc_continuous_handle_t handle = NULL;
-    continuous_adc_init(&handle);
+    adc_continuous_handle_t adc_handle = NULL;
+    continuous_adc_init(&adc_handle);
 #else
     continuous_adc_init();
 #endif
@@ -698,6 +702,9 @@ void dual_adc(void *arg)
     while (1)
     {
         xQueueReceive(uicmd_queue, &cmd_power, portMAX_DELAY);
+
+        // отключаем обработку прерываний от pcf
+        gpio_isr_handler_remove(PCF_INT_PIN);
 
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
         // включаем канал
@@ -721,7 +728,7 @@ void dual_adc(void *arg)
         int64_t timeout = menu[0].val * 1000LL;
 
 #if ESP_IDF_VERSION_MAJOR >= 5
-        ESP_ERROR_CHECK(adc_continuous_start(handle));
+        ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
 #else
         ESP_ERROR_CHECK(adc_digi_start());
 #endif
@@ -760,25 +767,20 @@ void dual_adc(void *arg)
             uint32_t req = ADC_BUFFER;
             uint32_t ret = 0;
             ptrb = ptr;
-            // printf("adc: ");
+
             while (req > 0)
             {
 #if ESP_IDF_VERSION_MAJOR >= 5
-                ESP_ERROR_CHECK(adc_continuous_read(handle, ptr, req, &ret, ADC_MAX_DELAY));
+                ESP_ERROR_CHECK(adc_continuous_read(adc_handle, ptr, req, &ret, ADC_MAX_DELAY));
 #else
                 ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, req, &ret, ADC_MAX_DELAY));
 #endif
                 ptr = ptr + ret;
                 req = req - ret;
-
-                // printf(" %ld", ret);
             }
-            // printf(" %ld\n", ret);
 
             if (blocks == ON_BLOCK) // включаем источник ВВ
             {
-                if (BattLow > 10)
-                    break;
 
                 t1 = esp_timer_get_time();
 
@@ -794,7 +796,6 @@ void dual_adc(void *arg)
                         pcf8575_set(LV_CMDON);
                 }
 
-                // printf("on\n");
                 block_power_on = blocks;
             }
 
@@ -1168,7 +1169,7 @@ void dual_adc(void *arg)
 
                     if (blocks == block_power_off_step)
                     {
-                        ESP_LOGV("compare off", "%d\n", blocks);
+                        ESP_LOGV("adc", "compare off %d", blocks);
 
                         // ВЫРУБАЕМ
                         if (cmd_power.channel < 5)
@@ -1233,11 +1234,14 @@ void dual_adc(void *arg)
                     if (result.Ubatt1 < menu[16].val)
                     {
                         BattLow += 1;
+        
+                        ESP_LOGD(TAG, "Ubatt low: %d", result.Ubatt1);
 
                         // отключаем если при lv измерении напряжение упало ниже минимума
+                        // увеличивем интервал при очень низком напряжении
                         if (cmd_power.channel > 4 && result.Ubatt1 < menu[17].val)
                         {
-                            BattLow = 1000000;
+                            BattLow += 10;
                         }
                     }
 
@@ -1291,22 +1295,37 @@ void dual_adc(void *arg)
         } while (blocks < 9000); // ограничение 9 сек
 
 #if ESP_IDF_VERSION_MAJOR >= 5
-        ESP_ERROR_CHECK(adc_continuous_stop(handle));
-        // ESP_ERROR_CHECK(adc_continuous_deinit(handle));
+        ESP_ERROR_CHECK(adc_continuous_stop(adc_handle));
+        // ESP_ERROR_CHECK(adc_continuous_deinit(adc_handle));
 #else
         ESP_ERROR_CHECK(adc_digi_stop());
 #endif
 
-        // ВЫРУБАЕМ (на всякий случай)
-        pcf8575_set(LV_CMDOFF);
-        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+        // ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
 
-        // запоминаем данные для сравнения
-        measure_chan[cmd_power.channel] = result.R;
+        // сравниваем с предыдущими измерениями измерения
+        if (result.R > 0)
+        {
+            if (abs(measure_chan[cmd_power.channel] - result.R) * 100 / abs(result.R) > menu[27].val)
+            {
+                xEventGroupSetBits(ready_event_group, NEED_TRANSMIT);
+
+                ESP_LOGD(TAG, "Differences in measurements found. Set NEED_TRANSMIT");
+
+                // запоминаем данные для сравнения
+                measure_chan[cmd_power.channel] = result.R;
+            }
+        }
+
+        // передаем полюбому если проводим высоковольтные измерения
+        if (hv_measure)
+        {
+            xEventGroupSetBits(ready_event_group, NEED_TRANSMIT);
+        }
 
         // определяем процент напряжение на обратном проводе
         int pr = (result.U0 * 100) / result.U;
-        if (pr > 75) // 75%
+        if (pr > menu[26].val) // 75%
         {
             measure_current_flags |= BIT(cmd_power.channel);
         }
@@ -1323,15 +1342,24 @@ void dual_adc(void *arg)
             {
                 start_measure(0, 1);
             }
-
-            // если номера каналов измерения только низковольные 5-8, в очередь ничего не будет добавлено и завершаем
-            if (uxQueueMessagesWaiting(uicmd_queue) == 0)
+            else
             {
+                // завершаем
                 measure_flags = measure_current_flags;
+                // ВЫРУБАЕМ каналы
                 pcf8575_set(POWER_CMDOFF);
+
+                // Подключаем прерывания от pcf
+                // читаем pcf, для сброса бита INT
+                ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_isr_handler_add(PCF_INT_PIN, pcf_int_handler, (void *)PCF_INT_PIN));
+                uint32_t io_num = 0;
+                xQueueSend(gpio_evt_queue, &io_num, 0);
+
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+
                 xEventGroupSetBits(ready_event_group, END_MEASURE);
-            }
-        }
+            };
+        };
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];

@@ -36,8 +36,6 @@ extern float tsens_out;
 extern int temperature;
 extern int humidity;
 
-extern int d_input; // состояние внешнего входа (-1 - состояние отправлено через модем)
-
 char modem_status[200];
 
 struct stringreturn_t
@@ -675,25 +673,23 @@ void radio_task(void *arg)
 
     modem_dce_t *dce = NULL;
 
-    gpio_config_t io_conf = {};
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_OUTPUT_OD;
-    io_conf.pin_bit_mask = (1 << GPIO_NUM_18);
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
-    // configure GPIO with the given settings
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
-    ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_18, 1)); // power NBIoT
-
     vTaskDelay(1000 / portTICK_PERIOD_MS); // смещение времени запуска модуля
+
+    /* Ждем необходимости запуска передачи*/
+    xEventGroupWaitBits(
+        ready_event_group, /* The event group being tested. */
+        NEED_TRANSMIT,     /* The bits within the event group to wait for. */
+        pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdTRUE,
+        portMAX_DELAY);
 
     while (1)
     {
         // ON
         ESP_LOGI(TAG, "Power ON");
-        ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_18, 0)); // power NBIoT
-        vTaskDelay(1000 / portTICK_PERIOD_MS);           // ждем включения NBIOT модуля
-        ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_18, 1)); // power NBIoT
+        pcf8575_set(NB_PWR_CMDON);
+        vTaskDelay(1000 / portTICK_PERIOD_MS); // ждем включения NBIOT модуля
+        pcf8575_set(NB_PWR_CMDOFF);
 
         int counter = 2;
         do
@@ -1016,7 +1012,7 @@ void radio_task(void *arg)
             int len_data = 0;
 
             // результат измерений
-            result_t result = {.input = d_input};
+            result_t result;
 
             while (pdTRUE == xQueueReceive(send_queue, &result, 20000 / portTICK_PERIOD_MS))
             {
@@ -1027,7 +1023,7 @@ void radio_task(void *arg)
                 if (result.channel == 1 && (result.input == 100 || result.input == 101)) // Input, Tcpu, RSSI
                 {
 #if defined(SHT4x_SENSOR)
-                    len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d,\"T2\":%.1f,\"H2\":%.1f}", id, result.channel, datetime, d_input, tsens_out, (int)rssi * 2 + -113, temperature / 1000.0, humidity / 1000.0);
+                    len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d,\"T2\":%.1f,\"H2\":%.1f}", id, result.channel, datetime, result.input - 100, tsens_out, (int)rssi * 2 + -113, temperature / 1000.0, humidity / 1000.0);
 #else
                     len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, datetime, d_input, tsens_out, (int)rssi * 2 + -113);
 #endif
@@ -1074,8 +1070,8 @@ void radio_task(void *arg)
                     {
                         if (dce->state == MODEM_STATE_SUCCESS)
                         {
-                            if (result.channel == 1)
-                                d_input = -1; // состояние входа "отправлено"
+                            //                            if (result.channel == 1)
+                            //                                d_input = -1; // состояние входа "отправлено"
 
                             break;
                         }
@@ -1133,7 +1129,12 @@ void radio_task(void *arg)
             error_timeout_counter++;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(error_timeout));
+        // vTaskDelay(pdMS_TO_TICKS(error_timeout));
+        if (ulTaskNotifyTake(pdFALSE, pdMS_TO_TICKS(error_timeout)) > 0)
+        {
+            ESP_LOGD(TAG, "Receive SLEEP_BIT");
+            break;
+        }
     }
 
     if (dce)
@@ -1153,21 +1154,21 @@ void radio_task(void *arg)
         // vTaskDelay(pdMS_TO_TICKS(1000));
 
         // OFF
-        ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_18, 0)); // power NBIoT
-        vTaskDelay(1000 / portTICK_PERIOD_MS);           // ждем включения NBIOT модуля
-        ESP_ERROR_CHECK(gpio_set_level(GPIO_NUM_18, 1)); // power NBIoT
-                                                         /*
-                                                                 esp_dce->priv_resource = "DOWN";
-                                                                 dce->handle_line = esp_modem_dce_handle_response_str_ok;
-                                                                 dte->send_cmd(dte, "AT+CPOWD=1\r", 10000);
-                                                 
-                                                                 if (dce->state == MODEM_STATE_SUCCESS)
-                                                         */
-        ESP_LOGW(TAG, "Power down");
-    }
+        pcf8575_set(NB_PWR_CMDON);
+        vTaskDelay(1500 / portTICK_PERIOD_MS); // ждем включения NBIOT модуля
+        pcf8575_set(NB_PWR_CMDOFF);
+        /*
+                esp_dce->priv_resource = "DOWN";
+                dce->handle_line = esp_modem_dce_handle_response_str_ok;
+                dte->send_cmd(dte, "AT+CPOWD=1\r", 10000);
 
-    vTaskDelay(pdMS_TO_TICKS(1020)); // Turn-Off Timing by AT Command
-    ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
+                if (dce->state == MODEM_STATE_SUCCESS)
+        */
+        ESP_LOGW(TAG, "Power down");
+
+        vTaskDelay(pdMS_TO_TICKS(1500)); // Turn-Off Timing by AT Command
+        ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
+    }
 
     xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
 

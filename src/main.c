@@ -12,16 +12,21 @@
 
 #include "esp_timer.h"
 
-#include "driver/i2c.h"
 #define PCF8575_I2C_ADDR_BASE 0x20
 
 #include <string.h>
 
 #if ESP_IDF_VERSION_MAJOR == 5
+#include "driver/i2c_master.h"
 #include "driver/temperature_sensor.h"
+
+i2c_master_bus_handle_t bus_handle;
+i2c_master_dev_handle_t dev_handle_pcf;
+
 #endif
 
 #if ESP_IDF_VERSION_MAJOR == 4
+#include "driver/i2c.h"
 #include "driver/temp_sensor.h"
 #endif
 
@@ -39,9 +44,8 @@ TaskHandle_t xHandleWifi = NULL;
 TaskHandle_t xHandleADC = NULL;
 TaskHandle_t xHandleBtn = NULL;
 
+int i2c_master_port = I2C_NUM_0;
 int i2c_err = 1;
-
-// static i2c_dev_t pcf8575;
 
 menu_t menu[] = {
     {.id = "pulse", .name = "Время импульса", .val = 500, .min = -1, .max = 10000},
@@ -70,8 +74,8 @@ menu_t menu[] = {
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "blocks", .name = "График после результ.", .val = 100, .min = 0, .max = 2000},
     {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
-    {.id = "percU0lv", .name = "\% U петли низ.", .val = 50, .min = 0, .max = 100}, /*26 Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
-    {.id = "percRlv", .name = "\% R низ.", .val = 50, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого считаем нормой, выше - проводим высоковольтные измерения. 100% - не проводим высоковольтные измерения по изменению сопротивления*/
+    {.id = "percU0lv", .name = "\% U петли низ.", .val = 75, .min = 0, .max = 100}, /*26 Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
+    {.id = "percRlv", .name = "\% R низ.", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
 };
 
 QueueHandle_t uicmd_queue;
@@ -113,49 +117,34 @@ int read_nvs_menu()
     }
     return err;
 }
-/*
-void power_on(int channel_mask)
-{
-    if (i2c_err)
-        return;
-    uint16_t port_val = ~(channel_mask | (1 << NB_PWR_BIT));
-    // ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
-    pcf8575_port_write(&pcf8575, port_val);
-}
 
-void power_off(void)
-{
-    if (i2c_err)
-        return;
-    uint16_t port_val = ~((1 << POWER_BIT) | (1 << NB_PWR_BIT));
-    // ESP_ERROR_CHECK(pcf8575_port_write(&pcf8575, port_val));
-    pcf8575_port_write(&pcf8575, port_val);
-}
-*/
-
-int pcf8575_read(uint16_t bit)
+int pcf8575_read(int bit)
 {
     if (i2c_err)
         return 0;
 
     static uint16_t port_val = UINT16_MAX;
 
-    ESP_ERROR_CHECK(i2c_master_read_from_device(0, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
+#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
+    ESP_ERROR_CHECK(i2c_master_read_from_device(i2c_master_port, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
+#endif
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
+    i2c_master_receive(dev_handle_pcf, (uint8_t *)&port_val, 2, 100);
+#endif
+
+    ESP_LOGV("pcf8575", "pcf8575 get: 0x%04X", port_val);
 
     if ((port_val & BIT(bit)) == 0)
         return 1;
     return 0;
 }
 
-// #define INVERT_NB_PWR 1 //без транзистора на входе (0 - сигнал вкл.)
 //  POWER_BIT - и NB_PWR_BIT - инверсные
 //  POWER_BIT - всегда, кроме когда каналы выбраны
 void pcf8575_set(int channel_cmd)
 {
     if (i2c_err)
         return;
-
-    ESP_LOGD("pcf8575", "pcf8575 set (%d)", channel_cmd);
 
     static uint16_t current_mask = 0;
     uint16_t cmd_mask = 0;
@@ -266,8 +255,13 @@ void pcf8575_set(int channel_cmd)
 
     uint16_t port_val = ~(cmd_mask);
 
-    ESP_ERROR_CHECK(i2c_master_write_to_device(0, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
-    // ESP_LOGV("pcf8575", "pcf8575 set OK");
+#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
+    ESP_ERROR_CHECK(i2c_master_write_to_device(i2c_master_port, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
+#endif
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
+    ESP_ERROR_CHECK(i2c_master_transmit(dev_handle_pcf, (uint8_t *)&port_val, 2, 100));
+#endif
+    ESP_LOGV("pcf8575", "cmd: %3d set: 0x%04X", channel_cmd, port_val);
 }
 
 void go_sleep(void)
@@ -277,17 +271,15 @@ void go_sleep(void)
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
 #endif
 
-    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
-
-    ESP_LOGW("main", "Go sleep...");
-    fflush(stdout);
-
-    uint64_t time_in_us = StoUS(menu[18].val);
+    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
 
     // коррекция на время работы
-    time_in_us = time_in_us - (esp_timer_get_time() % StoUS(menu[18].val));
+    uint64_t time_in_us = StoUS(menu[18].val) * BattLow - (esp_timer_get_time() % StoUS(menu[18].val));
 
-    esp_sleep_enable_timer_wakeup(time_in_us * BattLow);
+    ESP_LOGW("main", "Go sleep: %lld us, (k BattLow: %d)", time_in_us, BattLow);
+    fflush(stdout);
+
+    esp_sleep_enable_timer_wakeup(time_in_us);
     esp_deep_sleep_start();
 }
 
@@ -397,6 +389,12 @@ void app_main()
     //  "Количество загрузок: "
     ESP_LOGI("main", "Boot number: %d", bootCount);
 
+    time_t n = time(0);
+    struct tm *localtm = localtime(&n);
+    strftime((char *)buf, sizeof(buf), "%Y-%m-%d %T", localtm);
+
+    ESP_LOGI("main", "Current date/time: %s", buf);
+
     esp_efuse_mac_get_default(mac);
     ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
@@ -458,7 +456,7 @@ void app_main()
     // Check I2C bus resistor to +3v3 is connected
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = (1 << I2C_MASTER_SDA_PIN) | (1 << I2C_MASTER_SCL_PIN);
+    io_conf.pin_bit_mask = BIT64(I2C_MASTER_SDA_PIN) | BIT64(I2C_MASTER_SCL_PIN);
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     // configure GPIO with the given settings
@@ -466,15 +464,40 @@ void app_main()
 
     if (gpio_get_level(I2C_MASTER_SDA_PIN) == 1 && gpio_get_level(I2C_MASTER_SCL_PIN) == 1)
     {
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
+        i2c_master_bus_config_t i2c_mst_config = {
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .i2c_port = i2c_master_port,
+            .scl_io_num = I2C_MASTER_SCL_PIN,
+            .sda_io_num = I2C_MASTER_SDA_PIN,
+            .glitch_ignore_cnt = 7,
+            .flags.enable_internal_pullup = false,
+        };
 
-        int i2c_master_port = 0;
+        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
 
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = PCF8575_I2C_ADDR_BASE,
+            .scl_speed_hz = 100000,
+        };
+
+        if (i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle_pcf) == ESP_OK)
+        {
+            i2c_err = 0;
+        }
+        else
+        {
+            ESP_LOGE("i2c", "i2c_driver_install error!");
+        }
+#endif
+#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
         i2c_config_t conf = {
             .mode = I2C_MODE_MASTER,
             .sda_io_num = I2C_MASTER_SDA_PIN,
             .scl_io_num = I2C_MASTER_SCL_PIN,
-            .sda_pullup_en = GPIO_PULLUP_ENABLE,
-            .scl_pullup_en = GPIO_PULLUP_ENABLE,
+            .sda_pullup_en = GPIO_PULLUP_DISABLE,
+            .scl_pullup_en = GPIO_PULLUP_DISABLE,
             .master.clk_speed = 100000,
         };
 
@@ -488,10 +511,9 @@ void app_main()
         {
             ESP_LOGE("i2c", "i2c_driver_install error!");
         }
-
+#endif
         // init pcf outs
         pcf8575_set(0);
-        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
     else
     {
@@ -510,31 +532,57 @@ void app_main()
 #define SHT4X_ADDRESS 0x44
 
     static uint8_t sht4x_cmd_measure = SHT4X_CMD_MEASURE_HPM;
-    if (i2c_err == 0 && i2c_master_write_to_device(0, SHT4X_ADDRESS, (uint8_t *)&sht4x_cmd_measure, 1, 500 / portTICK_PERIOD_MS) == ESP_OK)
+
+    vTaskDelay(10 / portTICK_PERIOD_MS); // пауза после инициализации PCF
+
+#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
+    if (i2c_err == 0 && i2c_master_write_to_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)&sht4x_cmd_measure, 1, 500 / portTICK_PERIOD_MS) == ESP_OK)
+#endif
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
+        i2c_device_config_t dev_cfg_sht4x = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = SHT4X_ADDRESS,
+            .scl_speed_hz = 100000,
+        };
+
+    i2c_master_dev_handle_t dev_handle_sht4x;
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_add_device(bus_handle, &dev_cfg_sht4x, &dev_handle_sht4x));
+
+    if (i2c_err == 0 && i2c_master_transmit(dev_handle_sht4x, (uint8_t *)&sht4x_cmd_measure, 1, 500) == ESP_OK)
+#endif
     {
         vTaskDelay(10 / portTICK_PERIOD_MS);
         uint8_t sensor_data[6];
-        if (i2c_master_read_from_device(0, SHT4X_ADDRESS, (uint8_t *)sensor_data, 6, 500 / portTICK_PERIOD_MS) == ESP_OK)
-        {
-            int t_ticks = sensor_data[0] * 256 + sensor_data[1];
-            int rh_ticks = sensor_data[3] * 256 + sensor_data[4];
+#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
+        if (i2c_master_read_from_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)sensor_data, 6, 500 / portTICK_PERIOD_MS) == ESP_OK)
+#endif
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
+            if (i2c_master_receive(dev_handle_sht4x, (uint8_t *)sensor_data, 6, 500) == ESP_OK)
+#endif
+            {
+                int t_ticks = sensor_data[0] * 256 + sensor_data[1];
+                int rh_ticks = sensor_data[3] * 256 + sensor_data[4];
 
-            /**
-             * formulas for conversion of the sensor signals, optimized for fixed point
-             * algebra:
-             * Temperature = 175 * S_T / 65535 - 45
-             * Relative Humidity = 125 * (S_RH / 65535) - 6
-             */
-            temperature = ((21875 * t_ticks) >> 13) - 45000;
-            humidity = ((15625 * rh_ticks) >> 13) - 6000;
+                /**
+                 * formulas for conversion of the sensor signals, optimized for fixed point
+                 * algebra:
+                 * Temperature = 175 * S_T / 65535 - 45
+                 * Relative Humidity = 125 * (S_RH / 65535) - 6
+                 */
+                temperature = ((21875 * t_ticks) >> 13) - 45000;
+                humidity = ((15625 * rh_ticks) >> 13) - 6000;
 
-            l = snprintf((char *)buf, sizeof(buf), "SHT4x \"T2\":%.01f°C,\"H2\":%.01f%%", temperature / 1000.0, humidity / 1000.0);
-            xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
-            ESP_LOGI("SHT4x", "%s", buf);
-        }
-        else
-            ESP_LOGE("SHT4x", "Read error");
+                l = snprintf((char *)buf, sizeof(buf), "SHT4x \"T2\":%.01f°C,\"H2\":%.01f%%", temperature / 1000.0, humidity / 1000.0);
+                xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
+                ESP_LOGI("SHT4x", "%s", buf);
+            }
+            else
+                ESP_LOGE("SHT4x", "Read error");
     }
+
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
+    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_rm_device(dev_handle_sht4x));
+#endif
 
 #endif
 
@@ -560,6 +608,7 @@ void app_main()
     if (bootCount % (menu[19].val / menu[18].val) == 1 && BattLow < 10)
     {
         start_measure(0, 0);
+        xEventGroupSetBits(ready_event_group, NEED_TRANSMIT); // запускаем передатчик
     }
     else
     {
@@ -608,6 +657,13 @@ void app_main()
         ESP_LOGI("radio_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleRadio));
         ESP_LOGI("btn_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleBtn));
     }
+
+    // Если нет необходимости передавать данные, то пропускаем ожидание передачи
+    if ((xEventGroupGetBits(ready_event_group) & NEED_TRANSMIT) == 0)
+    {
+        xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
+    }
+
     xEventGroupWaitBits(
         ready_event_group,              /* The event group being tested. */
         END_TRANSMIT | END_RADIO_SLEEP, /* The bits within the event group to wait for. */

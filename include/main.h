@@ -29,9 +29,9 @@
 #define BTN_PIN GPIO_NUM_9
 
 #ifdef ADC1_ONLY
-    #define INT_PIN GPIO_NUM_5
+    #define PCF_INT_PIN GPIO_NUM_5
 #else
-    #define INT_PIN GPIO_NUM_2
+    #define PCF_INT_PIN GPIO_NUM_2
 #endif
 
 #define I2C_MASTER_SDA_PIN GPIO_NUM_8
@@ -54,7 +54,7 @@
 
 #define WS_BUF_SIZE 160
 
-#define StoUS(ms) ((ms)*1000000LL)
+#define StoUS(s) ((s)*1000000LL)
 
 typedef struct
 {
@@ -117,12 +117,13 @@ extern RingbufHandle_t wsbuf_handle;
 
 extern EventGroupHandle_t ready_event_group;
 
-// Конец измерений
+// Конец измерений и флаги
 #define END_MEASURE BIT0
 #define END_TRANSMIT BIT1
 #define END_WIFI_TIMEOUT BIT2
 #define END_RADIO_SLEEP BIT3
 #define END_UI_SLEEP BIT4
+#define NEED_TRANSMIT BIT5
 
 extern int bootCount;
 extern int terminal_mode;
@@ -158,7 +159,10 @@ void cur_time(char *buf);
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on, int channel);
 
 void pcf8575_set(int channel_cmd);
-int pcf8575_read(uint16_t bit);
+
+//bit 0..15 - return bit
+//bit -1 return all bits
+int pcf8575_read(int bit);
 
 /*
 channel - номер канала, если 0 - то по списку menu[20]
