@@ -14,6 +14,8 @@
 
 #include "freertos/ringbuf.h"
 
+#include <sys/time.h>
+
 // размер кольцевого буфера (только степень 2)
 #define RINGBUFLEN 4096
 

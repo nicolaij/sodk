@@ -276,7 +276,7 @@ static esp_err_t settings_handler(httpd_req_t *req)
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<a href=\"?restart=true\">Restart</a>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
-                       "socket.onopen = function(){socket.send(\"open ws\");};\n"
+                       "socket.onopen = function(){socket.send(\"openws:\" + Date.now());};\n"
                        "socket.onmessage = function(e){document.getElementById(\"text\").value += e.data + \"\\n\";}"
                        "</script>"
                        "</body></html>";
@@ -984,25 +984,29 @@ static esp_err_t ws_handler(httpd_req_t *req)
         ESP_LOGE(TAGH, "httpd_ws_recv_frame failed with %d", ret);
         return ret;
     }
-    ESP_LOGI(TAGH, "Got packet with message: \"%s\"", ws_pkt.payload);
-    ESP_LOGI(TAGH, "Packet type: %d", ws_pkt.type);
+    ESP_LOGD(TAGH, "Got packet with message: \"%s\"", ws_pkt.payload);
+    ESP_LOGD(TAGH, "Packet type: %d", ws_pkt.type);
 
     ws_hd = req->handle;
     ws_fd = httpd_req_to_sockfd(req);
     ESP_LOGI(TAGH, "ws_hd/fd: %d/%d", *(int *)ws_hd, ws_fd);
 
-    if (strcmp("open ws", (const char *)ws_pkt.payload) == 0)
-        need_ws_send = true;
-
-    /*
-        strlcpy((char*)buf, "Test!!!", sizeof(buf));
-
-        ret = httpd_ws_send_frame(req, &ws_pkt);
-        if (ret != ESP_OK)
+    const char *initstring = "openws:";
+    if (strncmp(initstring, (const char *)ws_pkt.payload, strlen(initstring)) == 0)
+    {
+        long long ts = atoll((const char *)ws_pkt.payload + strlen(initstring)) / 1000LL;
+        if (ts > 1715923962LL) //17 May 2024 05:32:42 
         {
-            ESP_LOGE(TAGH, "httpd_ws_send_frame failed with %d", ret);
+            struct timeval now = {.tv_sec = ts + timezone * 3600}; // UNIX time + timezone offset
+            settimeofday(&now, NULL);
+
+            time_t t = time(0);
+            struct tm *localtm = localtime(&t);
+            ESP_LOGD(TAG, "WS set date and time: %s", asctime(localtm));
         }
-        */
+        need_ws_send = true;
+    }
+
     return ret;
 }
 

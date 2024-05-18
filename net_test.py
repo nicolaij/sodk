@@ -6,7 +6,7 @@ import json
 import csv
 
 host = '10.179.40.11'
-port = 48884
+port = 48886
 
 x = '{  "name": "John",  "age": 30,  "city": "New York"}'
 
@@ -47,8 +47,6 @@ print(dt)
 s = j['name']
 
 
-
-
 # Создать сокет сервера
 
 MAX_CONNECTIONS = 20
@@ -59,9 +57,5 @@ for client in clients:
     client.connect((host, port))
 
 for i in range(MAX_CONNECTIONS):
-    clients[i].send(bytes("hello from client number " + str(i), encoding='UTF-8'))
-    udp_cli.sendto(bytes("hello from UDP client number " + str(i), encoding='UTF-8'), (host, port))
-
-for client in clients:
-    data = client.recv(1024)
-    print(str(data))
+    clients[i].send(m)
+    udp_cli.sendto(m, (host, port))

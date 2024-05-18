@@ -1,7 +1,6 @@
 #include <main.h>
 #include <stdio.h>
 #include "driver/gpio.h"
-#include <sys/time.h>
 #include "driver/uart.h"
 #include "nvs_flash.h"
 #include "nvs.h"

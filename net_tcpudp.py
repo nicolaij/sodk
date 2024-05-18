@@ -79,7 +79,7 @@ def write_historian(js):
     id = js["id"]
     idn = id.split('.')
     chan = int(idn[1], base=10)
-    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S}.csv'.format(
+    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S.%f}.csv'.format(
         FASTLOADDIR, id, datetime.datetime.now())
     try:
         with open(IntouchFilename, 'w', encoding="latin-1") as f:

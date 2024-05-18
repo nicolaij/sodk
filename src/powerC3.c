@@ -699,9 +699,28 @@ void dual_adc(void *arg)
     bhead = 0;
     btail = 0;
 
+    int timeoutCounter = 0;
+
     while (1)
     {
-        xQueueReceive(uicmd_queue, &cmd_power, portMAX_DELAY);
+        BaseType_t err = xQueueReceive(uicmd_queue, &cmd_power, pdMS_TO_TICKS(menu[18].val * 1000));
+        if (err != pdTRUE) // истек timeout в случае если интервал измерений > таймаута WiFi
+        {
+            if ((++timeoutCounter) % (menu[19].val / menu[18].val) == 1)
+            {
+                start_measure(0, 0);
+            }
+            else
+            {
+                start_measure(0, 2); // LV only
+            }
+            continue;
+        }
+
+        char datetime[22];
+        time_t t = time(0);
+        struct tm *localtm = localtime(&t);
+        strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
 
         // отключаем обработку прерываний от pcf
         gpio_isr_handler_remove(PCF_INT_PIN);
@@ -1234,7 +1253,7 @@ void dual_adc(void *arg)
                     if (result.Ubatt1 < menu[16].val)
                     {
                         BattLow += 1;
-        
+
                         ESP_LOGD(TAG, "Ubatt low: %d", result.Ubatt1);
 
                         // отключаем если при lv измерении напряжение упало ниже минимума
@@ -1363,8 +1382,9 @@ void dual_adc(void *arg)
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0);
-        xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
+        int len_data = snprintf((char *)buf, sizeof(buf), "{\"channel\":\"%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d}", result.channel, timeoutCounter, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
+        // int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0);
+        xRingbufferSend(wsbuf_handle, buf, len_data + 1, 0);
 
         printf("%s\n", buf);
         printf("Avg ADC 0:%d, 1:%d, 2:%d, 3:%d, 4:%d\n", sum_adc_full.R1 / count_adc_full, sum_adc_full.U / count_adc_full, sum_adc_full.R2 / count_adc_full, sum_adc_full.Ubatt / count_adc_full, sum_adc_full.U0 / count_adc_full);

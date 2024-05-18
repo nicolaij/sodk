@@ -69,7 +69,7 @@ menu_t menu[] = {
     {.id = "Trepeatlv", .name = "Интервал измерений", .val = 120, .min = 1, .max = 1000000},
     {.id = "Trepeathv", .name = "Интервал измер. выс.", .val = 3600, .min = 1, .max = 1000000},
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999}, /*20*/
-    {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 1, .max = 10000},
+    {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 1, .max = 100000},
     {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "blocks", .name = "График после результ.", .val = 100, .min = 0, .max = 2000},
@@ -274,7 +274,7 @@ void go_sleep(void)
     ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
 
     // коррекция на время работы
-    uint64_t time_in_us = StoUS(menu[18].val) * BattLow - (esp_timer_get_time() % StoUS(menu[18].val));
+    uint64_t time_in_us = StoUS(menu[18].val * BattLow) - (esp_timer_get_time() % StoUS(menu[18].val));
 
     ESP_LOGW("main", "Go sleep: %lld us, (k BattLow: %d)", time_in_us, BattLow);
     fflush(stdout);
@@ -598,14 +598,9 @@ void app_main()
 
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);
 
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED) // reset
-    {
-        // vTaskDelay(3000 / portTICK_PERIOD_MS);
-    };
-
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
 
-    if (bootCount % (menu[19].val / menu[18].val) == 1 && BattLow < 10)
+    if (bootCount % (menu[19].val / menu[18].val) == 1 && BattLow < 100)
     {
         start_measure(0, 0);
         xEventGroupSetBits(ready_event_group, NEED_TRANSMIT); // запускаем передатчик
@@ -631,6 +626,7 @@ void app_main()
         pdTRUE,
         portMAX_DELAY);
 
+    //запускаем WiFi если подали питание или сработал концевик
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
         // для отладки схемы pulse -1
