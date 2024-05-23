@@ -17,9 +17,10 @@ PORT = 48886
 FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
 DATASIZE = 1024
 
-dataname = ['id', 'dt', 'num', 'U', 'R', 'time', 'U0', 'Ulv', 'Rlv', 'U0lv', 'Ub0', 'Ub1', 'T', 'rssi', 'in', 'T2', 'H2']
+dataname = ['id', 'dt', 'num', 'U', 'R', 'time', 'U0', 'Ulv',
+    'Rlv', 'U0lv', 'Ub0', 'Ub1', 'T', 'rssi', 'in', 'T2', 'H2']
 
-officedataname = ['dt', 'num','U','R', 'U0', 'Ub1']
+officedataname = ['dt', 'num', 'U', 'R', 'U0', 'Ub1']
 
 # soffice "-accept=socket,host=localhost,port=2002;urp;"
 
@@ -43,9 +44,10 @@ def create_office_instance():
 
 def open_sheets(doc):
     if doc is None:
-        doc = desktop.loadComponentFromURL("private:factory/scalc", "_blank", 0, ())
-    
-    for chan in range(1,9):
+        doc = desktop.loadComponentFromURL(
+            "private:factory/scalc", "_blank", 0, ())
+
+    for chan in range(1, 9):
         try:
             csheet = doc.Sheets[chan]
         except:
@@ -94,13 +96,15 @@ def write_csv(prename, js):
         if d not in js:
             js[d] = ''
 
-    csvFilename = '{}{}_{:%Y-%m}.csv'.format(prename, js["id"], datetime.datetime.now())
+    csvFilename = '{}{}_{:%Y-%m}.csv'.format(
+        prename, js["id"], datetime.datetime.now())
     try:
         with open(csvFilename, 'r', newline='') as csvfile:
             n = csvfile.read(1)
     except:
         with open(csvFilename, 'w', newline='') as csvfile:
-            csvfile.write('Datetime;Counter;U;R;time;U0;Ulv;Rlv;U0lv;Ub0;Ub1;T;RSSI;in;T2;H2\n')
+            csvfile.write(
+                'Datetime;Counter;U;R;time;U0;Ulv;Rlv;U0lv;Ub0;Ub1;T;RSSI;in;T2;H2\n')
         pass
 
     try:
@@ -117,7 +121,8 @@ def write_historian(js):
     id = js["id"]
     idn = id.split('.')
     chan = int(idn[1], base=10)
-    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S.%f}.csv'.format(FASTLOADDIR, id, datetime.datetime.now())
+    IntouchFilename = '{}{} {:%Y-%m-%d_%H.%M.%S.%f}.csv'.format(
+        FASTLOADDIR, id, datetime.datetime.now())
     try:
         with open(IntouchFilename, 'w', encoding="latin-1") as f:
             f.write("ASCII\n,\n")
@@ -182,7 +187,7 @@ def on_wsmessage(wsapp, message):
                         if d == 'dt':
                             o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Formula = js[d]
                             numbers = odoc.NumberFormats
-                            locale = odoc.CharLocale                                            
+                            locale= odoc.CharLocale
                             NumberFormatString = "YYYY-MM-DD HH:MM:SS"
                             number_format_key = numbers.queryKey(NumberFormatString, locale, True)
                             if number_format_key == -1:
@@ -198,9 +203,9 @@ def on_wsmessage(wsapp, message):
 if __name__ == '__main__':
 
     logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)-5.5s] %(message)s",
-        handlers=[
+        level = logging.DEBUG,
+        format = "%(asctime)s [%(levelname)-5.5s] %(message)s",
+        handlers = [
             logging.FileHandler("debug.log"),
             logging.StreamHandler(sys.stdout)
         ]
@@ -222,7 +227,7 @@ if __name__ == '__main__':
         logging.info("OpenOffice connect succefull.")
         odoc = desktop.getCurrentComponent()
         o_sheets = open_sheets(odoc)
-        for chan in range(1,9):
+        for chan in range(1, 9):
             oCurs = o_sheets[chan].createCursor()
             oCurs.gotoEndOfUsedArea(False)
             dEndRow[chan] = oCurs.RangeAddress.EndRow
@@ -235,15 +240,13 @@ if __name__ == '__main__':
                         pass
                     num = num + 1
 
+        websocket.enableTrace(True)
+
         os.environ['NO_PROXY'] = '192.168.4.1'
+        wsapp = None
         wsapp = websocket.WebSocketApp("ws://192.168.4.1/ws", on_open=on_wsopen, on_message=on_wsmessage)
-        while True:
-            try:
-                wsapp.run_forever()
-            except Exception as e:
-                logging.error(e)
-            
-            time.sleep(1)
+        wsapp.run_forever(reconnect=5)
+    sys.exit(0)
 
     # Откуда и куда записывать информацию
     outputs = []
@@ -252,7 +255,7 @@ if __name__ == '__main__':
     # Создаем серверный сокет без блокирования основного потока в ожидании подключения
     server_socket_tcp = get_non_blocking_server_socket(socket.SOCK_STREAM)
     server_socket_udp = get_non_blocking_server_socket(socket.SOCK_DGRAM)
-    
+
     inputs = [server_socket_tcp, server_socket_udp]
     # print("TCP/UDP server is running")
     logging.info("TCP/UDP server is running")
@@ -288,7 +291,8 @@ if __name__ == '__main__':
             if message:
                 # Вывод полученных данных на консоль
                 # print("{}: {}".format(str(client_address), str(message)))
-                logging.info("{}: {}".format(str(client_address), str(message)))
+                logging.info("{}: {}".format(
+                    str(client_address), str(message)))
                 try:
                     for js in parse_msg(message.decode(encoding="latin-1", errors="ignore")):
                         if "id" in js:
@@ -305,7 +309,7 @@ if __name__ == '__main__':
                                             if d == 'dt':
                                                 o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Formula = js[d]
                                                 numbers = odoc.NumberFormats
-                                                locale = odoc.CharLocale                                            
+                                                locale= odoc.CharLocale
                                                 NumberFormatString = "YYYY-MM-DD HH:MM:SS"
                                                 number_format_key = numbers.queryKey(NumberFormatString, locale, True)
                                                 if number_format_key == -1:
@@ -313,7 +317,7 @@ if __name__ == '__main__':
                                                 o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).NumberFormat = number_format_key
                                             else:
                                                 o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Value = js[d]
-                                            #print(o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Value)
+                                            # print(o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Value)
                                         except:
                                             pass
                                         num = num + 1

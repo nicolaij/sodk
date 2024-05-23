@@ -526,66 +526,71 @@ void app_main()
 
     ready_event_group = xEventGroupCreate();
 
+    if (i2c_err == 0)
+    {
 #if defined(SHT4x_SENSOR)
 
 #define SHT4X_CMD_MEASURE_HPM 0xFD
 #define SHT4X_ADDRESS 0x44
 
-    static uint8_t sht4x_cmd_measure = SHT4X_CMD_MEASURE_HPM;
+        static uint8_t sht4x_cmd_measure = SHT4X_CMD_MEASURE_HPM;
 
-    vTaskDelay(10 / portTICK_PERIOD_MS); // пауза после инициализации PCF
+        vTaskDelay(10 / portTICK_PERIOD_MS); // пауза после инициализации PCF
 
 #if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-    if (i2c_err == 0 && i2c_master_write_to_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)&sht4x_cmd_measure, 1, 500 / portTICK_PERIOD_MS) == ESP_OK)
+        if (i2c_err == 0 && i2c_master_write_to_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)&sht4x_cmd_measure, 1, 500 / portTICK_PERIOD_MS) == ESP_OK)
 #endif
 #if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-        i2c_device_config_t dev_cfg_sht4x = {
-            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-            .device_address = SHT4X_ADDRESS,
-            .scl_speed_hz = 100000,
-        };
+            i2c_device_config_t dev_cfg_sht4x = {
+                .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+                .device_address = SHT4X_ADDRESS,
+                .scl_speed_hz = 100000,
+            };
 
-    i2c_master_dev_handle_t dev_handle_sht4x;
-    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_add_device(bus_handle, &dev_cfg_sht4x, &dev_handle_sht4x));
+        i2c_master_dev_handle_t dev_handle_sht4x;
+        if (i2c_err == 0)
+        {
+            ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_add_device(bus_handle, &dev_cfg_sht4x, &dev_handle_sht4x));
+        }
 
-    if (i2c_err == 0 && i2c_master_transmit(dev_handle_sht4x, (uint8_t *)&sht4x_cmd_measure, 1, 500) == ESP_OK)
+        if (i2c_err == 0 && i2c_master_transmit(dev_handle_sht4x, (uint8_t *)&sht4x_cmd_measure, 1, 500) == ESP_OK)
 #endif
-    {
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-        uint8_t sensor_data[6];
+        {
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+            uint8_t sensor_data[6];
 #if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-        if (i2c_master_read_from_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)sensor_data, 6, 500 / portTICK_PERIOD_MS) == ESP_OK)
+            if (i2c_master_read_from_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)sensor_data, 6, 500 / portTICK_PERIOD_MS) == ESP_OK)
 #endif
 #if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-            if (i2c_master_receive(dev_handle_sht4x, (uint8_t *)sensor_data, 6, 500) == ESP_OK)
+                if (i2c_master_receive(dev_handle_sht4x, (uint8_t *)sensor_data, 6, 500) == ESP_OK)
 #endif
-            {
-                int t_ticks = sensor_data[0] * 256 + sensor_data[1];
-                int rh_ticks = sensor_data[3] * 256 + sensor_data[4];
+                {
+                    int t_ticks = sensor_data[0] * 256 + sensor_data[1];
+                    int rh_ticks = sensor_data[3] * 256 + sensor_data[4];
 
-                /**
-                 * formulas for conversion of the sensor signals, optimized for fixed point
-                 * algebra:
-                 * Temperature = 175 * S_T / 65535 - 45
-                 * Relative Humidity = 125 * (S_RH / 65535) - 6
-                 */
-                temperature = ((21875 * t_ticks) >> 13) - 45000;
-                humidity = ((15625 * rh_ticks) >> 13) - 6000;
+                    /**
+                     * formulas for conversion of the sensor signals, optimized for fixed point
+                     * algebra:
+                     * Temperature = 175 * S_T / 65535 - 45
+                     * Relative Humidity = 125 * (S_RH / 65535) - 6
+                     */
+                    temperature = ((21875 * t_ticks) >> 13) - 45000;
+                    humidity = ((15625 * rh_ticks) >> 13) - 6000;
 
-                l = snprintf((char *)buf, sizeof(buf), "SHT4x \"T2\":%.01f°C,\"H2\":%.01f%%", temperature / 1000.0, humidity / 1000.0);
-                xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
-                ESP_LOGI("SHT4x", "%s", buf);
-            }
-            else
-                ESP_LOGE("SHT4x", "Read error");
+                    l = snprintf((char *)buf, sizeof(buf), "SHT4x \"T2\":%.01f°C,\"H2\":%.01f%%", temperature / 1000.0, humidity / 1000.0);
+                    xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
+                    ESP_LOGI("SHT4x", "%s", buf);
+                }
+                else
+                    ESP_LOGE("SHT4x", "Read error");
+        }
+
+#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
+        ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_rm_device(dev_handle_sht4x));
+#endif
+
+#endif
     }
-
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-    ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_rm_device(dev_handle_sht4x));
-#endif
-
-#endif
-
 #ifdef RECEIVER_ONLY
     xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);
     xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
@@ -626,7 +631,7 @@ void app_main()
         pdTRUE,
         portMAX_DELAY);
 
-    //запускаем WiFi если подали питание или сработал концевик
+    // запускаем WiFi если подали питание или сработал концевик
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
         // для отладки схемы pulse -1

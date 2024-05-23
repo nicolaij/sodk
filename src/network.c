@@ -273,11 +273,14 @@ static esp_err_t settings_handler(httpd_req_t *req)
     const char *nbiotstart = "<form><fieldset><legend>NB-IoT</legend><table>";
     const char *nbiotend = "</table><input type=\"submit\" value=\"Сохранить\" /></fieldset></form>";
     const char *tail = "<p><a href=\"/d?mode=2\">Буфер данных</a>&nbsp;&nbsp;<a href=\"/d3\">График АЦП</a>&nbsp;&nbsp;<a href=\"/d3?mode=1\">График АЦП(фильтр)</a>&nbsp;&nbsp;<a href=\"/d3?mode=2\">График R</a></p>"
+                       "<p><button onclick=\"measure(1)\">Измерить 1</button>&nbsp;<button onclick=\"measure(2)\">Измерить 2</button>&nbsp;<button onclick=\"measure(3)\">Измерить 3</button>&nbsp;<button onclick=\"measure(4)\">Измерить 4</button>&nbsp;"
+                       "<button onclick=\"measure(5)\">Измерить 5</button>&nbsp;<button onclick=\"measure(6)\">Измерить 6</button>&nbsp;<button onclick=\"measure(7)\">Измерить 7</button>&nbsp;<button onclick=\"measure(8)\">Измерить 8</button></p>"
                        "<p><textarea id=\"text\" style=\"width:98\%;height:400px;\"></textarea></p>\n"
                        "<a href=\"?restart=true\">Restart</a>\n"
                        "<script>var socket = new WebSocket(\"ws://\" + location.host + \"/ws\");\n"
-                       "socket.onopen = function(){socket.send(\"openws:\" + Date.now());};\n"
-                       "socket.onmessage = function(e){document.getElementById(\"text\").value += e.data + \"\\n\";}"
+                       "socket.onopen = function(){socket.send(\"openws:\" + String(Date.now() / 1000));};\n"
+                       "socket.onmessage = function(e){document.getElementById(\"text\").value += e.data + \"\\n\";};\n"
+                       "function measure(chan){socket.send(\"start:\"+ String(chan));};\n"
                        "</script>"
                        "</body></html>";
 
@@ -947,14 +950,14 @@ esp_err_t update_post_handler(httpd_req_t *req)
 }
 
 httpd_handle_t ws_hd;
-int ws_fd = 0;
+int ws_fd[5] = {0, 0, 0, 0, 0};
 
 /*
  * async send function, which we put into the httpd work queue
  */
 static void ws_async_send(char *msg)
 {
-    if (ws_fd == 0)
+    if (ws_fd[0] == 0)
         return;
     httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
@@ -962,7 +965,11 @@ static void ws_async_send(char *msg)
     ws_pkt.len = strlen(msg);
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
 
-    httpd_ws_send_frame_async(ws_hd, ws_fd, &ws_pkt);
+    for (int i = 0; i < (sizeof(ws_fd) / sizeof(ws_fd[0])); i++)
+    {
+        if (ws_fd[i] > 0)
+            httpd_ws_send_frame_async(ws_hd, ws_fd[i], &ws_pkt);
+    }
 }
 
 static esp_err_t ws_handler(httpd_req_t *req)
@@ -988,14 +995,26 @@ static esp_err_t ws_handler(httpd_req_t *req)
     ESP_LOGD(TAGH, "Packet type: %d", ws_pkt.type);
 
     ws_hd = req->handle;
-    ws_fd = httpd_req_to_sockfd(req);
-    ESP_LOGI(TAGH, "ws_hd/fd: %d/%d", *(int *)ws_hd, ws_fd);
+    int ws_sock = httpd_req_to_sockfd(req);
+    for (int i = 0; i < (sizeof(ws_fd) / sizeof(ws_fd[0])); i++)
+    {
+        if (ws_fd[i] == ws_sock)
+            break;
+
+        if (ws_fd[i] == 0)
+        {
+            ws_fd[i] = ws_sock;
+            break;
+        }
+    }
+
+    ESP_LOGI(TAGH, "ws_handler: httpd_handle_t=%p, sockfd=%d, client_info:%d", req->handle, httpd_req_to_sockfd(req), httpd_ws_get_fd_info(req->handle, httpd_req_to_sockfd(req)));
 
     const char *initstring = "openws:";
     if (strncmp(initstring, (const char *)ws_pkt.payload, strlen(initstring)) == 0)
     {
-        long long ts = atoll((const char *)ws_pkt.payload + strlen(initstring)) / 1000LL;
-        if (ts > 1715923962LL) //17 May 2024 05:32:42 
+        long long ts = atoll((const char *)ws_pkt.payload + strlen(initstring));
+        if (ts > 1715923962LL) // 17 May 2024 05:32:42
         {
             struct timeval now = {.tv_sec = ts + timezone * 3600}; // UNIX time + timezone offset
             settimeofday(&now, NULL);
@@ -1007,7 +1026,31 @@ static esp_err_t ws_handler(httpd_req_t *req)
         need_ws_send = true;
     }
 
+    const char *startstring = "start:";
+    if (strncmp(startstring, (const char *)ws_pkt.payload, strlen(startstring)) == 0)
+    {
+        int ch = atoi((const char *)ws_pkt.payload + strlen(startstring));
+        if (ch > 0)
+        {
+            start_measure(ch, 0);
+            ESP_LOGD(TAG, "Start measure channel %i", ch);
+        }
+    }
+
     return ret;
+}
+
+static void ws_close_fn(httpd_handle_t hd, int sockfd)
+{
+    for (int i = 0; i < (sizeof(ws_fd) / sizeof(ws_fd[0])); i++)
+    {
+        if (ws_fd[i] == sockfd)
+        {
+            ws_fd[i] = 0;
+            break;
+        }
+    }
+    ESP_LOGI(TAG, "Handle hd=%p: closing websocket fd=%d", hd, sockfd);
 }
 
 static const httpd_uri_t main_page = {
@@ -1084,12 +1127,13 @@ static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    // config.max_open_sockets = 2;
+    // config.max_open_sockets = 5;
     // config.stack_size = 1024 * 10;
     config.lru_purge_enable = true;
     // config.send_wait_timeout = 30;
     // config.recv_wait_timeout = 30;
     // config.task_priority = 6;
+    config.close_fn = ws_close_fn;
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -1109,7 +1153,10 @@ static httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &update_post);
         httpd_register_uri_handler(server, &update_get);
 
-        ws_fd = 0;
+        for (int i = 0; i < (sizeof(ws_fd) / sizeof(ws_fd[0])); i++)
+        {
+            ws_fd[i] = 0;
+        }
 
         return server;
     }
@@ -1188,16 +1235,15 @@ void wifi_task(void *arg)
 
     while (1)
     {
-        if (ws_fd > 0)
+        if (ws_fd[0] > 0)
         {
-
             // Receive an item from no-split ring buffer
             size_t item_size;
             char *item = (char *)xRingbufferReceive(wsbuf_handle, &item_size, pdMS_TO_TICKS(0));
             // Check received item
             if (item != NULL)
             {
-                httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, item);
+                ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, item));
                 reset_sleep_timeout();
                 // Return Item
                 vRingbufferReturnItem(wsbuf_handle, (void *)item);

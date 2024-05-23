@@ -777,10 +777,13 @@ void radio_task(void *arg)
             // ждем регистрации в сети
             uint32_t nn = 0;
             uint32_t stat = 0;
-            counter = 60; // до 1 мин идет регистрация нового модуля
+            counter = 60;
             do
             {
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                if (stat == 2) // Not registered, but ME is currently searching for a new operator to register to
+                    vTaskDelay(10000 / portTICK_PERIOD_MS);
+                else
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
 
                 get_network_status(dce, &nn, &stat);
                 dce->stat = stat;
