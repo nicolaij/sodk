@@ -1257,10 +1257,10 @@ void dual_adc(void *arg)
                         ESP_LOGD(TAG, "Ubatt low: %d", result.Ubatt1);
 
                         // отключаем если при lv измерении напряжение упало ниже минимума
-                        // увеличивем интервал при очень низком напряжении
-                        if (cmd_power.channel > 4 && result.Ubatt1 < menu[17].val)
+                        if (result.Ubatt1 < menu[17].val)
                         {
-                            BattLow += 10;
+                            BattLow += 100000;
+                            go_sleep();
                         }
                     }
 

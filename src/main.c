@@ -266,15 +266,13 @@ void pcf8575_set(int channel_cmd)
 
 void go_sleep(void)
 {
-
-#if CONFIG_IDF_TARGET_ESP32
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 1 = High, 0 = Low
-#endif
-
-    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
+    if (BattLow < 100)
+    {
+        ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
+    }
 
     // коррекция на время работы
-    uint64_t time_in_us = StoUS(menu[18].val * BattLow) - (esp_timer_get_time() % StoUS(menu[18].val));
+    uint64_t time_in_us = StoUS((uint64_t)menu[18].val * (uint64_t)BattLow) - (esp_timer_get_time() % StoUS(menu[18].val));
 
     ESP_LOGW("main", "Go sleep: %lld us, (k BattLow: %d)", time_in_us, BattLow);
     fflush(stdout);

@@ -1133,7 +1133,7 @@ static httpd_handle_t start_webserver(void)
     // config.send_wait_timeout = 30;
     // config.recv_wait_timeout = 30;
     // config.task_priority = 6;
-    config.close_fn = ws_close_fn;
+    //config.close_fn = ws_close_fn;
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);

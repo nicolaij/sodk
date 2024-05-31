@@ -18,7 +18,7 @@ FASTLOADDIR = 'c:\\InSQL\\Data\\DataImport\\'
 DATASIZE = 1024
 
 dataname = ['id', 'dt', 'num', 'U', 'R', 'time', 'U0', 'Ulv',
-    'Rlv', 'U0lv', 'Ub0', 'Ub1', 'T', 'rssi', 'in', 'T2', 'H2']
+            'Rlv', 'U0lv', 'Ub0', 'Ub1', 'T', 'rssi', 'in', 'T2', 'H2']
 
 officedataname = ['dt', 'num', 'U', 'R', 'U0', 'Ub1']
 
@@ -173,8 +173,12 @@ def write_historian(js):
         logging.error(e)
         pass
 
+
 def on_wsopen(wsapp):
     wsapp.send("openws:" + str(time.time()))
+
+def on_error(ws, error):
+    logging.exception("error")
 
 def on_wsmessage(wsapp, message):
     for js in parse_msg(message):
@@ -185,27 +189,33 @@ def on_wsmessage(wsapp, message):
                 for d in officedataname:
                     try:
                         if d == 'dt':
-                            o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Formula = js[d]
+                            o_sheets[chan].getCellByPosition(
+                                num, dEndRow[chan] + 1).Formula = js[d]
                             numbers = odoc.NumberFormats
-                            locale= odoc.CharLocale
+                            locale = odoc.CharLocale
                             NumberFormatString = "YYYY-MM-DD HH:MM:SS"
-                            number_format_key = numbers.queryKey(NumberFormatString, locale, True)
+                            number_format_key = numbers.queryKey(
+                                NumberFormatString, locale, True)
                             if number_format_key == -1:
-                                number_format_key = numbers.addNew(NumberFormatString, locale)
-                            o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).NumberFormat = number_format_key
+                                number_format_key = numbers.addNew(
+                                    NumberFormatString, locale)
+                            o_sheets[chan].getCellByPosition(
+                                num, dEndRow[chan] + 1).NumberFormat = number_format_key
                         else:
-                            o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Value = js[d]
+                            o_sheets[chan].getCellByPosition(
+                                num, dEndRow[chan] + 1).Value = js[d]
                     except:
                         pass
                     num = num + 1
                 dEndRow[chan] = dEndRow[chan] + 1
 
+
 if __name__ == '__main__':
 
     logging.basicConfig(
-        level = logging.DEBUG,
-        format = "%(asctime)s [%(levelname)-5.5s] %(message)s",
-        handlers = [
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)-5.5s] %(message)s",
+        handlers=[
             logging.FileHandler("debug.log"),
             logging.StreamHandler(sys.stdout)
         ]
@@ -216,6 +226,9 @@ if __name__ == '__main__':
     else:
         logging.error("Wonderware Historian fastload disable.")
         # print("Wonderware Historian fastload disable.")
+
+    # start LibreOffice
+    os.system('TASKLIST | FINDSTR soffice.exe || START "" "soffice.exe" "-accept=socket,host=localhost,port=2002;urp;"')
 
     try:
         desktop = create_office_instance()
@@ -235,7 +248,8 @@ if __name__ == '__main__':
                 num = 0
                 for d in officedataname:
                     try:
-                        o_sheets[chan].getCellByPosition(num, dEndRow[chan]).String = str(d)
+                        o_sheets[chan].getCellByPosition(
+                            num, dEndRow[chan]).String = str(d)
                     except:
                         pass
                     num = num + 1
@@ -244,8 +258,8 @@ if __name__ == '__main__':
 
         os.environ['NO_PROXY'] = '192.168.4.1'
         wsapp = None
-        wsapp = websocket.WebSocketApp("ws://192.168.4.1/ws", on_open=on_wsopen, on_message=on_wsmessage)
-        wsapp.run_forever(reconnect=5)
+        wsapp = websocket.WebSocketApp("ws://192.168.4.1/ws", on_open=on_wsopen, on_message=on_wsmessage,on_error=on_error)
+        wsapp.run_forever(reconnect=5, ping_interval=60, ping_timeout=10)
     sys.exit(0)
 
     # Откуда и куда записывать информацию
@@ -263,7 +277,8 @@ if __name__ == '__main__':
     logging.debug("New: {}".format(str(server_socket_udp)))
 
     while inputs:
-        readables, writables, exceptional = select.select(inputs, outputs, xinputs)
+        readables, writables, exceptional = select.select(
+            inputs, outputs, xinputs)
         message = b''
         client_address = ('', 0)
         # print("readadle len: " + str(len(readables)))
@@ -307,16 +322,21 @@ if __name__ == '__main__':
                                     for d in officedataname:
                                         try:
                                             if d == 'dt':
-                                                o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Formula = js[d]
+                                                o_sheets[chan].getCellByPosition(
+                                                    num, dEndRow[chan] + 1).Formula = js[d]
                                                 numbers = odoc.NumberFormats
-                                                locale= odoc.CharLocale
+                                                locale = odoc.CharLocale
                                                 NumberFormatString = "YYYY-MM-DD HH:MM:SS"
-                                                number_format_key = numbers.queryKey(NumberFormatString, locale, True)
+                                                number_format_key = numbers.queryKey(
+                                                    NumberFormatString, locale, True)
                                                 if number_format_key == -1:
-                                                    number_format_key = numbers.addNew(NumberFormatString, locale)
-                                                o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).NumberFormat = number_format_key
+                                                    number_format_key = numbers.addNew(
+                                                        NumberFormatString, locale)
+                                                o_sheets[chan].getCellByPosition(
+                                                    num, dEndRow[chan] + 1).NumberFormat = number_format_key
                                             else:
-                                                o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Value = js[d]
+                                                o_sheets[chan].getCellByPosition(
+                                                    num, dEndRow[chan] + 1).Value = js[d]
                                             # print(o_sheets[chan].getCellByPosition(num, dEndRow[chan] + 1).Value)
                                         except:
                                             pass
