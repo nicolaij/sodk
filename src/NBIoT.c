@@ -672,7 +672,7 @@ void radio_task(void *arg)
 
     modem_dce_t *dce = NULL;
 
-    vTaskDelay(1000 / portTICK_PERIOD_MS); // смещение времени запуска модуля
+    //vTaskDelay(1000 / portTICK_PERIOD_MS); // смещение времени запуска модуля
 
     /* Ждем необходимости запуска передачи*/
     xEventGroupWaitBits(
@@ -1027,7 +1027,7 @@ void radio_task(void *arg)
 #if defined(SHT4x_SENSOR)
                     len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d,\"T2\":%.1f,\"H2\":%.1f}", id, result.channel, datetime, result.input - 100, tsens_out, (int)rssi * 2 + -113, temperature / 1000.0, humidity / 1000.0);
 #else
-                    len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, datetime, d_input, tsens_out, (int)rssi * 2 + -113);
+                    len_data = snprintf((char *)buf, sizeof(buf), "{\"id\":\"%ld.%d\",\"dt\":\"%s\",\"in\":%d,\"T\":%.1f,\"rssi\":%d}", id, result.channel, datetime, result.input - 100, tsens_out, (int)rssi * 2 + -113);
 #endif
                 }
                 else

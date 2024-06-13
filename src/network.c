@@ -167,7 +167,7 @@ void wifi_init_softap(void)
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
-    static char wifi_name[32] = AP_WIFI_SSID;
+    static char wifi_name[sizeof(wifi_config.ap.ssid)] = AP_WIFI_SSID;
     int l = strlen(wifi_name);
     itoa(id, &wifi_name[l], 10);
 

@@ -194,61 +194,93 @@ void pcf8575_set(int channel_cmd)
     case 1:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        current_mask |= BIT(3);         
+#else    
         current_mask |= BIT(6);          // ADC R
         current_mask |= BIT(7);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     case 5:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        //current_mask |= BIT(4);
+#else    
         current_mask |= BIT(LV_BIT);     // LV
         current_mask |= BIT(6);          // ADC R
         current_mask |= BIT(7);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     case 2:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        current_mask |= BIT(2);         
+#else    
         current_mask |= BIT(4);          // ADC R
         current_mask |= BIT(5);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     case 6:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        //current_mask |= BIT(3);         
+#else    
         current_mask |= BIT(LV_BIT);     // LV
         current_mask |= BIT(4);          // ADC R
         current_mask |= BIT(5);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     case 3:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        current_mask |= BIT(1);         
+#else    
         current_mask |= BIT(2);          // ADC R
         current_mask |= BIT(3);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     case 7:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        //current_mask |= BIT(2);         
+#else    
         current_mask |= BIT(LV_BIT);     // LV
         current_mask |= BIT(2);          // ADC R
         current_mask |= BIT(3);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     case 4:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        current_mask |= BIT(0);         
+#else    
         current_mask |= BIT(0);          // ADC R
         current_mask |= BIT(1);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     case 8:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+#if HW == 14
+        //current_mask |= BIT(0);         
+#else    
         current_mask |= BIT(LV_BIT);     // LV
         current_mask |= BIT(0);          // ADC R
         current_mask |= BIT(1);          // Uout + U0
+#endif
         cmd_mask = current_mask;
         break;
     }
@@ -283,6 +315,11 @@ void go_sleep(void)
 
 void start_measure(int channel, int flag)
 {
+
+#if HW == 14
+    flag = 1; //HiVolt Only
+#endif
+
     cmd_t cmd;
     int pos;
     if (channel >= 1 && channel <= 8)
@@ -606,7 +643,6 @@ void app_main()
     if (bootCount % (menu[19].val / menu[18].val) == 1 && BattLow < 100)
     {
         start_measure(0, 0);
-        xEventGroupSetBits(ready_event_group, NEED_TRANSMIT); // запускаем передатчик
     }
     else
     {

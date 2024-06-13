@@ -83,11 +83,11 @@ int terminal_mode = 1;
 
 #ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
-    {.channel = ADC1_CHANNEL_0, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC2_CHANNEL_0, .max = 1000},   // Напряжение источника питания
-    {.channel = ADC1_CHANNEL_4, .max = 299999}, //
-    {.channel = ADC1_CHANNEL_1, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
-    {.channel = ADC1_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
+    {.channel = ADC_CHANNEL_0, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC_CHANNEL_0, .max = 1000},   // Напряжение источника питания
+    {.channel = ADC_CHANNEL_4, .max = 299999}, //
+    {.channel = ADC_CHANNEL_1, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
+    {.channel = ADC_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
 };
 #elif ADC1_ONLY
 const measure_t chan_r[] = {
@@ -1049,6 +1049,19 @@ void dual_adc(void *arg)
                 sum_adc_full.U0 += sum_adc.U0;
             };
 
+
+            // запоминаем напряжение батареи
+            if (blocks >= (ON_BLOCK - 5) && blocks < ON_BLOCK)
+            {
+                result.Ubatt0 += bufferR[bhead].Ubatt;
+                Ubatt0counter++;
+            }
+            else if (blocks >= (ON_BLOCK + 2) && blocks < (ON_BLOCK + 5))
+            {
+                result.Ubatt1 += bufferR[bhead].Ubatt;
+                Ubatt1counter++;
+            }
+
             // считаем среднее
             if (blocks > ON_BLOCK)
             {
@@ -1246,8 +1259,15 @@ void dual_adc(void *arg)
                     result.U0 = u0;
                     result.time = block_result;
 
-                    result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
-                    result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
+                    //ESP_LOGD(TAG, "on result: channel: %d, block: %d", result.channel, block_result);
+                    //ESP_LOGD(TAG, "on result: Ubatt0 summ: %d, count: %d", result.Ubatt0, Ubatt0counter);
+                    //ESP_LOGD(TAG, "on result: Ubatt1 summ: %d, count: %d", result.Ubatt1, Ubatt1counter);
+
+                    if (Ubatt0counter > 0)
+                        result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
+
+                    if (Ubatt1counter > 0)
+                        result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
 
                     // увеличивем интервал при низком напряжении
                     if (result.Ubatt1 < menu[16].val)
@@ -1266,18 +1286,6 @@ void dual_adc(void *arg)
 
                     xQueueSend(send_queue, &result, (TickType_t)0);
                 }
-            }
-
-            // запоминаем напряжение батареи
-            if (blocks >= (ON_BLOCK - 5) && blocks < ON_BLOCK)
-            {
-                result.Ubatt0 += bufferR[bhead].Ubatt;
-                Ubatt0counter++;
-            }
-            else if (blocks >= (ON_BLOCK + 2) && blocks < (ON_BLOCK + 5))
-            {
-                result.Ubatt1 += bufferR[bhead].Ubatt;
-                Ubatt1counter++;
             }
 
             // буферезируем после включения последнее измерение
@@ -1382,7 +1390,7 @@ void dual_adc(void *arg)
 
         // РЕЗУЛЬТАТ
         char buf[WS_BUF_SIZE];
-        int len_data = snprintf((char *)buf, sizeof(buf), "{\"channel\":\"%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d}", result.channel, timeoutCounter, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
+        int len_data = snprintf((char *)buf, sizeof(buf), "{\"channel\":\"%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d}", result.channel, bootCount + timeoutCounter, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
         // int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0);
         xRingbufferSend(wsbuf_handle, buf, len_data + 1, 0);
 
