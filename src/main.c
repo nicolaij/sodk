@@ -69,11 +69,11 @@ menu_t menu[] = {
     {.id = "Trepeatlv", .name = "Интервал измерений", .val = 120, .min = 1, .max = 1000000},
     {.id = "Trepeathv", .name = "Интервал измер. выс.", .val = 3600, .min = 1, .max = 1000000},
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999}, /*20*/
-    {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 1, .max = 100000},
+    {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
+    {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 60, .max = 100000},
+    {.id = "WiFichan", .name = "WiFi channel", .val = 1, .min = 1, .max = 20},
     {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 1000},
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000},
-    {.id = "blocks", .name = "График после результ.", .val = 100, .min = 0, .max = 2000},
-    {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
     {.id = "percU0lv", .name = "\% U петли низ.", .val = 75, .min = 0, .max = 100}, /*26 Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
     {.id = "percRlv", .name = "\% R низ.", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
 };

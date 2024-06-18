@@ -761,11 +761,11 @@ void dual_adc(void *arg)
         calcdata_t bref = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
         uint16_t avg_len = 0;
-        int compare_counter = menu[22].val;
+        int compare_counter = menu[24].val;
         const int compare_delta = 1;
         bool compare_ok = false;
 
-        const int exp_filter_k = menu[25].val;
+        const int exp_filter_k = menu[21].val;
         int exp_filter[5] = {0, 0, 0, 0, 0};
 
         // сумма на всем измерении для расчета среднего для калибровки
@@ -1071,7 +1071,7 @@ void dual_adc(void *arg)
                 sum_bavg.U0 += bufferR[bhead].U0;
                 avg_len++;
 
-                if (avg_len > menu[23].val)
+                if (avg_len > menu[25].val)
                 {
                     avg_len--;
                     unsigned int delpos = (bhead - avg_len) & (RINGBUFLEN - 1);
@@ -1134,7 +1134,7 @@ void dual_adc(void *arg)
                     bref.R2 = r2;
                     bref.U = u;
                     bref.U0 = u0;
-                    compare_counter = menu[22].val;
+                    compare_counter = menu[24].val;
                 }
 
                 // окончание измерений
@@ -1298,7 +1298,7 @@ void dual_adc(void *arg)
                         memcpy(&buffer_ADC_copy[ADC_BUFFER * counter_block_ADC_buffer], ptrb, ADC_BUFFER);
                         counter_block_ADC_buffer++;
                     }
-                    else if (block_result > 0 && blocks > (block_result + menu[24].val))
+                    else if (block_result > 0 && blocks > (block_result + 100))
                     {
                         // заканчиваем измерение
                         break;
@@ -1430,7 +1430,7 @@ int getADC_Data(char *line, int data_pos, bool filter)
     char *pos = line;
     int l = 0;
 
-    const int exp_filter_k = menu[25].val;
+    const int exp_filter_k = menu[21].val;
     static int exp_filter[5] = {0, 0, 0, 0, 0};
 
     calcdata_t current_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};

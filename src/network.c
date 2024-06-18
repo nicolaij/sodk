@@ -41,7 +41,6 @@ extern char modem_status[128];
 #define AP_WIFI_PASS "123123123"
 #define EXAMPLE_ESP_MAXIMUM_RETRY 0
 
-#define EXAMPLE_ESP_WIFI_CHANNEL 1
 #define EXAMPLE_MAX_STA_CONN 5
 
 /* FreeRTOS event group to signal when we are connected*/
@@ -139,7 +138,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     }
 }
 
-void wifi_init_softap(void)
+void wifi_init_softap(uint8_t channel)
 {
 
     esp_netif_create_default_wifi_ap();
@@ -156,7 +155,7 @@ void wifi_init_softap(void)
         .ap = {
             .ssid = AP_WIFI_SSID,
             .ssid_len = strlen(AP_WIFI_SSID),
-            .channel = EXAMPLE_ESP_WIFI_CHANNEL,
+            .channel = channel,
             .password = AP_WIFI_PASS,
             .max_connection = EXAMPLE_MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK},
@@ -178,7 +177,12 @@ void wifi_init_softap(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d", AP_WIFI_SSID, AP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
+    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(44)); //влияние на измерения АЦП незначительные
+    
+    int8_t power = 0;
+    ESP_ERROR_CHECK(esp_wifi_get_max_tx_power(&power));
+
+    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d power:%d", AP_WIFI_SSID, AP_WIFI_PASS, wifi_config.ap.channel, power);
 }
 
 int wifi_init_sta(void)
@@ -1133,7 +1137,7 @@ static httpd_handle_t start_webserver(void)
     // config.send_wait_timeout = 30;
     // config.recv_wait_timeout = 30;
     // config.task_priority = 6;
-    //config.close_fn = ws_close_fn;
+    // config.close_fn = ws_close_fn;
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
@@ -1211,8 +1215,7 @@ void wifi_task(void *arg)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // if (wifi_init_sta() == 0)
-    wifi_init_softap();
+    wifi_init_softap(menu[23].val); // WiFi channel
 
     /* Start the server for the first time */
     start_webserver();
@@ -1263,7 +1266,7 @@ void wifi_task(void *arg)
         }
         */
         // WiFi timeout
-        if (esp_timer_get_time() - timeout_begin > StoUS(menu[21].val))
+        if (esp_timer_get_time() - timeout_begin > StoUS(menu[22].val))
         {
             esp_wifi_stop();
             xEventGroupSetBits(ready_event_group, END_WIFI_TIMEOUT);
