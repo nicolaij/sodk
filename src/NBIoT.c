@@ -1168,7 +1168,7 @@ void radio_task(void *arg)
         */
         ESP_LOGW(TAG, "Power down");
 
-        vTaskDelay(pdMS_TO_TICKS(1500)); // Turn-Off Timing by AT Command
+        vTaskDelay(pdMS_TO_TICKS(500)); // Turn-Off Timing by AT Command
         ESP_ERROR_CHECK_WITHOUT_ABORT(dce->deinit(dce));
     }
 

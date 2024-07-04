@@ -48,7 +48,7 @@ int i2c_master_port = I2C_NUM_0;
 int i2c_err = 1;
 
 menu_t menu[] = {
-    {.id = "pulse", .name = "Время импульса", .val = 500, .min = -1, .max = 10000},
+    {.id = "pulse", .name = "Макс. время импульса", .val = 500, .min = -1, .max = 10000},
     {.id = "Volt", .name = "Ограничение U", .val = 600, .min = 0, .max = 1000},
     {.id = "kU", .name = "коэф. U", .val = 1690, .min = 1, .max = 10000},
     {.id = "offsU", .name = "смещ. U", .val = -7794, .min = -100000, .max = 100000},
@@ -66,14 +66,14 @@ menu_t menu[] = {
     {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -1000000, .max = 1000000},
     {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
     {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
-    {.id = "Trepeatlv", .name = "Интервал измерений", .val = 120, .min = 1, .max = 1000000},
+    {.id = "Trepeatlv", .name = "Интервал измер. низ.", .val = 300, .min = 1, .max = 1000000},
     {.id = "Trepeathv", .name = "Интервал измер. выс.", .val = 3600, .min = 1, .max = 1000000},
     {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999}, /*20*/
     {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
     {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 60, .max = 100000},
     {.id = "WiFichan", .name = "WiFi channel", .val = 1, .min = 1, .max = 20},
-    {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 1000},
-    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 1000},
+    {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 10000},
+    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 10000},
     {.id = "percU0lv", .name = "\% U петли низ.", .val = 75, .min = 0, .max = 100}, /*26 Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
     {.id = "percRlv", .name = "\% R низ.", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
 };
@@ -304,7 +304,11 @@ void go_sleep(void)
     }
 
     // коррекция на время работы
+#if HW == 14
+    uint64_t time_in_us = StoUS((uint64_t)menu[19].val * (uint64_t)BattLow) - (esp_timer_get_time() % StoUS(menu[19].val));
+#else
     uint64_t time_in_us = StoUS((uint64_t)menu[18].val * (uint64_t)BattLow) - (esp_timer_get_time() % StoUS(menu[18].val));
+#endif
 
     ESP_LOGW("main", "Go sleep: %lld us, (k BattLow: %d)", time_in_us, BattLow);
     fflush(stdout);
@@ -640,7 +644,12 @@ void app_main()
 
     xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
 
+
+#if HW == 14 //HiVolt Only
+    if (BattLow < 100)
+#else
     if (bootCount % (menu[19].val / menu[18].val) == 1 && BattLow < 100)
+#endif
     {
         start_measure(0, 0);
     }
@@ -696,15 +705,16 @@ void app_main()
     // Если нет необходимости передавать данные, то пропускаем ожидание передачи
     if ((xEventGroupGetBits(ready_event_group) & NEED_TRANSMIT) == 0)
     {
+        xEventGroupSetBits(ready_event_group, END_TRANSMIT);
         xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
     }
 
     xEventGroupWaitBits(
         ready_event_group,              /* The event group being tested. */
-        END_TRANSMIT | END_RADIO_SLEEP, /* The bits within the event group to wait for. */
+        END_TRANSMIT,                   /* The bits within the event group to wait for. */
         pdFALSE,                        /* BIT_0 & BIT_1 should be cleared before returning. */
         pdFALSE,
-        100000 / portTICK_PERIOD_MS);
+        180000 / portTICK_PERIOD_MS);
 
     xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
 
@@ -713,7 +723,7 @@ void app_main()
         END_RADIO_SLEEP,   /* The bits within the event group to wait for. */
         pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
         pdTRUE,
-        4000 / portTICK_PERIOD_MS);
+        5000 / portTICK_PERIOD_MS);
 
     if (terminal_mode > -1)
         ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());

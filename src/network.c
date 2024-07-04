@@ -93,6 +93,7 @@ typedef struct
 void reset_sleep_timeout()
 {
     timeout_begin = esp_timer_get_time();
+    ESP_LOGV(TAG, "Timeout reset");
 }
 
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
