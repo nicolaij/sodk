@@ -7,26 +7,23 @@
 
 #include "driver/gpio.h"
 
-#if ESP_IDF_VERSION_MAJOR == 5
 #include "esp_adc/adc_continuous.h" //esp-idf v5
-#endif
-#if ESP_IDF_VERSION_MAJOR == 4
-#include "driver/adc.h" //esp-idf v4
-#endif
+#include "esp_adc/adc_cali_scheme.h"
 
 #include "esp_timer.h"
 
-// #include "esp_adc_cal.h"
 #include "esp_rom_sys.h"
 
 #include "soc/apb_saradc_reg.h"
 
 #include "esp_wifi.h"
 
+#include <math.h>
+
 static const char *TAG = "power";
 
 // Счетчик разряда батареи
-RTC_DATA_ATTR unsigned int BattLow = 1;
+RTC_DATA_ATTR unsigned int BattLow = 0;
 
 /*
     БИТ
@@ -56,12 +53,12 @@ const int step_time_const[] = {0, 50, 125, 250, 500, 1000, 2000, 4000, 8000};
 #define STEP_TIME_COUNT 3
 
 // кольцевой буфер для визуализации
-calcdata_t bufferR[RINGBUFLEN];
-unsigned int bhead = 0;
-unsigned int btail = 0;
+static calcdata_t bufferR[RINGBUFLEN];
+uint16_t bhead = 0;
+uint16_t btail = 0;
 
-uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
-uint8_t buffer_ADC_copy[ADC_BUFFER * 300];
+static uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
+static uint8_t buffer_ADC_copy[ADC_BUFFER * 400];
 
 int d_input; // состояние внешнего входа (-1 - состояние отправлено через модем)
 
@@ -81,38 +78,27 @@ int terminal_mode = -1;
 int terminal_mode = 1;
 #endif
 
-#ifdef SWAP_ADC1_0
 const measure_t chan_r[] = {
-    {.channel = ADC_CHANNEL_0, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC_CHANNEL_0, .max = 1000},   // Напряжение источника питания
-    {.channel = ADC_CHANNEL_4, .max = 299999}, //
-    {.channel = ADC_CHANNEL_1, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
-    {.channel = ADC_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
-};
-#elif ADC1_ONLY
-const measure_t chan_r[] = {
-    {.channel = ADC_CHANNEL_1, .max = 6999, .maxlv = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
+    {.channel = ADC_CHANNEL_1, .max = 6999, .maxlv = 150},    //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
     {.channel = ADC_CHANNEL_2, .max = 1000, .maxlv = 1000},   // Напряжение источника питания
-    {.channel = ADC_CHANNEL_4, .max = 299999, .maxlv = 9999}, //
+    {.channel = ADC_CHANNEL_4, .max = 299999, .maxlv = 6999}, //
     {.channel = ADC_CHANNEL_0, .max = 15000, .maxlv = 15000}, //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
     {.channel = ADC_CHANNEL_3, .max = 1000, .maxlv = 15},     // Напряжение 0 проводника
 };
-#else
-const measure_t chan_r[] = {
-    {.channel = ADC_CHANNEL_1, .max = 6999},   //{.channel = ADC1_CHANNEL_1, .k = 1, .max = 2999},  //Основной канал
-    {.channel = ADC_CHANNEL_0, .max = 1000},   // Напряжение источника питания
-    {.channel = ADC_CHANNEL_4, .max = 299999}, //~х22
-    {.channel = ADC_CHANNEL_0, .max = 10000},  //{.channel = ADC1_CHANNEL_0, .k = 1, .max = 10000}, //Напряжение акк
-    {.channel = ADC_CHANNEL_3, .max = 1000},   // Напряжение 0 проводника
-};
-#endif
+
+adc_continuous_handle_t adc_handle = NULL;
+adc_cali_handle_t cali_handle[5] = {NULL};
+
+// Коэффициенты каналов
+// U, Ulv, I1, I2, U0, U0lv, Ubat
+int koeff[7][2] = {0};
 
 // return mV
 int volt(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (adc * menu[2].val) / 10 + menu[3].val;
+    int res = ((adc * koeff[0][0]) + koeff[0][1]) / 1000;
     if (res < 0)
         return 0;
     else
@@ -124,7 +110,7 @@ int voltlv(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (adc * menu[4].val) / 10 + menu[5].val;
+    int res = ((adc * koeff[1][0]) + koeff[1][1]) / 1000;
     if (res < 0)
         return 0;
     else
@@ -136,7 +122,7 @@ int voltBatt(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = ((adc * menu[14].val) + menu[15].val) / 1000;
+    int res = ((adc * koeff[6][0]) + koeff[6][1]) / 1000;
     if (res < 0)
         return 0;
     else
@@ -148,7 +134,7 @@ int volt0(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (adc * menu[10].val) / 10 + menu[11].val;
+    int res = ((adc * koeff[4][0]) + koeff[4][1]) / 1000;
     if (res < 0)
         return 0;
     else
@@ -160,7 +146,7 @@ int volt0lv(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (adc * menu[12].val) / 10 + menu[13].val;
+    int res = ((adc * koeff[5][0]) + koeff[5][1]) / 1000;
     if (res < 0)
         return 0;
     else
@@ -171,7 +157,7 @@ int current(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (adc * menu[6].val) / 10 + menu[7].val;
+    int res = (adc * koeff[2][0]) / 10 + koeff[2][1];
 
     return res;
 };
@@ -210,7 +196,7 @@ int current2chan(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (menu[8].val * adc) / 10 + menu[9].val;
+    int res = (adc * koeff[3][0]) / 10 + koeff[3][1];
 
     return res;
 };
@@ -242,145 +228,57 @@ int kOm2chanlv(int adc_u, int adc_r)
         return chan_r[2].maxlv;
     return r;
 };
-#if ESP_IDF_VERSION_MAJOR >= 5
 
-static void continuous_adc_init(adc_continuous_handle_t *out_handle)
+static void continuous_adc_init()
 {
-    adc_continuous_handle_t handle = NULL;
+    static adc_cali_curve_fitting_config_t cali_config[5];
 
     adc_continuous_handle_cfg_t adc_config = {
         .max_store_buf_size = ADC_BUFFER * 4,
         .conv_frame_size = ADC_BUFFER};
 
-    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &handle));
+    ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &adc_handle));
 
     adc_continuous_config_t dig_cfg = {
         .sample_freq_hz = ADC_FREQ,
-#ifdef ADC1_ONLY
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
-#else
-        .conv_mode = ADC_CONV_BOTH_UNIT,
-#endif
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
     };
-    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
+    adc_digi_pattern_config_t adc_pattern[5] = {0};
 
-    int n = 0;
-    // Note: Все atten при инициализации должны быть одинаковые!!!???
-    adc_pattern[n].atten = ADC_ATTEN_DB_12;
-    adc_pattern[n].channel = chan_r[0].channel;
-    adc_pattern[n].unit = ADC_UNIT_1;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_12;
-    adc_pattern[n].channel = chan_r[1].channel;
-#ifdef ADC1_ONLY
-    adc_pattern[n].unit = ADC_UNIT_1;
-#else
-    adc_pattern[n].unit = ADC_UNIT_2;
-#endif
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_12;
-    adc_pattern[n].channel = chan_r[2].channel;
-    adc_pattern[n].unit = ADC_UNIT_1;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_12;
-    adc_pattern[n].channel = chan_r[3].channel;
-    adc_pattern[n].unit = ADC_UNIT_1;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_12;
-    adc_pattern[n].channel = chan_r[4].channel;
-    adc_pattern[n].unit = ADC_UNIT_1;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-
-    dig_cfg.pattern_num = n;
-    dig_cfg.adc_pattern = adc_pattern;
-    ESP_ERROR_CHECK(adc_continuous_config(handle, &dig_cfg));
-
-    *out_handle = handle;
-}
-#else
-static void continuous_adc_init()
-{
-    esp_err_t ret = ESP_OK;
-    assert(ret == ESP_OK);
-
-    adc_digi_init_config_t adc_dma_config = {
-        .max_store_buf_size = ADC_BUFFER * 20, // ??? подобрано по количеству ошибок
-        .conv_num_each_intr = ADC_BUFFER * 4,  // подобрано по количеству ошибок
-#ifdef ADC1_ONLY
-        .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[1].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
-        .adc2_chan_mask = 0,
-#else
-        .adc1_chan_mask = (1 << chan_r[0].channel) | (1 << chan_r[2].channel) | (1 << chan_r[3].channel) | (1 << chan_r[4].channel),
-        .adc2_chan_mask = (1 << chan_r[1].channel),
-#endif
-
+    for (int n = 0; n < 5; n++)
+    {
+        adc_pattern[n].atten = ADC_ATTEN_DB_6; // ADC_ATTEN_DB_12;
+        adc_pattern[n].channel = chan_r[n].channel;
+        adc_pattern[n].unit = ADC_UNIT_1;
+        adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     };
 
-    ESP_ERROR_CHECK(adc_digi_initialize(&adc_dma_config));
-
-    adc_digi_configuration_t dig_cfg = {
-        .conv_limit_en = false,
-        .conv_limit_num = 0,
-        .sample_freq_hz = ADC_FREQ,
-#ifdef ADC1_ONLY
-        .conv_mode = ADC_CONV_SINGLE_UNIT_1,
-#else
-        .conv_mode = ADC_CONV_BOTH_UNIT,
-#endif
-        .format = ADC_DIGI_OUTPUT_FORMAT_TYPE2,
-    };
-
-    adc_digi_pattern_config_t adc_pattern[SOC_ADC_PATT_LEN_MAX] = {0};
-    int n = 0;
-    // Note: Все atten при инициализации должны быть одинаковые!!!???
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
-    adc_pattern[n].channel = chan_r[n].channel;
-    adc_pattern[n].unit = 0;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
-    adc_pattern[n].channel = chan_r[n].channel;
-#ifdef ADC1_ONLY
-    adc_pattern[n].unit = 0;
-#else
-    adc_pattern[n].unit = 1;
-#endif
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
-    adc_pattern[n].channel = chan_r[n].channel;
-    adc_pattern[n].unit = 0;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
-    adc_pattern[n].channel = chan_r[n].channel;
-    adc_pattern[n].unit = 0;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-    adc_pattern[n].atten = ADC_ATTEN_DB_11;
-    adc_pattern[n].channel = chan_r[n].channel;
-    adc_pattern[n].unit = 0;
-    adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
-    n++;
-
-    dig_cfg.pattern_num = n;
+    dig_cfg.pattern_num = 5;
     dig_cfg.adc_pattern = adc_pattern;
-    ESP_ERROR_CHECK(adc_digi_controller_configure(&dig_cfg));
-}
-#endif
+    ESP_ERROR_CHECK(adc_continuous_config(adc_handle, &dig_cfg));
 
-static QueueHandle_t gpio_evt_queue = NULL;
+    adc_cali_scheme_ver_t av;
+    ESP_ERROR_CHECK(adc_cali_check_scheme(&av));
+    assert((av & ADC_CALI_SCHEME_VER_CURVE_FITTING) != 0);
+
+    for (int n = 0; n < 5; n++)
+    {
+        cali_config[n].unit_id = adc_pattern[n].unit;
+        cali_config[n].chan = adc_pattern[n].channel;
+        cali_config[n].atten = adc_pattern[n].atten;
+        cali_config[n].bitwidth = adc_pattern[n].bit_width;
+
+        ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config[n], &cali_handle[n]));
+    }
+}
 
 static void IRAM_ATTR pcf_int_handler(void *arg)
 {
-    uint32_t gpio_num = (uint32_t)arg;
-    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+    static cmd_t cmd = {.cmd = 3, .channel = 0};
+    xQueueSendFromISR(uicmd_queue, &cmd, (TickType_t)0);
+    // uint32_t gpio_num = (uint32_t)arg;
+    // xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
 void btn_task(void *arg)
@@ -394,33 +292,145 @@ void btn_task(void *arg)
     io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
+    int old_btn_state = gpio_get_level(BTN_PIN);
+    int new_btn_state = old_btn_state;
+
+    int pulse = get_menu_val_by_id("pulse");
+
+    while (1)
+    {
+        new_btn_state = gpio_get_level(BTN_PIN);
+        if (old_btn_state != new_btn_state)
+        {
+            old_btn_state = new_btn_state;
+            if (new_btn_state == 1)
+            {
+                // для отладки схемы pulse -1
+                if (pulse == -1)
+                {
+                    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
+                }
+                else
+                {
+                    // step_time[1] = 7; //4000
+                    // step_time[5] = 7; //4000
+                    start_measure(1, 0);
+                }
+            }
+
+            reset_sleep_timeout();
+        }
+
+        vTaskDelay(1);
+    }
+}
+
+#define MEDIAN(a, p) (MAX(a[0].p, a[1].p) == MAX(a[1].p, a[2].p)) ? MAX(a[0].p, a[2].p) : MAX(a[1].p, MIN(a[0].p, a[2].p))
+
+void adc_task(void *arg)
+{
+
+    cmd_t cmd_power = {};
+    result_t result = {};
+
+    unsigned int measure_current_flags = measure_flags;
+
+    // признак высоковольтных измерений
+    int hv_measure = 0;
+
+    // zero-initialize the config structure.
+    gpio_config_t io_conf = {};
+
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_OUTPUT_OD;
+    io_conf.pin_bit_mask = BIT64(ENABLE_PIN);
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+
     // Interrupt from PCF8575
     io_conf.intr_type = GPIO_INTR_NEGEDGE;
+    io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = BIT64(PCF_INT_PIN);
     io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
-
-    // create a queue to handle gpio event from isr
-    gpio_evt_queue = xQueueCreate(1, sizeof(uint32_t));
-
-    uint32_t io_num = 0;
-    xQueueSend(gpio_evt_queue, &io_num, 0);
 
     // install gpio isr service
     gpio_install_isr_service(0);
     // hook isr handler for specific gpio pin
     gpio_isr_handler_add(PCF_INT_PIN, pcf_int_handler, (void *)PCF_INT_PIN);
 
-    int old_btn_state = gpio_get_level(BTN_PIN);
-    int new_btn_state = old_btn_state;
-
-    result_t result = {.channel = 1, .input = -1};
     int d_in = -1;
+
+    continuous_adc_init();
+
+    // сбрасывем буфер
+    bhead = 0;
+    btail = 0;
+
+    int timeoutCounter = 0;
+
+    const int Trepeatlv = get_menu_val_by_id("Trepeatlv");
+    const int Trepeathv = get_menu_val_by_id("Trepeathv");
+    const int overvolt_value = get_menu_val_by_id("Overvolt");
+
+    koeff[0][0] = get_menu_val_by_id("kU");
+    koeff[0][1] = get_menu_val_by_id("offsU");
+    koeff[1][0] = get_menu_val_by_id("kUlv");
+    koeff[1][1] = get_menu_val_by_id("offsUlv");
+    koeff[2][0] = get_menu_val_by_id("kR1");
+    koeff[2][1] = get_menu_val_by_id("offsR1");
+    koeff[3][0] = get_menu_val_by_id("kR2");
+    koeff[3][1] = get_menu_val_by_id("offsR2");
+    koeff[4][0] = get_menu_val_by_id("kU0");
+    koeff[4][1] = get_menu_val_by_id("offsU0");
+    koeff[5][0] = get_menu_val_by_id("kU0lv");
+    koeff[5][1] = get_menu_val_by_id("offsU0lv");
+    koeff[6][0] = get_menu_val_by_id("kUbat");
+    koeff[6][1] = get_menu_val_by_id("offsUbat");
+
+    const int avg_length = get_menu_val_by_id("avgcnt");
+    const int compare_counter_val = get_menu_val_by_id("avgcomp");
+    const int exp_filter_k = get_menu_val_by_id("Kfilter");
+
+    const int UbatEnd = get_menu_val_by_id("UbatEnd");
+    const int UbatLow = get_menu_val_by_id("UbatLow");
+
+    // величина перегрузки измерительного канала
+    int reloadR1 = 0;
+    int reloadR2 = 0;
+    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[0], 4095, &reloadR1));
+    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[2], 4095, &reloadR2));
+
+    ESP_LOGI("ADC", "0 - %d, 2 - %d", reloadR1, reloadR2);
 
     while (1)
     {
-        if (xQueueReceive(gpio_evt_queue, &io_num, 200 / portTICK_PERIOD_MS) == pdTRUE)
+        vTaskDelay(1000);
+    };
+
+    // Ограничение времени импульса (0 - не вкл. ВВ источник)
+    int pulse = get_menu_val_by_id("pulse");
+
+    while (1)
+    {
+        BaseType_t err = xQueueReceive(uicmd_queue, &cmd_power, pdMS_TO_TICKS(Trepeatlv * 60 * 1000));
+        if (err != pdTRUE) // истек timeout в случае если интервал измерений > таймаута WiFi
+        {
+            if ((++timeoutCounter) % (Trepeathv / Trepeatlv) == 1)
+            {
+                start_measure(0, 0);
+            }
+            else
+            {
+                start_measure(0, 2); // LV only
+            }
+            continue;
+        }
+
+        if (cmd_power.cmd == 3)
         {
             ESP_LOGV("pcf8575", "read pcf8575");
 
@@ -440,297 +450,33 @@ void btn_task(void *arg)
                 {
                     measure_flags &= ~0b1;
                 }
+                result.channel = 1;
                 result.input = d_input + 100;
                 xQueueSend(send_queue, &result, 0);
             }
-        }
-
-        new_btn_state = gpio_get_level(BTN_PIN);
-        if (old_btn_state != new_btn_state)
-        {
-            old_btn_state = new_btn_state;
-            if (new_btn_state == 1)
-            {
-                // для отладки схемы pulse -1
-                if (menu[0].val == -1)
-                {
-                    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, NULL);
-                }
-                else
-                {
-                    d_in = -1;
-                    // pcf8575_set(11);
-                    start_measure(1, 2);
-                }
-            }
-
-            reset_sleep_timeout();
-        }
-
-        // работа с терминалом
-        int ch = EOF;
-        int key_code = EOF;
-        do
-        {
-            key_code = ch;
-            ch = fgetc(stdin);
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-
-        } while (ch != EOF);
-
-        if (key_code != EOF)
-        {
-            if (key_code == '\n')
-            {
-                if (terminal_mode == -1)
-                {
-                    terminal_mode = 0;
-                    ESP_LOGI("terminal", "Вывод в терминал включен");
-                }
-                else
-                {
-                    terminal_mode = -1;
-                    ESP_LOGW("terminal", "Вывод в терминал отключен");
-                }
-
-                if (terminal_mode > -1)
-                {
-                    ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
-                    ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
-                }
-            }
-
-            if (key_code == 'w' || key_code == 'W') // stop wifi
-            {
-                esp_wifi_stop();
-            }
-
-            if (key_code == 'r' || key_code == 'R') // print block result
-            {
-                unsigned int p = btail;
-                int i = 0;
-                do
-                {
-                    printf(" %4d %4d %4d %4d\n", i, bufferR[p].R1, bufferR[p].U, bufferR[p].R2);
-                    p = (p + 1) & (RINGBUFLEN - 1);
-                    i++;
-                } while (p != bhead);
-            }
-
-            if (key_code == 'p' || key_code == 'P') // print ADC buffer
-            {
-                adc_digi_output_data_t *p = (void *)buffer_ADC_copy;
-                adc_digi_output_data_t *p_good = p;
-                int n = 0;
-
-                calcdata_t current_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
-                uint8_t fill_data_line = 0;
-
-                while ((uint8_t *)p < (uint8_t *)buffer_ADC_copy + sizeof(buffer_ADC_copy))
-                {
-
-                    n = ((uint8_t *)p - (uint8_t *)buffer_ADC_copy) / sizeof(adc_digi_output_data_t);
-
-                    // fill data
-                    if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel)
-                    {
-                        current_adc.R1 = p->type2.data;
-                        p++;
-                        fill_data_line |= 0b1;
-                        if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel) // ПОВТОР пропускаем
-                            p++;
-                    }
-#ifdef ADC1_ONLY
-                    if (p->type2.unit == 0 && p->type2.channel == chan_r[1].channel)
-#else
-                    if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
-#endif
-                    {
-                        current_adc.U = p->type2.data;
-                        p++;
-                        fill_data_line |= 0b10;
-                    }
-
-                    if (p->type2.unit == 0 && p->type2.channel == chan_r[2].channel)
-                    {
-                        current_adc.R2 = p->type2.data;
-                        p++;
-                        fill_data_line |= 0b100;
-                    }
-
-                    if (p->type2.unit == 0 && p->type2.channel == chan_r[3].channel)
-                    {
-                        current_adc.Ubatt = p->type2.data;
-                        p++;
-                        fill_data_line |= 0b1000;
-                    }
-
-                    if (p->type2.unit == 0 && p->type2.channel == chan_r[4].channel)
-                    {
-                        current_adc.U0 = p->type2.data;
-                        p++;
-                        fill_data_line |= 0b10000;
-                    }
-
-                    if (fill_data_line != 0b11111)
-                    {
-                        if (fill_data_line == 0)
-                            p++;
-
-                        printf("error ADC data");
-                        while (p_good < p)
-                        {
-                            printf(" %d:%d:%d", p_good->type2.unit, p_good->type2.channel, p_good->type2.data);
-                            p_good++;
-                        }
-                        printf("\n");
-
-                        continue;
-                    }
-
-                    fill_data_line = 0;
-                    p_good = p;
-
-                    printf(" %4d %4d %4d %4d %4d %4d\t", n / ADC_COUNT_READ, current_adc.R1, current_adc.U, current_adc.R2, current_adc.Ubatt, current_adc.U0);
-                    printf("= %6d %6d %6d\n", kOm(current_adc.U, current_adc.R1), volt(current_adc.U), kOm2chan(current_adc.U, current_adc.R2));
-
-                    // избежать task_wdt: Task watchdog got triggered.
-                    if ((n / ADC_COUNT_READ) % 100 == 0)
-                        vTaskDelay(1);
-                }
-            }
-
-            if (key_code == '1')
-            {
-                start_measure(1, 1);
-            }
-            if (key_code == '2')
-            {
-                start_measure(2, 1);
-            }
-            if (key_code == '3')
-            {
-                start_measure(3, 1);
-            }
-            if (key_code == '4')
-            {
-                start_measure(4, 1);
-            }
-            if (key_code == '5')
-            {
-                start_measure(5, 2);
-            }
-            if (key_code == '6')
-            {
-                start_measure(6, 2);
-            }
-            if (key_code == '7')
-            {
-                start_measure(7, 2);
-            }
-            if (key_code == '8')
-            {
-                start_measure(8, 2);
-            }
-            if (key_code == '0')
-            {
-                start_measure(0, 0);
-            }
-
-            if (key_code == 37) // Open LV mode for testing Shift-5
-            {
-                pcf8575_set(11);
-                pcf8575_set(LV_CMDON);
-            }
-            if (key_code == 94) // Open LV mode for testing Shift-6
-            {
-                pcf8575_set(12);
-                pcf8575_set(LV_CMDON);
-            }
-            if (key_code == 38) // Open LV mode for testing Shift-7
-            {
-                pcf8575_set(13);
-                pcf8575_set(LV_CMDON);
-            }
-            if (key_code == 42) // Open LV mode for testing Shift-8
-            {
-                pcf8575_set(14);
-                pcf8575_set(LV_CMDON);
-            }
-        }
-        // end работа с терминалом
-
-        vTaskDelay(1);
-    }
-}
-
-void dual_adc(void *arg)
-{
-
-    cmd_t cmd_power = {};
-    result_t result = {};
-
-    unsigned int measure_current_flags = measure_flags;
-
-    // признак высоковольтных измерений
-    int hv_measure = 0;
-
-    // zero-initialize the config structure.
-    gpio_config_t io_conf = {};
-    // disable interrupt
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    // set as output mode
-    io_conf.mode = GPIO_MODE_OUTPUT_OD;
-    io_conf.pin_bit_mask = BIT64(ENABLE_PIN);
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
-    // configure GPIO with the given settings
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
-    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-
-#if ESP_IDF_VERSION_MAJOR >= 5
-    adc_continuous_handle_t adc_handle = NULL;
-    continuous_adc_init(&adc_handle);
-#else
-    continuous_adc_init();
-#endif
-
-    // сбрасывем буфер
-    bhead = 0;
-    btail = 0;
-
-    int timeoutCounter = 0;
-
-    while (1)
-    {
-        BaseType_t err = xQueueReceive(uicmd_queue, &cmd_power, pdMS_TO_TICKS(menu[18].val * 1000));
-        if (err != pdTRUE) // истек timeout в случае если интервал измерений > таймаута WiFi
-        {
-            if ((++timeoutCounter) % (menu[19].val / menu[18].val) == 1)
-            {
-                start_measure(0, 0);
-            }
-            else
-            {
-                start_measure(0, 2); // LV only
-            }
             continue;
-        }
-
-        char datetime[22];
-        time_t t = time(0);
-        struct tm *localtm = localtime(&t);
-        strftime((char *)datetime, sizeof(datetime), "%Y-%m-%d %T", localtm);
+        };
 
         // отключаем обработку прерываний от pcf
-        gpio_isr_handler_remove(PCF_INT_PIN);
+        // gpio_isr_handler_remove(PCF_INT_PIN);
+        ESP_ERROR_CHECK(gpio_intr_disable(PCF_INT_PIN));
 
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
         // включаем канал
         result.channel = cmd_power.channel; // 1..4, 5..8(LV)
+        result.ttime = time(0);
 
         pcf8575_set(cmd_power.channel);
-
+        /*
+                //TEST
+                ESP_LOGI("TEST", "Start");
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                ESP_LOGI("TEST", "End");
+                continue;
+        */
         uint8_t *ptr = (uint8_t *)buffer_ADC;
         uint8_t *ptr_adc_begin = (uint8_t *)buffer_ADC;
         // uint8_t *ptre = (uint8_t *)buffer_ADC;
@@ -744,35 +490,25 @@ void dual_adc(void *arg)
         int counter_block_ADC_buffer = 0;
         int overload = 0;
 
-        int64_t timeout = menu[0].val * 1000LL;
-
-#if ESP_IDF_VERSION_MAJOR >= 5
-        ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
-#else
-        ESP_ERROR_CHECK(adc_digi_start());
-#endif
-
-        int64_t t1 = esp_timer_get_time();
-        // int64_t t2 = 0, t3 = 0, time_off = 0;
-
         calcdata_t sum_bavg = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
         // опорное значение
         calcdata_t bref = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
-        uint16_t avg_len = 0;
-        int compare_counter = menu[24].val;
+        uint16_t avg_counter = 0;
+        int compare_counter = 0;
         const int compare_delta = 1;
         bool compare_ok = false;
 
-        const int exp_filter_k = menu[21].val;
-        int exp_filter[5] = {0, 0, 0, 0, 0};
+        calcdata_t digital_filter = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
+        calcdata_t median_filter[3] = {{.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0}, {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0}, {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0}};
+        int median_filter_fill = 0;
 
         // сумма на всем измерении для расчета среднего для калибровки
         calcdata_t sum_adc_full = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
 
         int count_adc_full = 0;
-        bool filter_initialize = false;
+        bool filter_initialized = false;
 
         int data_errors = 0;
 
@@ -781,6 +517,10 @@ void dual_adc(void *arg)
         int Ubatt1counter = 0;
         result.Ubatt1 = 0;
 
+        ESP_ERROR_CHECK(adc_continuous_start(adc_handle));
+        int64_t t1 = esp_timer_get_time();
+        static int64_t ta[50];
+        int c = 0;
         do
         {
             uint32_t req = ADC_BUFFER;
@@ -789,22 +529,24 @@ void dual_adc(void *arg)
 
             while (req > 0)
             {
-#if ESP_IDF_VERSION_MAJOR >= 5
+
                 ESP_ERROR_CHECK(adc_continuous_read(adc_handle, ptr, req, &ret, ADC_MAX_DELAY));
-#else
-                ESP_ERROR_CHECK(adc_digi_read_bytes(ptr, req, &ret, ADC_MAX_DELAY));
-#endif
+
                 ptr = ptr + ret;
                 req = req - ret;
             }
 
+            if (blocks < sizeof(ta) / sizeof(ta[0]))
+            {
+                ta[blocks] = esp_timer_get_time();
+            }
+
             if (blocks == ON_BLOCK) // включаем источник ВВ
             {
-
-                t1 = esp_timer_get_time();
+                // t2 = esp_timer_get_time();
 
                 // включаем источник питания
-                if (timeout > 0)
+                if (pulse > 0)
                 {
                     if (cmd_power.channel < 5)
                     {
@@ -812,9 +554,10 @@ void dual_adc(void *arg)
                         hv_measure = 1;
                     }
                     else
+                    {
                         pcf8575_set(LV_CMDON);
+                    }
                 }
-
                 block_power_on = blocks;
             }
 
@@ -833,40 +576,42 @@ void dual_adc(void *arg)
                 // fill data
                 if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel)
                 {
-                    current_adc.R1 = p->type2.data;
+                    // current_adc.R1 = p->type2.data;
+                    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[0], p->type2.data, &current_adc.R1));
                     p++;
                     fill_data_line |= 0b1;
                     if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel) // ПОВТОР пропускаем
                         p++;
                 }
-#ifdef ADC1_ONLY
+
                 if (p->type2.unit == 0 && p->type2.channel == chan_r[1].channel)
-#else
-                if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
-#endif
                 {
-                    current_adc.U = p->type2.data;
+                    // current_adc.U = p->type2.data;
+                    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[1], p->type2.data, &current_adc.U));
                     p++;
                     fill_data_line |= 0b10;
                 }
 
                 if (p->type2.unit == 0 && p->type2.channel == chan_r[2].channel)
                 {
-                    current_adc.R2 = p->type2.data;
+                    // current_adc.R2 = p->type2.data;
+                    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[2], p->type2.data, &current_adc.R2));
                     p++;
                     fill_data_line |= 0b100;
                 }
 
                 if (p->type2.unit == 0 && p->type2.channel == chan_r[3].channel)
                 {
-                    current_adc.Ubatt = p->type2.data;
+                    // current_adc.Ubatt = p->type2.data;
+                    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[3], p->type2.data, &current_adc.Ubatt));
                     p++;
                     fill_data_line |= 0b1000;
                 }
 
                 if (p->type2.unit == 0 && p->type2.channel == chan_r[4].channel)
                 {
-                    current_adc.U0 = p->type2.data;
+                    // current_adc.U0 = p->type2.data;
+                    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[4], p->type2.data, &current_adc.U0));
                     p++;
                     fill_data_line |= 0b10000;
                 }
@@ -883,53 +628,70 @@ void dual_adc(void *arg)
                 // все данные заполнены
                 fill_data_line = 0;
                 ptr_adc_begin = (void *)p;
+                /*
+                    if (filter_initialized)
+                    {
+                        digital_filter.R1 = (current_adc.R1 * exp_filter_k + digital_filter.R1 * (100 - exp_filter_k)) / 100;
+                        digital_filter.U = (current_adc.U * exp_filter_k + digital_filter.U * (100 - exp_filter_k)) / 100;
+                        digital_filter.R2 = (current_adc.R2 * exp_filter_k + digital_filter.R2 * (100 - exp_filter_k)) / 100;
+                        digital_filter.Ubatt = (current_adc.Ubatt * exp_filter_k + digital_filter.Ubatt * (100 - exp_filter_k)) / 100;
+                        digital_filter.U0 = (current_adc.U0 * exp_filter_k + digital_filter.U0 * (100 - exp_filter_k)) / 100;
+                    }
+                    else
+                    {
+                        digital_filter.R1 = current_adc.R1;
+                        digital_filter.U = current_adc.U;
+                        digital_filter.R2 = current_adc.R2;
+                        digital_filter.Ubatt = current_adc.Ubatt;
+                        digital_filter.U0 = current_adc.U0;
+                        filter_initialized = true;
+                    }
+                */
 
-                if (filter_initialize == true)
+                median_filter[median_filter_fill % 3] = current_adc;
+                median_filter_fill++;
+
+                if (median_filter_fill <= 3)
                 {
-                    exp_filter[0] = (current_adc.R1 * exp_filter_k + exp_filter[0] * (100 - exp_filter_k)) / 100;
-                    exp_filter[1] = (current_adc.U * exp_filter_k + exp_filter[1] * (100 - exp_filter_k)) / 100;
-                    exp_filter[2] = (current_adc.R2 * exp_filter_k + exp_filter[2] * (100 - exp_filter_k)) / 100;
-                    exp_filter[3] = (current_adc.Ubatt * exp_filter_k + exp_filter[3] * (100 - exp_filter_k)) / 100;
-                    exp_filter[4] = (current_adc.U0 * exp_filter_k + exp_filter[4] * (100 - exp_filter_k)) / 100;
+                    digital_filter = current_adc;
                 }
                 else
                 {
-                    exp_filter[0] = current_adc.R1;
-                    exp_filter[1] = current_adc.U;
-                    exp_filter[2] = current_adc.R2;
-                    exp_filter[3] = current_adc.Ubatt;
-                    exp_filter[4] = current_adc.U0;
-                    filter_initialize = true;
+                    digital_filter.R1 = MEDIAN(median_filter, R1);
+                    digital_filter.U = MEDIAN(median_filter, U);
+                    digital_filter.R2 = MEDIAN(median_filter, R2);
+                    digital_filter.Ubatt = MEDIAN(median_filter, Ubatt);
+                    digital_filter.U0 = MEDIAN(median_filter, U0);
                 }
 
                 n++;
-                sum_adc.R1 += exp_filter[0];
-                sum_adc.U += exp_filter[1];
-                sum_adc.R2 += exp_filter[2];
-                sum_adc.Ubatt += exp_filter[3];
-                sum_adc.U0 += exp_filter[4];
+                sum_adc.R1 += digital_filter.R1;
+                sum_adc.U += digital_filter.U;
+                sum_adc.R2 += digital_filter.R2;
+                sum_adc.Ubatt += digital_filter.Ubatt;
+                sum_adc.U0 += digital_filter.U0;
 
-                int v = voltBatt(exp_filter[3]);
+                int v = voltBatt(digital_filter.Ubatt);
                 sum_avg01.Ubatt += v;
 
                 if (cmd_power.channel >= 5)
                 {
-                    sum_avg01.R1 += kOmlv(exp_filter[1], exp_filter[0]);
-                    sum_avg01.R2 += kOm2chanlv(exp_filter[1], exp_filter[2]);
-                    v = voltlv(exp_filter[1]);
+                    sum_avg01.R1 += kOmlv(digital_filter.U, digital_filter.R1);
+                    sum_avg01.R2 += kOm2chanlv(digital_filter.U, digital_filter.R2);
+                    v = voltlv(digital_filter.U);
                     sum_avg01.U += v;
-                    sum_avg01.U0 += volt0lv(exp_filter[4]);
+                    sum_avg01.U0 += volt0lv(digital_filter.U0);
                 }
                 else
                 {
-                    sum_avg01.R1 += kOm(exp_filter[1], exp_filter[0]);
-                    sum_avg01.R2 += kOm2chan(exp_filter[1], exp_filter[2]);
-                    v = volt(exp_filter[1]);
+                    sum_avg01.R1 += kOm(digital_filter.U, digital_filter.R1);
+                    sum_avg01.R2 += kOm2chan(digital_filter.U, digital_filter.R2);
+                    v = volt(digital_filter.U);
                     sum_avg01.U += v;
-                    sum_avg01.U0 += volt0(exp_filter[4]);
+                    sum_avg01.U0 += volt0(digital_filter.U0);
                 }
 
-                if (v > menu[1].val * 1000)
+                if (v > overvolt_value * 1000)
                 {
                     overvolt++;
                     if (overvolt >= 3)
@@ -955,7 +717,7 @@ void dual_adc(void *arg)
             {
                 memcpy(buffer_ADC, ptr_adc_begin, d);
                 ptr = buffer_ADC + d;
-                // printf("Обрывок: %d\n", (int)d);
+                ESP_LOGE("adc", "Обрывок: %d\n", (int)d);
             }
             else
             {
@@ -970,7 +732,7 @@ void dual_adc(void *arg)
 
             if (n != 10)
             {
-                // ESP_LOGE("adc", "%4d %d\n", blocks, n);
+                ESP_LOGE("adc", "%4d %d\n", blocks, n);
             }
 
             bufferR[bhead].U = sum_avg01.U / n;
@@ -982,9 +744,9 @@ void dual_adc(void *arg)
             if (blocks > ON_BLOCK && block_power_off == 0)
             {
                 // отсечка по времени
-                if ((esp_timer_get_time() - t1) > timeout)
+                if (pulse > 0)
                 {
-                    if (timeout > 0)
+                    if ((esp_timer_get_time() - t1) > (pulse * 1000LL))
                     {
                         // ВЫРУБАЕМ
                         if (cmd_power.channel < 5)
@@ -996,51 +758,57 @@ void dual_adc(void *arg)
                     }
                     else
                     {
-                        block_power_off = 1000; // для калибровки
-                        block_result = 1000;
-                    }
-                }
-                else
-                {
-                    /*
-                    // отсечка по напряжению, Ubatt
-                    if (bufferR[bhead].Ubatt < menu[17].val)
-                    {
-                        // прекращаем измерения
-                        // ВЫРУБАЕМ
-                        if (cmd_power.channel < 5)
-                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                        else
-                            pcf8575_set(LV_CMDOFF);
-
-                        if (terminal_mode >= 0)
-                            printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[17].val);
-                        BattLow += 100;
-                        break;
-                    }
-                    else if (bufferR[bhead].Ubatt < menu[16].val)
-                    {
-                        BattLow += 1;
-                        if (BattLow > 10)
+                        /*
+                        // отсечка по напряжению, Ubatt
+                        if (bufferR[bhead].Ubatt < menu[17].val)
                         {
+                            // прекращаем измерения
                             // ВЫРУБАЕМ
                             if (cmd_power.channel < 5)
                                 ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
                             else
                                 pcf8575_set(LV_CMDOFF);
 
-                            // прекращаем измерения
                             if (terminal_mode >= 0)
-                                printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[16].val, BattLow);
+                                printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[17].val);
+                            BattLow += 100;
                             break;
                         }
-                    }*/
+                        else if (bufferR[bhead].Ubatt < menu[16].val)
+                        {
+                            BattLow += 1;
+                            if (BattLow > 10)
+                            {
+                                // ВЫРУБАЕМ
+                                if (cmd_power.channel < 5)
+                                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                                else
+                                    pcf8575_set(LV_CMDOFF);
+
+                                // прекращаем измерения
+                                if (terminal_mode >= 0)
+                                    printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[16].val, BattLow);
+                                break;
+                            }
+                        }*/
+                    }
+                }
+                else
+                {
+                    block_power_off = 1000; // для калибровки
+                    block_result = 1000;
                 }
             }
 
             // считаем среднее для калибровки
-            if (blocks > ON_BLOCK + 10)
+            if (blocks > (ON_BLOCK + 10) && blocks <= block_power_off)
             {
+                if (c == 0)
+                {
+                    // ESP_LOGD(TAG, "block: %d = adc 0:%d, 1:%d, 2:%d", blocks, sum_adc.R1 / n, sum_adc.U / n, sum_adc.R2 / n);
+                    c++;
+                };
+
                 count_adc_full += n; // сумма на всем интервале измерения для калибровки
                 sum_adc_full.R1 += sum_adc.R1;
                 sum_adc_full.R2 += sum_adc.R2;
@@ -1048,7 +816,6 @@ void dual_adc(void *arg)
                 sum_adc_full.Ubatt += sum_adc.Ubatt;
                 sum_adc_full.U0 += sum_adc.U0;
             };
-
 
             // запоминаем напряжение батареи
             if (blocks >= (ON_BLOCK - 5) && blocks < ON_BLOCK)
@@ -1062,29 +829,29 @@ void dual_adc(void *arg)
                 Ubatt1counter++;
             }
 
-            // считаем среднее
+            // считаем скользящее среднее
             if (blocks > ON_BLOCK)
             {
                 sum_bavg.R1 += bufferR[bhead].R1;
                 sum_bavg.R2 += bufferR[bhead].R2;
                 sum_bavg.U += bufferR[bhead].U;
                 sum_bavg.U0 += bufferR[bhead].U0;
-                avg_len++;
+                avg_counter++;
 
-                if (avg_len > menu[25].val)
+                if (avg_counter > avg_length)
                 {
-                    avg_len--;
-                    unsigned int delpos = (bhead - avg_len) & (RINGBUFLEN - 1);
+                    avg_counter--;
+                    unsigned int delpos = (bhead - avg_counter) & (RINGBUFLEN - 1);
                     sum_bavg.R1 -= bufferR[delpos].R1;
                     sum_bavg.R2 -= bufferR[delpos].R2;
                     sum_bavg.U -= bufferR[delpos].U;
                     sum_bavg.U0 -= bufferR[delpos].U0;
                 }
 
-                int r1 = sum_bavg.R1 / avg_len;
-                int r2 = sum_bavg.R2 / avg_len;
-                int u = sum_bavg.U / avg_len;
-                int u0 = sum_bavg.U0 / avg_len;
+                int r1 = sum_bavg.R1 / avg_counter;
+                int r2 = sum_bavg.R2 / avg_counter;
+                int u = sum_bavg.U / avg_counter;
+                int u0 = sum_bavg.U0 / avg_counter;
 
                 /*
                 //Поиск максимума
@@ -1134,7 +901,7 @@ void dual_adc(void *arg)
                     bref.R2 = r2;
                     bref.U = u;
                     bref.U0 = u0;
-                    compare_counter = menu[24].val;
+                    compare_counter = compare_counter_val;
                 }
 
                 // окончание измерений
@@ -1211,7 +978,7 @@ void dual_adc(void *arg)
 
                         block_power_off = blocks;
 
-                        if (sum_adc.R1 / n < 4000) // НЕТ ПЕРЕГРУЗКИ измерительного канала
+                        if (sum_adc.R1 / n < reloadR1) // НЕТ ПЕРЕГРУЗКИ измерительного канала
                             block_result = blocks;
                         else
                             overload = 1;
@@ -1221,7 +988,7 @@ void dual_adc(void *arg)
                 {
                     if (block_result == 0) // была перегрузка или отключились по timeout
                     {
-                        if (sum_adc.R1 / n < 4000)
+                        if (sum_adc.R1 / n < reloadR1)
                         {
                             if (overload > 0) // при выходе из перегрузки среднее не действительно
                             {
@@ -1243,6 +1010,8 @@ void dual_adc(void *arg)
                 // запоминаем результат
                 if (blocks == block_result)
                 {
+                    // t3 = esp_timer_get_time();
+
                     result.adc0 = sum_adc.R1 / n;
                     result.adc1 = sum_adc.U / n;
                     result.adc2 = sum_adc.R2 / n;
@@ -1259,9 +1028,9 @@ void dual_adc(void *arg)
                     result.U0 = u0;
                     result.time = block_result;
 
-                    //ESP_LOGD(TAG, "on result: channel: %d, block: %d", result.channel, block_result);
-                    //ESP_LOGD(TAG, "on result: Ubatt0 summ: %d, count: %d", result.Ubatt0, Ubatt0counter);
-                    //ESP_LOGD(TAG, "on result: Ubatt1 summ: %d, count: %d", result.Ubatt1, Ubatt1counter);
+                    // ESP_LOGD(TAG, "block: %d = adc 0:%d, 1:%d, 2:%d", blocks, sum_adc.R1 / n, sum_adc.U / n, sum_adc.R2 / n);
+                    //  ESP_LOGD(TAG, "on result: Ubatt0 summ: %d, count: %d", result.Ubatt0, Ubatt0counter);
+                    //  ESP_LOGD(TAG, "on result: Ubatt1 summ: %d, count: %d", result.Ubatt1, Ubatt1counter);
 
                     if (Ubatt0counter > 0)
                         result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
@@ -1270,17 +1039,16 @@ void dual_adc(void *arg)
                         result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
 
                     // увеличивем интервал при низком напряжении
-                    if (result.Ubatt1 < menu[16].val)
+                    if (result.Ubatt1 < UbatLow)
                     {
                         BattLow += 1;
 
                         ESP_LOGD(TAG, "Ubatt low: %d", result.Ubatt1);
 
                         // отключаем если при lv измерении напряжение упало ниже минимума
-                        if (result.Ubatt1 < menu[17].val)
+                        if (result.Ubatt1 < UbatEnd)
                         {
                             BattLow += 100000;
-                            go_sleep();
                         }
                     }
 
@@ -1288,29 +1056,18 @@ void dual_adc(void *arg)
                 }
             }
 
-            // буферезируем после включения последнее измерение
-            if (blocks >= ON_BLOCK)
+            // буферизируем adc
+            if (blocks >= 0) // ON_BLOCK)
             {
-                if (uxQueueMessagesWaiting(uicmd_queue) == 0) // последнее измерение
+                if (counter_block_ADC_buffer < sizeof(buffer_ADC_copy) / ADC_BUFFER) // копируем буфер
                 {
-                    if (counter_block_ADC_buffer < sizeof(buffer_ADC_copy) / ADC_BUFFER) // копируем буфер
-                    {
-                        memcpy(&buffer_ADC_copy[ADC_BUFFER * counter_block_ADC_buffer], ptrb, ADC_BUFFER);
-                        counter_block_ADC_buffer++;
-                    }
-                    else if (block_result > 0 && blocks > (block_result + 100))
-                    {
-                        // заканчиваем измерение
-                        break;
-                    }
+                    memcpy(buffer_ADC_copy + ADC_BUFFER * counter_block_ADC_buffer, buffer_ADC, ADC_BUFFER);
+                    counter_block_ADC_buffer++;
                 }
-                else
+                else if (block_result > 0 && blocks >= block_result)
                 {
-                    if (block_result > 0)
-                    {
-                        // заканчиваем измерение
-                        break;
-                    }
+                    // заканчиваем измерение
+                    break;
                 }
             }
 
@@ -1318,41 +1075,34 @@ void dual_adc(void *arg)
             if (bhead == btail) // увеличиваем хвост
                 btail = (btail + 1) & (RINGBUFLEN - 1);
 
+            if (blocks < sizeof(ta) / sizeof(ta[0]))
+            {
+                ta[blocks] = esp_timer_get_time() - ta[blocks];
+            }
+
             blocks++;
         } while (blocks < 9000); // ограничение 9 сек
 
-#if ESP_IDF_VERSION_MAJOR >= 5
         ESP_ERROR_CHECK(adc_continuous_stop(adc_handle));
-        // ESP_ERROR_CHECK(adc_continuous_deinit(adc_handle));
-#else
-        ESP_ERROR_CHECK(adc_digi_stop());
-#endif
-
-        // ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
 
         // сравниваем с предыдущими измерениями измерения
         if (result.R > 0)
         {
-            if (abs(measure_chan[cmd_power.channel] - result.R) * 100 / abs(result.R) > menu[27].val)
+            if (abs(measure_chan[cmd_power.channel] - result.R) * 100 / abs(result.R) > get_menu_val_by_id("percRlv"))
             {
-                xEventGroupSetBits(ready_event_group, NEED_TRANSMIT);
+                if (xHandleNB)
+                    xTaskNotifyGive(xHandleNB); // включаем NBIoT модуль
 
                 ESP_LOGD(TAG, "Differences in measurements found. Set NEED_TRANSMIT");
 
                 // запоминаем данные для сравнения
-                measure_chan[cmd_power.channel] = result.R;
+                // measure_chan[cmd_power.channel] = result.R;
             }
-        }
-
-        // передаем полюбому если проводим высоковольтные измерения
-        if (hv_measure)
-        {
-            xEventGroupSetBits(ready_event_group, NEED_TRANSMIT);
         }
 
         // определяем процент напряжение на обратном проводе
         int pr = (result.U0 * 100) / result.U;
-        if (pr > menu[26].val) // 75%
+        if (pr > get_menu_val_by_id("percU0lv")) // 75%
         {
             measure_current_flags |= BIT(cmd_power.channel);
         }
@@ -1369,35 +1119,39 @@ void dual_adc(void *arg)
             {
                 start_measure(0, 1);
             }
-            else
-            {
-                // завершаем
-                measure_flags = measure_current_flags;
-                // ВЫРУБАЕМ каналы
-                pcf8575_set(POWER_CMDOFF);
+        };
 
-                // Подключаем прерывания от pcf
-                // читаем pcf, для сброса бита INT
-                ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_isr_handler_add(PCF_INT_PIN, pcf_int_handler, (void *)PCF_INT_PIN));
-                uint32_t io_num = 0;
-                xQueueSend(gpio_evt_queue, &io_num, 0);
+        if (uxQueueMessagesWaiting(uicmd_queue) == 0)
+        {
+            // завершаем
+            measure_flags = measure_current_flags;
+            // ВЫРУБАЕМ каналы
+            pcf8575_set(POWER_CMDOFF);
 
-                vTaskDelay(100 / portTICK_PERIOD_MS);
-
-                xEventGroupSetBits(ready_event_group, END_MEASURE);
-            };
+            // читаем pcf, для сброса бита INT
+            pcf_int_handler(NULL);
+            // Подключаем прерывания от pcf
+            ESP_ERROR_CHECK(gpio_intr_enable(PCF_INT_PIN));
+            xEventGroupSetBits(status_event_group, END_MEASURE);
         };
 
         // РЕЗУЛЬТАТ
-        char buf[WS_BUF_SIZE];
-        int len_data = snprintf((char *)buf, sizeof(buf), "{\"channel\":\"%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d}", result.channel, bootCount + timeoutCounter, datetime, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
+        static char buf[WS_BUF_SIZE];
+        int len_data = snprintf((char *)buf, sizeof(buf), "{\"channel\":\"%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d}", result.channel, bootCount + timeoutCounter, get_datetime(result.ttime), result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time);
         // int l = snprintf((char *)buf, sizeof(buf), "(on:%3d res:%3d err:%3d) \"channel\":%d,\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f", block_power_on, block_result, data_errors, cmd_power.channel, result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0);
         xRingbufferSend(wsbuf_handle, buf, len_data + 1, 0);
 
-        printf("%s\n", buf);
-        printf("Avg ADC 0:%d, 1:%d, 2:%d, 3:%d, 4:%d\n", sum_adc_full.R1 / count_adc_full, sum_adc_full.U / count_adc_full, sum_adc_full.R2 / count_adc_full, sum_adc_full.Ubatt / count_adc_full, sum_adc_full.U0 / count_adc_full);
+        ESP_LOGI("result", "%s", buf);
+        ESP_LOGD("result", "Avg ADC (%d) 0:%d, 1:%d, 2:%d, 3:%d, 4:%d", count_adc_full, sum_adc_full.R1 / count_adc_full, sum_adc_full.U / count_adc_full, sum_adc_full.R2 / count_adc_full, sum_adc_full.Ubatt / count_adc_full, sum_adc_full.U0 / count_adc_full);
+        // ESP_LOGD("result", "dt2: %lli, dt3: %lli", t2 - t1, t3 - t2);
+        // ESP_LOGD("result", "%i: %lli", 0, ta[0] - t1);
+        for (int i = 0; i < sizeof(ta) / sizeof(ta[0]) - 1; i++)
+        {
+            if (ta[i] >= 1000)
+                ESP_LOGE("result", "Block %i process time %lli us", i, ta[i]);
+        }
 
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(1);
     };
 }
 
@@ -1424,16 +1178,20 @@ int getResult_Data(char *line, int data_pos)
     return l;
 }
 
-int getADC_Data(char *line, int data_pos, bool filter)
+int getADC_Data(char *line, int data_pos, const int mode)
 {
     const char *header = {"id,adc0,adc1,adc2,adc3,adc4\n"};
     char *pos = line;
     int l = 0;
 
-    const int exp_filter_k = menu[21].val;
-    static int exp_filter[5] = {0, 0, 0, 0, 0};
+    const int exp_filter_k = get_menu_val_by_id("Kfilter");
+
+    calcdata_t digital_filter = {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0};
 
     calcdata_t current_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
+    static calcdata_t median_filter[3] = {{.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0}, {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0}, {.R1 = 0, .R2 = 0, .U = 0, .U0 = 0, .Ubatt = 0}};
+    static int median_filter_fill = 0;
+
     uint8_t fill_data_line = 0;
 
     adc_digi_output_data_t *p = (void *)(buffer_ADC_copy + data_pos * ADC_COUNT_READ * sizeof(adc_digi_output_data_t));
@@ -1443,6 +1201,8 @@ int getADC_Data(char *line, int data_pos, bool filter)
         strcpy(line, header);
         l = strlen(header);
         pos = line + l;
+
+        median_filter_fill = 0;
     }
 
     while ((uint8_t *)p < (uint8_t *)buffer_ADC_copy + sizeof(buffer_ADC_copy))
@@ -1450,41 +1210,72 @@ int getADC_Data(char *line, int data_pos, bool filter)
         // fill data
         if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel)
         {
-            current_adc.R1 = p->type2.data;
+            if (mode >= 3)
+            {
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[0], p->type2.data, &current_adc.R1));
+            }
+            else
+            {
+                current_adc.R1 = p->type2.data;
+            }
             p++;
             fill_data_line |= 0b1;
             if (p->type2.unit == 0 && p->type2.channel == chan_r[0].channel) // ПОВТОР пропускаем
                 p++;
         }
 
-#ifdef ADC1_ONLY
         if (p->type2.unit == 0 && p->type2.channel == chan_r[1].channel)
-#else
-        if (p->type2.unit == 1 && p->type2.channel == chan_r[1].channel)
-#endif
         {
-            current_adc.U = p->type2.data;
+            if (mode >= 3)
+            {
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[1], p->type2.data, &current_adc.U));
+            }
+            else
+            {
+                current_adc.U = p->type2.data;
+            }
             p++;
             fill_data_line |= 0b10;
         }
 
         if (p->type2.unit == 0 && p->type2.channel == chan_r[2].channel)
         {
-            current_adc.R2 = p->type2.data;
+            if (mode >= 3)
+            {
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[2], p->type2.data, &current_adc.R2));
+            }
+            else
+            {
+                current_adc.R2 = p->type2.data;
+            }
             p++;
             fill_data_line |= 0b100;
         }
 
         if (p->type2.unit == 0 && p->type2.channel == chan_r[3].channel)
         {
-            current_adc.Ubatt = p->type2.data;
+            if (mode >= 3)
+            {
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[3], p->type2.data, &current_adc.Ubatt));
+            }
+            else
+            {
+                current_adc.Ubatt = p->type2.data;
+            }
             p++;
             fill_data_line |= 0b1000;
         }
 
         if (p->type2.unit == 0 && p->type2.channel == chan_r[4].channel)
         {
-            current_adc.U0 = p->type2.data;
+            if (mode >= 3)
+            {
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle[4], p->type2.data, &current_adc.U0));
+            }
+            else
+            {
+                current_adc.U0 = p->type2.data;
+            }
             p++;
             fill_data_line |= 0b10000;
         }
@@ -1494,31 +1285,49 @@ int getADC_Data(char *line, int data_pos, bool filter)
             if (fill_data_line == 0)
                 p++;
 
+            ESP_LOGE("adc copy", "Error data pos: %i", data_pos);
             continue;
         }
 
         // все данные заполнены
         fill_data_line = 0;
+        /*
+                if (mode == 1 && data_pos > 0)
+                {
+                    digital_filter[0] = (current_adc.R1 * exp_filter_k + digital_filter[0] * (100 - exp_filter_k)) / 100;
+                    digital_filter[1] = (current_adc.U * exp_filter_k + digital_filter[1] * (100 - exp_filter_k)) / 100;
+                    digital_filter[2] = (current_adc.R2 * exp_filter_k + digital_filter[2] * (100 - exp_filter_k)) / 100;
+                    digital_filter[3] = (current_adc.Ubatt * exp_filter_k + digital_filter[3] * (100 - exp_filter_k)) / 100;
+                    digital_filter[4] = (current_adc.U0 * exp_filter_k + digital_filter[4] * (100 - exp_filter_k)) / 100;
+                }
+                else
+                {
+                    digital_filter[0] = current_adc.R1;
+                    digital_filter[1] = current_adc.U;
+                    digital_filter[2] = current_adc.R2;
+                    digital_filter[3] = current_adc.Ubatt;
+                    digital_filter[4] = current_adc.U0;
+                }
+        */
 
-        if (filter && data_pos > 0)
+        median_filter[median_filter_fill % 3] = current_adc;
+        median_filter_fill++;
+
+        if (mode == 1 && median_filter_fill >= 3)
         {
-            exp_filter[0] = (current_adc.R1 * exp_filter_k + exp_filter[0] * (100 - exp_filter_k)) / 100;
-            exp_filter[1] = (current_adc.U * exp_filter_k + exp_filter[1] * (100 - exp_filter_k)) / 100;
-            exp_filter[2] = (current_adc.R2 * exp_filter_k + exp_filter[2] * (100 - exp_filter_k)) / 100;
-            exp_filter[3] = (current_adc.Ubatt * exp_filter_k + exp_filter[3] * (100 - exp_filter_k)) / 100;
-            exp_filter[4] = (current_adc.U0 * exp_filter_k + exp_filter[4] * (100 - exp_filter_k)) / 100;
+            digital_filter.R1 = MEDIAN(median_filter, R1);
+            digital_filter.U = MEDIAN(median_filter, U);
+            digital_filter.R2 = MEDIAN(median_filter, R2);
+            digital_filter.Ubatt = MEDIAN(median_filter, Ubatt);
+            digital_filter.U0 = MEDIAN(median_filter, U0);
         }
         else
         {
-            exp_filter[0] = current_adc.R1;
-            exp_filter[1] = current_adc.U;
-            exp_filter[2] = current_adc.R2;
-            exp_filter[3] = current_adc.Ubatt;
-            exp_filter[4] = current_adc.U0;
+            digital_filter = current_adc;
         }
 
         //                 id   adc0 adc1 adc2 adc3 adc4
-        l += sprintf(pos, "%5d, %4d, %4d, %4d, %4d, %4d\n", data_pos, exp_filter[0], exp_filter[1], exp_filter[2], exp_filter[3], exp_filter[4]);
+        l += sprintf(pos, "%5d, %4d, %4d, %4d, %4d, %4d\n", data_pos, digital_filter.R1, digital_filter.U0, digital_filter.R2, digital_filter.Ubatt, digital_filter.U0);
 
         return l;
     }

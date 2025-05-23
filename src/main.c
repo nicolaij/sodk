@@ -1,3 +1,7 @@
+/*
+    espnow MAC0 8713987 MAC3 3784525
+*/
+
 #include "main.h"
 #include <sys/time.h>
 
@@ -16,107 +20,31 @@
 
 #include <string.h>
 
-#if ESP_IDF_VERSION_MAJOR == 5
 #include "driver/i2c_master.h"
 #include "driver/temperature_sensor.h"
 
-i2c_master_bus_handle_t bus_handle;
 i2c_master_dev_handle_t dev_handle_pcf;
-
-#endif
-
-#if ESP_IDF_VERSION_MAJOR == 4
-#include "driver/i2c.h"
-#include "driver/temp_sensor.h"
-#endif
 
 RTC_DATA_ATTR int bootCount = 0;
 
 float tsens_out = 0;
-int temperature = 0;
-int humidity = 0;
 
 uint8_t mac[6];
 
-TaskHandle_t xHandleRadio = NULL;
+TaskHandle_t xHandleNB = NULL;
 TaskHandle_t xHandleUI = NULL;
 TaskHandle_t xHandleWifi = NULL;
 TaskHandle_t xHandleADC = NULL;
 TaskHandle_t xHandleBtn = NULL;
 
-int i2c_master_port = I2C_NUM_0;
 int i2c_err = 1;
-
-menu_t menu[] = {
-    {.id = "pulse", .name = "Макс. время импульса", .val = 500, .min = -1, .max = 10000},
-    {.id = "Volt", .name = "Ограничение U", .val = 600, .min = 0, .max = 1000},
-    {.id = "kU", .name = "коэф. U", .val = 1690, .min = 1, .max = 10000},
-    {.id = "offsU", .name = "смещ. U", .val = -7794, .min = -100000, .max = 100000},
-    {.id = "kUlv", .name = "коэф. U низ.", .val = 1690, .min = 1, .max = 10000},
-    {.id = "offsUlv", .name = "смещ. U низ.", .val = -7794, .min = -100000, .max = 100000},
-    {.id = "kR1", .name = "коэф. R (ch 1)", .val = 15000, .min = 1, .max = 100000},
-    {.id = "offsAR1", .name = "смещ. R (ch 1)", .val = -7925, .min = -100000, .max = 100000},
-    {.id = "kR2", .name = "коэф. R (ch 2)", .val = 319, .min = 1, .max = 100000},
-    {.id = "offsAR2", .name = "смещ. R (ch 2)", .val = -1729, .min = -100000, .max = 100000},
-    {.id = "kU0", .name = "коэф. U петли", .val = 1611, .min = 1, .max = 10000}, /*10*/
-    {.id = "offsU0", .name = "смещ. U петли", .val = -539, .min = -100000, .max = 100000},
-    {.id = "kU0lv", .name = "коэф. U петли низ.", .val = 1611, .min = 1, .max = 10000},
-    {.id = "offsU0lv", .name = "смещ. U петли низ.", .val = -539, .min = -100000, .max = 100000},
-    {.id = "kUbat", .name = "коэф. U bat", .val = 5005, .min = 1, .max = 100000},
-    {.id = "offsUbat", .name = "смещ. U bat", .val = -4000, .min = -1000000, .max = 1000000},
-    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .val = 0, .min = 0, .max = 12000},
-    {.id = "UbatEnd", .name = "U bat отключения", .val = 0, .min = 0, .max = 12000},
-    {.id = "Trepeatlv", .name = "Интервал измер. низ.", .val = 300, .min = 1, .max = 1000000},
-    {.id = "Trepeathv", .name = "Интервал измер. выс.", .val = 3600, .min = 1, .max = 1000000},
-    {.id = "chanord", .name = "Порядок опроса каналов", .val = 1234, .min = 0, .max = 999999999}, /*20*/
-    {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .val = 10, .min = 1, .max = 100},
-    {.id = "WiFitime", .name = "WiFi timeout", .val = 120, .min = 60, .max = 100000},
-    {.id = "WiFichan", .name = "WiFi channel", .val = 1, .min = 1, .max = 20},
-    {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .val = 25, .min = 1, .max = 10000},
-    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .val = 25, .min = 1, .max = 10000},
-    {.id = "percU0lv", .name = "\% U петли низ.", .val = 75, .min = 0, .max = 100}, /*26 Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
-    {.id = "percRlv", .name = "\% R низ.", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
-};
 
 QueueHandle_t uicmd_queue;
 QueueHandle_t send_queue;
 QueueHandle_t set_lora_queue;
 RingbufHandle_t wsbuf_handle;
 
-EventGroupHandle_t ready_event_group;
-
-int read_nvs_menu()
-{
-    // Open
-    nvs_handle_t my_handle;
-    esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE("storage", "Error (%s) opening NVS handle!", esp_err_to_name(err));
-    }
-    else
-    {
-        for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
-        {
-            err = nvs_get_i32(my_handle, menu[i].id, &menu[i].val);
-            switch (err)
-            {
-            case ESP_OK:
-                ESP_LOGD("NVS", "Read \"%s\" = %ld", menu[i].name, menu[i].val);
-                break;
-            case ESP_ERR_NVS_NOT_FOUND:
-                ESP_LOGD("NVS", "The value  \"%s\" is not initialized yet!", menu[i].name);
-                break;
-            default:
-                ESP_LOGE("NVS", "Error (%s) reading!", esp_err_to_name(err));
-            }
-        }
-
-        // Close
-        nvs_close(my_handle);
-    }
-    return err;
-}
+EventGroupHandle_t status_event_group;
 
 int pcf8575_read(int bit)
 {
@@ -125,17 +53,16 @@ int pcf8575_read(int bit)
 
     static uint16_t port_val = UINT16_MAX;
 
-#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-    ESP_ERROR_CHECK(i2c_master_read_from_device(i2c_master_port, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
-#endif
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-    i2c_master_receive(dev_handle_pcf, (uint8_t *)&port_val, 2, 100);
-#endif
+    esp_err_t err = i2c_master_receive(dev_handle_pcf, (uint8_t *)&port_val, 2, 100);
 
-    ESP_LOGV("pcf8575", "pcf8575 get: 0x%04X", port_val);
+    if (err == ESP_OK)
+    {
+        ESP_LOGD("pcf8575", "pcf8575 get: 0x%04X", port_val);
 
-    if ((port_val & BIT(bit)) == 0)
-        return 1;
+        if ((port_val & BIT(bit)) == 0)
+            return 1;
+    }
+
     return 0;
 }
 
@@ -152,27 +79,15 @@ void pcf8575_set(int channel_cmd)
     switch (channel_cmd)
     {
     case 0:
-#if NB == 26
-        current_mask = BIT(POWER_BIT) | BIT(NB_PWR_BIT);
-#else
         current_mask = BIT(POWER_BIT);
-#endif
         cmd_mask = current_mask;
         break;
     case NB_PWR_CMDON:
-#if NB == 26
-        current_mask &= ~BIT(NB_PWR_BIT);
-#else
         current_mask |= BIT(NB_PWR_BIT);
-#endif
         cmd_mask = current_mask;
         break;
     case NB_PWR_CMDOFF:
-#if NB == 26
-        current_mask |= BIT(NB_PWR_BIT);
-#else
         current_mask &= ~BIT(NB_PWR_BIT);
-#endif
         cmd_mask = current_mask;
         break;
     case LV_CMDON:
@@ -181,6 +96,14 @@ void pcf8575_set(int channel_cmd)
         break;
     case LV_CMDOFF:
         current_mask &= ~BIT(LV_POWER_BIT);
+        cmd_mask = current_mask;
+        break;
+    case LV_MEASUREON:
+        current_mask |= BIT(LV_BIT);
+        cmd_mask = current_mask;
+        break;
+    case LV_MEASUREOFF:
+        current_mask &= ~BIT(LV_BIT);
         cmd_mask = current_mask;
         break;
     case NB_RESET_CMD:
@@ -194,137 +117,95 @@ void pcf8575_set(int channel_cmd)
     case 1:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        current_mask |= BIT(3);         
-#else    
-        current_mask |= BIT(6);          // ADC R
-        current_mask |= BIT(7);          // Uout + U0
-#endif
+
+        current_mask |= BIT(6); // ADC R
+        current_mask |= BIT(7); // Uout + U0
+
         cmd_mask = current_mask;
         break;
     case 5:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        //current_mask |= BIT(4);
-#else    
-        current_mask |= BIT(LV_BIT);     // LV
-        current_mask |= BIT(6);          // ADC R
-        current_mask |= BIT(7);          // Uout + U0
-#endif
+
+        current_mask |= BIT(LV_BIT); // LV
+        current_mask |= BIT(6);      // ADC R
+        current_mask |= BIT(7);      // Uout + U0
+
         cmd_mask = current_mask;
         break;
     case 2:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        current_mask |= BIT(2);         
-#else    
-        current_mask |= BIT(4);          // ADC R
-        current_mask |= BIT(5);          // Uout + U0
-#endif
+
+        current_mask |= BIT(4); // ADC R
+        current_mask |= BIT(5); // Uout + U0
+
         cmd_mask = current_mask;
         break;
     case 6:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        //current_mask |= BIT(3);         
-#else    
-        current_mask |= BIT(LV_BIT);     // LV
-        current_mask |= BIT(4);          // ADC R
-        current_mask |= BIT(5);          // Uout + U0
-#endif
+
+        current_mask |= BIT(LV_BIT); // LV
+        current_mask |= BIT(4);      // ADC R
+        current_mask |= BIT(5);      // Uout + U0
+
         cmd_mask = current_mask;
         break;
     case 3:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        current_mask |= BIT(1);         
-#else    
         current_mask |= BIT(2);          // ADC R
         current_mask |= BIT(3);          // Uout + U0
-#endif
+
         cmd_mask = current_mask;
         break;
     case 7:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        //current_mask |= BIT(2);         
-#else    
-        current_mask |= BIT(LV_BIT);     // LV
-        current_mask |= BIT(2);          // ADC R
-        current_mask |= BIT(3);          // Uout + U0
-#endif
+
+        current_mask |= BIT(LV_BIT); // LV
+        current_mask |= BIT(2);      // ADC R
+        current_mask |= BIT(3);      // Uout + U0
         cmd_mask = current_mask;
         break;
     case 4:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        current_mask |= BIT(0);         
-#else    
-        current_mask |= BIT(0);          // ADC R
-        current_mask |= BIT(1);          // Uout + U0
-#endif
+
+        current_mask |= BIT(0); // ADC R
+        current_mask |= BIT(1); // Uout + U0
+
         cmd_mask = current_mask;
         break;
     case 8:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-#if HW == 14
-        //current_mask |= BIT(0);         
-#else    
-        current_mask |= BIT(LV_BIT);     // LV
-        current_mask |= BIT(0);          // ADC R
-        current_mask |= BIT(1);          // Uout + U0
-#endif
+
+        current_mask |= BIT(LV_BIT); // LV
+        current_mask |= BIT(0);      // ADC R
+        current_mask |= BIT(1);      // Uout + U0
+
         cmd_mask = current_mask;
         break;
     }
 
     uint16_t port_val = ~(cmd_mask);
 
-#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-    ESP_ERROR_CHECK(i2c_master_write_to_device(i2c_master_port, PCF8575_I2C_ADDR_BASE, (uint8_t *)&port_val, 2, 1000 / portTICK_PERIOD_MS));
-#endif
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-    ESP_ERROR_CHECK(i2c_master_transmit(dev_handle_pcf, (uint8_t *)&port_val, 2, 100));
-#endif
-    ESP_LOGV("pcf8575", "cmd: %3d set: 0x%04X", channel_cmd, port_val);
-}
-
-void go_sleep(void)
-{
-    if (BattLow < 100)
+    if (i2c_master_transmit(dev_handle_pcf, (uint8_t *)&port_val, 2, 100) != ESP_OK)
     {
-        ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
+        i2c_err = 1;
+        ESP_LOGE("pcf8575", "Error transmit");
     }
-
-    // коррекция на время работы
-#if HW == 14
-    uint64_t time_in_us = StoUS((uint64_t)menu[19].val * (uint64_t)BattLow) - (esp_timer_get_time() % StoUS(menu[19].val));
-#else
-    uint64_t time_in_us = StoUS((uint64_t)menu[18].val * (uint64_t)BattLow) - (esp_timer_get_time() % StoUS(menu[18].val));
-#endif
-
-    ESP_LOGW("main", "Go sleep: %lld us, (k BattLow: %d)", time_in_us, BattLow);
-    fflush(stdout);
-
-    esp_sleep_enable_timer_wakeup(time_in_us);
-    esp_deep_sleep_start();
+    else
+    {
+        // ESP_LOGD("pcf8575", "cmd: %3d set: 0x%04X", channel_cmd, port_val);
+    }
 }
 
 void start_measure(int channel, int flag)
 {
-
-#if HW == 14
-    flag = 1; //HiVolt Only
-#endif
-
-    cmd_t cmd;
+    cmd_t cmd = {.channel = 0, .cmd = 0};
     int pos;
     if (channel >= 1 && channel <= 8)
     {
@@ -333,12 +214,14 @@ void start_measure(int channel, int flag)
     }
     else
     {
+        int channels = get_menu_val_by_id("chanord");
+
         if (flag != 1)
         {
             pos = 100000000;
             while (pos > 0) // First LV
             {
-                cmd.channel = (menu[20].val % (pos * 10)) / pos;
+                cmd.channel = (channels % (pos * 10)) / pos;
                 if (cmd.channel > 0)
                 {
                     if (cmd.channel <= 4)
@@ -356,7 +239,7 @@ void start_measure(int channel, int flag)
             pos = 100000000;
             while (pos > 0) // HV
             {
-                cmd.channel = (menu[20].val % (pos * 10)) / pos;
+                cmd.channel = (channels % (pos * 10)) / pos;
                 if (cmd.channel > 0 && cmd.channel <= 4)
                 {
                     xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
@@ -428,21 +311,15 @@ void app_main()
     //  "Количество загрузок: "
     ESP_LOGI("main", "Boot number: %d", bootCount);
 
-    time_t n = time(0);
-    struct tm *localtm = localtime(&n);
-    strftime((char *)buf, sizeof(buf), "%Y-%m-%d %T", localtm);
-
-    ESP_LOGI("main", "Current date/time: %s", buf);
+    ESP_LOGI("main", "Current date/time: %s", get_datetime(time(0)));
 
     esp_efuse_mac_get_default(mac);
     ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
 
     wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
 
-#if CONFIG_IDF_TARGET_ESP32C3
     ESP_LOGD("main", "Initializing Temperature sensor");
 
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
     temperature_sensor_handle_t temp_sensor = NULL;
     temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
 
@@ -453,24 +330,10 @@ void app_main()
 
     ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
     ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
-#endif
-#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-    temp_sensor_config_t temp_sensor = TSENS_CONFIG_DEFAULT();
-    // temp_sensor_get_config(&temp_sensor);
-    // temp_sensor.dac_offset = TSENS_DAC_DEFAULT; // DEFAULT: range:-10℃ ~  80℃, error < 1℃.
-    // temp_sensor.dac_offset = TSENS_DAC_L3; /*!< offset =  1, measure range:-30℃ ~  50℃, error < 2℃. */
-    ESP_ERROR_CHECK(temp_sensor_set_config(temp_sensor));
-    ESP_ERROR_CHECK(temp_sensor_start());
-    vTaskDelay(1); // Влияет на измерения
-    ESP_ERROR_CHECK(temp_sensor_read_celsius(&tsens_out));
-    ESP_ERROR_CHECK(temp_sensor_stop());
-#endif
 
     int l = snprintf((char *)buf, sizeof(buf), "Temperature:  %.01f°C", tsens_out);
     xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
     ESP_LOGI("temperature_sensor", "%s", buf);
-
-#endif
 
     // Initialize NVS
     esp_err_t err = nvs_flash_init();
@@ -490,167 +353,63 @@ void app_main()
 
     read_nvs_menu();
 
-    gpio_config_t io_conf = {};
+    i2c_master_bus_config_t i2c_bus_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = -1,
+        .scl_io_num = I2C_MASTER_SCL_PIN,
+        .sda_io_num = I2C_MASTER_SDA_PIN,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
 
-    // Check I2C bus resistor to +3v3 is connected
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = BIT64(I2C_MASTER_SDA_PIN) | BIT64(I2C_MASTER_SCL_PIN);
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    // configure GPIO with the given settings
-    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    i2c_master_bus_handle_t bus_handle;
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_config, &bus_handle));
 
-    if (gpio_get_level(I2C_MASTER_SDA_PIN) == 1 && gpio_get_level(I2C_MASTER_SCL_PIN) == 1)
+    i2c_device_config_t dev_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = PCF8575_I2C_ADDR_BASE,
+        .scl_speed_hz = 100000,
+    };
+
+    if (i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle_pcf) == ESP_OK)
     {
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-        i2c_master_bus_config_t i2c_mst_config = {
-            .clk_source = I2C_CLK_SRC_DEFAULT,
-            .i2c_port = i2c_master_port,
-            .scl_io_num = I2C_MASTER_SCL_PIN,
-            .sda_io_num = I2C_MASTER_SDA_PIN,
-            .glitch_ignore_cnt = 7,
-            .flags.enable_internal_pullup = false,
-        };
-
-        ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
-
-        i2c_device_config_t dev_cfg = {
-            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-            .device_address = PCF8575_I2C_ADDR_BASE,
-            .scl_speed_hz = 100000,
-        };
-
-        if (i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle_pcf) == ESP_OK)
-        {
-            i2c_err = 0;
-        }
-        else
-        {
-            ESP_LOGE("i2c", "i2c_driver_install error!");
-        }
-#endif
-#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-        i2c_config_t conf = {
-            .mode = I2C_MODE_MASTER,
-            .sda_io_num = I2C_MASTER_SDA_PIN,
-            .scl_io_num = I2C_MASTER_SCL_PIN,
-            .sda_pullup_en = GPIO_PULLUP_DISABLE,
-            .scl_pullup_en = GPIO_PULLUP_DISABLE,
-            .master.clk_speed = 100000,
-        };
-
-        i2c_param_config(i2c_master_port, &conf);
-
-        if (i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0) == ESP_OK)
-        {
-            i2c_err = 0;
-        }
-        else
-        {
-            ESP_LOGE("i2c", "i2c_driver_install error!");
-        }
-#endif
-        // init pcf outs
-        pcf8575_set(0);
+        i2c_err = 0;
     }
     else
     {
-        ESP_LOGE("i2c", "i2c bus error state!");
+        ESP_LOGE("i2c", "i2c_driver_install error!");
     }
+
+    // init pcf outs
+    pcf8575_set(0);
+
+    pcf8575_read(0);
 
     uicmd_queue = xQueueCreate(8, sizeof(cmd_t));
 
     send_queue = xQueueCreate(10, sizeof(result_t));
 
-    ready_event_group = xEventGroupCreate();
+    status_event_group = xEventGroupCreate();
 
-    if (i2c_err == 0)
+    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
+
+    xTaskCreate(console_task, "console_task", 1024 * 5, NULL, configMAX_PRIORITIES - 20, NULL);
+
+    // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
+
+    xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
+
+    xTaskCreate(adc_task, "adc_task", 1024 * 3, NULL, configMAX_PRIORITIES - 5, &xHandleADC);
+
+    vTaskPrioritySet(NULL, configMAX_PRIORITIES - 7);
+
+    const int Trepeatlv = get_menu_val_by_id("Trepeatlv");
+    const int Trepeathv = get_menu_val_by_id("Trepeathv");
+
+    if (bootCount % (Trepeathv / Trepeatlv) == 1 && BattLow < 100)
     {
-#if defined(SHT4x_SENSOR)
-
-#define SHT4X_CMD_MEASURE_HPM 0xFD
-#define SHT4X_ADDRESS 0x44
-
-        static uint8_t sht4x_cmd_measure = SHT4X_CMD_MEASURE_HPM;
-
-        vTaskDelay(10 / portTICK_PERIOD_MS); // пауза после инициализации PCF
-
-#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-        if (i2c_err == 0 && i2c_master_write_to_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)&sht4x_cmd_measure, 1, 500 / portTICK_PERIOD_MS) == ESP_OK)
-#endif
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-            i2c_device_config_t dev_cfg_sht4x = {
-                .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-                .device_address = SHT4X_ADDRESS,
-                .scl_speed_hz = 100000,
-            };
-
-        i2c_master_dev_handle_t dev_handle_sht4x;
-        if (i2c_err == 0)
-        {
-            ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_add_device(bus_handle, &dev_cfg_sht4x, &dev_handle_sht4x));
-        }
-
-        if (i2c_err == 0 && i2c_master_transmit(dev_handle_sht4x, (uint8_t *)&sht4x_cmd_measure, 1, 500) == ESP_OK)
-#endif
-        {
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-            uint8_t sensor_data[6];
-#if ESP_IDF_VERSION_MAJOR == 4 // esp-idf v4
-            if (i2c_master_read_from_device(i2c_master_port, SHT4X_ADDRESS, (uint8_t *)sensor_data, 6, 500 / portTICK_PERIOD_MS) == ESP_OK)
-#endif
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-                if (i2c_master_receive(dev_handle_sht4x, (uint8_t *)sensor_data, 6, 500) == ESP_OK)
-#endif
-                {
-                    int t_ticks = sensor_data[0] * 256 + sensor_data[1];
-                    int rh_ticks = sensor_data[3] * 256 + sensor_data[4];
-
-                    /**
-                     * formulas for conversion of the sensor signals, optimized for fixed point
-                     * algebra:
-                     * Temperature = 175 * S_T / 65535 - 45
-                     * Relative Humidity = 125 * (S_RH / 65535) - 6
-                     */
-                    temperature = ((21875 * t_ticks) >> 13) - 45000;
-                    humidity = ((15625 * rh_ticks) >> 13) - 6000;
-
-                    l = snprintf((char *)buf, sizeof(buf), "SHT4x \"T2\":%.01f°C,\"H2\":%.01f%%", temperature / 1000.0, humidity / 1000.0);
-                    xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
-                    ESP_LOGI("SHT4x", "%s", buf);
-                }
-                else
-                    ESP_LOGE("SHT4x", "Read error");
-        }
-
-#if ESP_IDF_VERSION_MAJOR == 5 // esp-idf v5
-        ESP_ERROR_CHECK_WITHOUT_ABORT(i2c_master_bus_rm_device(dev_handle_sht4x));
-#endif
-
-#endif
-    }
-#ifdef RECEIVER_ONLY
-    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);
-    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
-    while (1)
-    {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    };
-#else
-    xTaskCreate(btn_task, "btn_task", 1024 * 3, NULL, 5, &xHandleBtn);
-
-    xTaskCreate(radio_task, "radio_task", 1024 * 4, NULL, 5, &xHandleRadio);
-
-    xTaskCreate(dual_adc, "dual_adc", 1024 * 4, NULL, 10, &xHandleADC);
-
-
-#if HW == 14 //HiVolt Only
-    if (BattLow < 100)
-#else
-    if (bootCount % (menu[19].val / menu[18].val) == 1 && BattLow < 100)
-#endif
-    {
+        if (xHandleNB)
+            xTaskNotifyGive(xHandleNB); // включаем NBIoT модуль
         start_measure(0, 0);
     }
     else
@@ -658,81 +417,98 @@ void app_main()
         start_measure(0, 2); // LV only
     }
 
-#endif
-
     if (terminal_mode > -1)
         ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
 
-    // BIT0 - окончание измерения
-    // BIT1 - окончание передачи
-    // BIT2 - timeout работы wifi
     /* Ждем окончания измерений */
     xEventGroupWaitBits(
-        ready_event_group, /* The event group being tested. */
-        END_MEASURE,       /* The bits within the event group to wait for. */
-        pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
-        pdTRUE,
-        portMAX_DELAY);
+        status_event_group, /* The event group being tested. */
+        END_MEASURE,        /* The bits within the event group to wait for. */
+        pdFALSE,            /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdFALSE,
+        60000 / portTICK_PERIOD_MS);
+
+    // время ожидания
+    int wait = get_menu_val_by_id("waitwifi");
 
     // запускаем WiFi если подали питание или сработал концевик
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
     {
-        // для отладки схемы pulse -1
-        if (menu[0].val != -1)
+        // для отладки схемы pulse != -1
+        if (get_menu_val_by_id("pulse") != -1)
         {
-            xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, 5, &xHandleWifi);
+            if (xHandleWifi)
+                xTaskNotifyGive(xHandleWifi); // включаем WiFi
         }
 
-        xEventGroupWaitBits(
-            ready_event_group, /* The event group being tested. */
-            END_WIFI_TIMEOUT,  /* The bits within the event group to wait for. */
-            pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
-            pdTRUE,
-            portMAX_DELAY);
+        // Ждем timeout WIFI_ACTIVE
+        while ((xEventGroupWaitBits(status_event_group, WIFI_ACTIVE, pdTRUE, pdFALSE, wait * 60000 / portTICK_PERIOD_MS) & WIFI_ACTIVE) != 0)
+        {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        };
     }
 
     if (terminal_mode > -1)
     {
-
         ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
-
         ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
-        ESP_LOGI("dual_adc", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
-        ESP_LOGI("radio_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleRadio));
+        ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
+        ESP_LOGI("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
         ESP_LOGI("btn_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleBtn));
     }
 
-    // Если нет необходимости передавать данные, то пропускаем ожидание передачи
-    if ((xEventGroupGetBits(ready_event_group) & NEED_TRANSMIT) == 0)
-    {
-        xEventGroupSetBits(ready_event_group, END_TRANSMIT);
-        xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
-    }
+    EventBits_t uxBits;
 
-    xEventGroupWaitBits(
-        ready_event_group,              /* The event group being tested. */
-        END_TRANSMIT,                   /* The bits within the event group to wait for. */
-        pdFALSE,                        /* BIT_0 & BIT_1 should be cleared before returning. */
+    uxBits = xEventGroupWaitBits(
+        status_event_group,                               /* The event group being tested. */
+        END_RADIO | NB_TERMINAL | SERIAL_TERMINAL_ACTIVE, /* The bits within the event group to wait for. */
+        pdFALSE,                                          /* BIT_0 & BIT_1 should be cleared before returning. */
         pdFALSE,
-        180000 / portTICK_PERIOD_MS);
+        wait * 60000 / portTICK_PERIOD_MS);
 
-    xTaskNotify(xHandleRadio, SLEEP_BIT, eSetValueWithOverwrite);
+    // если serial terminal
+    if (uxBits & (NB_TERMINAL | SERIAL_TERMINAL_ACTIVE))
+    {
+        while ((xEventGroupWaitBits(
+                    status_event_group,     /* The event group being tested. */
+                    SERIAL_TERMINAL_ACTIVE, /* The bits within the event group to wait for. */
+                    pdTRUE,                 /* BIT_0 & BIT_1 should be cleared before returning. */
+                    pdFALSE,
+                    wait * 60000 / portTICK_PERIOD_MS) &
+                SERIAL_TERMINAL_ACTIVE) != 0)
+        {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        };
+    };
 
-    xEventGroupWaitBits(
-        ready_event_group, /* The event group being tested. */
-        END_RADIO_SLEEP,   /* The bits within the event group to wait for. */
-        pdFALSE,           /* BIT_0 & BIT_1 should be cleared before returning. */
-        pdTRUE,
-        5000 / portTICK_PERIOD_MS);
+    vTaskPrioritySet(NULL, tskIDLE_PRIORITY + 1);
+
+    xTaskNotify(xHandleWifi, NOTYFY_WIFI_STOP, eSetValueWithOverwrite);
+    vTaskDelay(1);
 
     if (terminal_mode > -1)
         ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
 
     // засыпаем...
-    go_sleep();
+    if (BattLow < 100)
+    {
+        pcf8575_read(0); // reset INT_PIN
+                         // if (gpio_get_level(PCF_INT_PIN) == 1)
+        ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
+    }
+
+    // коррекция на время работы
+    uint64_t time_in_us = StoUS(Trepeatlv * (BattLow + 1) * 60) - (esp_timer_get_time() % StoUS(Trepeatlv * 60));
+    // uint64_t time_in_us = StoUS(Trepeatlv * (BattLow + 1) * 60);
+
+    ESP_LOGW("main", "Go sleep: %lld мин, (k BattLow: %d)", time_in_us / 1000000 / 60, BattLow);
+    fflush(stdout);
+
+    esp_sleep_enable_timer_wakeup(time_in_us);
+    esp_deep_sleep_start();
 
     while (1)
     {
-        vTaskDelay(10000 / portTICK_PERIOD_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     };
 }

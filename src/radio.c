@@ -187,7 +187,7 @@ void radio_task(void *arg)
             {
                 ESP_LOGI(TAG, "lora_sleep");
                 lora_sleep();
-                xEventGroupSetBits(ready_event_group, END_RADIO_SLEEP);
+                xEventGroupSetBits(status_event_group, END_RADIO_SLEEP);
                 vTaskDelay(10000 / portTICK_PERIOD_MS);
             }
         }
@@ -228,7 +228,7 @@ void radio_task(void *arg)
                 lora_send_packet((uint8_t *)buf, l);
                 
             lora_receive(); // put into receive mode
-            xEventGroupSetBits(ready_event_group, END_TRANSMIT);
+            xEventGroupSetBits(status_event_group, END_TRANSMIT);
         }
        
         vTaskDelay(10);
