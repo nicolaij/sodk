@@ -139,8 +139,7 @@ extern TaskHandle_t xHandleNB;
 #define NOTYFY_WIFI_ESPNOW BIT2
 #define NOTYFY_WIFI_REBOOT BIT3
 
-#define OUT_JSON_ADD_COMMON ",\"NBPower\":%.3f,\"RSSI\":%i,\"Temp\":%.01f}"
-
+#define OUT_JSON_ADD_NBCOMMON ",\"NBPower\":%.3f,\"RSSI\":%i,\"Temp\":%.01f}"
 #define OUT_JSON_CHANNEL "{\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"U0\":%d,\"Ubatt1\":%d}"
 #define OUT_DATA_CHANNEL(prefix) prefix.U, prefix.R, prefix.U0, prefix.Ubatt1
 

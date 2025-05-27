@@ -821,7 +821,7 @@ void modem_task(void *arg)
 
                                 if (common_data_transmit == false)
                                 {
-                                    snprintf(send_data + l - 1, sizeof(send_data) - l, OUT_JSON_ADD_COMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, tsens_out);
+                                    snprintf(send_data + l - 1, sizeof(send_data) - l, OUT_JSON_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, tsens_out);
                                 }
 
                                 ESP_LOGD(TAG, "Send... %s", send_data);
