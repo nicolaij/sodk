@@ -30,15 +30,15 @@ menu_t menu[] = {
     {.id = "pulse", .name = "Макс. время импульса", .izm = "мс", .val = 5000, .min = -1, .max = 10000},
     {.id = "chanord", .name = "Порядок опроса каналов", .izm = "", .val = 1234, .min = 0, .max = 999999999},
     {.id = "Overvolt", .name = "Ограничение U", .izm = "В", .val = 600, .min = 0, .max = 1000},
-    {.id = "kU", .name = "коэф. U", .izm = "", .val = 228273, .min = 1, .max = 1000000},
+    {.id = "kU", .name = "коэф. U", .izm = "", .val = 1432, .min = 1, .max = 1000000},
     {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3784, .min = 1, .max = 1000000},
     {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
     {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8086, .min = 1, .max = 1000000},            // ADC_ATTEN_DB_6
     {.id = "offsAR1", .name = "смещ. R (ch 1)", .izm = "", .val = -15160, .min = -1000000, .max = 1000000}, // ADC_ATTEN_DB_6
-    {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 303, .min = 1, .max = 100000},              // ADC_ATTEN_DB_6
+    {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30560, .min = 1, .max = 100000},              // ADC_ATTEN_DB_6
     {.id = "offsAR2", .name = "смещ. R (ch 2)", .izm = "", .val = -239, .min = -1000000, .max = 1000000},   // ADC_ATTEN_DB_6
-    {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 228273, .min = 1, .max = 1000000},
+    {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1418, .min = 1, .max = 1000000},
     {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -100000, .max = 1000000},
     {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 124535, .min = 1, .max = 1000000},
     {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
@@ -52,6 +52,11 @@ menu_t menu[] = {
     {.id = "avgcnt", .name = "Кол-во усред. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
     {.id = "percU0lv", .name = "\% U петли низ.", .izm = "\%", .val = 75, .min = 0, .max = 100}, /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
     {.id = "percRlv", .name = "\% R низ.", .izm = "\%", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
+    {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 200},
+    {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 200},
+    {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
+    {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
+    {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
 };
 
 esp_err_t init_nvs()

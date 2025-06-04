@@ -386,7 +386,8 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     // printf("mode:%d\n", mode);
 
     strlcpy(line, "attachment; filename=\"", sizeof(line));
-    if (mode == 2){
+    if (mode == 2)
+    {
         strlcat(line, "SODKdata.txt\"", sizeof(line));
     }
     else
@@ -756,8 +757,8 @@ static httpd_handle_t start_webserver(void)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     // config.max_open_sockets = 5;
-    config.stack_size = 1024 * 8;
-    config.lru_purge_enable = true;
+    config.stack_size = 1024 * 5;
+    // config.lru_purge_enable = true;
     // config.send_wait_timeout = 30;
     // config.recv_wait_timeout = 30;
     // config.task_priority = 6;

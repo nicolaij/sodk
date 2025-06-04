@@ -182,11 +182,11 @@
 
     d1.then(function (data) {
         if (params.get('mode') == 2)
-            document.body.appendChild(LineChart(data, { name_y1: "R1", name_y2: "U", name_y3: "R2", width: window.innerWidth, height: window.innerHeight }));
+            document.body.appendChild(LineChart(data, { xDiv: 1, name_y1: "R1", name_y2: "U", name_y3: "R2", width: window.innerWidth, height: window.innerHeight }));
         else if (params.get('mode') == 4)
-            document.body.appendChild(LineChart(data, { name_y1: "adc3", name_y2: "adc1", name_y3: "adc4", width: window.innerWidth, height: window.innerHeight }));
+            document.body.appendChild(LineChart(data, { xDiv: 10, name_y1: "adc0", name_y2: "adc4", name_y3: "adc3", width: window.innerWidth, height: window.innerHeight }));
         else
-            document.body.appendChild(LineChart(data, { xDiv: 10, name_y1: "adc0", name_y2: "adc1", name_y3: "adc2", width: window.innerWidth, height: window.innerHeight }));
+            document.body.appendChild(LineChart(data, { xDiv: 10, name_y1: "adc1", name_y2: "adc4", name_y3: "adc2", width: window.innerWidth, height: window.innerHeight }));
     });
 
 </script>

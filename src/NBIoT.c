@@ -24,8 +24,6 @@ char net_status_current[32];
 
 RTC_DATA_ATTR bool first_run_completed = false;
 
-extern float tsens_out;
-
 extern TaskHandle_t xHandleWifi;
 
 unsigned int fromActiveTime(uint8_t val)
@@ -416,10 +414,14 @@ void modem_task(void *arg)
         protocol = 0;
     }
 
+    xEventGroupSetBits(status_event_group, END_RADIO);
+
     while (1)
     {
         /* Ждем необходимости запуска передачи*/
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Ожидаем уведомления беcконечно, для повторного опроса
+
+        xEventGroupClearBits(status_event_group, END_RADIO);
 
         bool cpin = false;
         int d_nbiot_error_counter = 0;
@@ -821,7 +823,10 @@ void modem_task(void *arg)
 
                                 if (common_data_transmit == false)
                                 {
-                                    snprintf(send_data + l - 1, sizeof(send_data) - l, OUT_JSON_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, tsens_out);
+                                    l -= 1;
+                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_JSON_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113);
+                                    l -= 1;
+                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_JSON_ADD_COMMON, tsens_out, result.flags.value);
                                 }
 
                                 ESP_LOGD(TAG, "Send... %s", send_data);
@@ -921,6 +926,14 @@ void modem_task(void *arg)
             while (pdTRUE == xQueueReceive(send_queue, &result, 10000 / portTICK_PERIOD_MS))
             {
                 int l = snprintf(send_data, sizeof(send_data), OUT_JSON_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
+
+                if (common_data_transmit == false)
+                {
+                    l -= 1;
+                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_JSON_ADD_COMMON, tsens_out, result.flags.value);
+
+                    common_data_transmit = true;
+                }
 
                 int try = 2;
                 esp_err_t result;

@@ -32,7 +32,7 @@ float tsens_out = 0;
 uint8_t mac[6];
 
 TaskHandle_t xHandleNB = NULL;
-TaskHandle_t xHandleUI = NULL;
+TaskHandle_t xHandleConsole = NULL;
 TaskHandle_t xHandleWifi = NULL;
 TaskHandle_t xHandleADC = NULL;
 TaskHandle_t xHandleBtn = NULL;
@@ -391,13 +391,13 @@ void app_main()
 
     status_event_group = xEventGroupCreate();
 
-    xTaskCreate(wifi_task, "wifi_task", 1024 * 4, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
+    xTaskCreate(wifi_task, "wifi_task", 1024 * 3, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
 
-    xTaskCreate(console_task, "console_task", 1024 * 5, NULL, configMAX_PRIORITIES - 20, NULL);
+    xTaskCreate(console_task, "console_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
-    xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
+    xTaskCreate(modem_task, "modem_task", 1024 * 4, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
     xTaskCreate(adc_task, "adc_task", 1024 * 3, NULL, configMAX_PRIORITIES - 5, &xHandleADC);
 
@@ -451,10 +451,11 @@ void app_main()
     if (terminal_mode > -1)
     {
         ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
+        ESP_LOGI("main_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
         ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
         ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
         ESP_LOGI("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
-        ESP_LOGI("btn_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleBtn));
+        ESP_LOGI("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
     }
 
     EventBits_t uxBits;

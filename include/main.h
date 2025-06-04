@@ -69,26 +69,40 @@ typedef struct
 
 typedef struct
 {
+    int Ubatt;
     int R1;
     int R2;
-    int U;
-    int Ubatt;
     int U0;
+    int U;
 } calcdata_t;
 
 typedef struct
 {
-    int channel; // канал измерения 1..4(HV), 5..8(LV)
-    int adc0;
-    int adc1;
-    int adc2;
+    uint16_t channel; // канал измерения 1..4(HV), 5..8(LV)
+    union
+    {
+        uint16_t value;
+        struct
+        {
+            bool d_in : 1; // состояние входа IN
+            bool reserved1 : 1;
+            bool reserved2 : 1;
+            bool reserved3 : 1;
+
+            bool d_changed_ch1 : 1; // признак изменения состояния канала 1
+            bool d_changed_ch2 : 1; // признак изменения состояния канала 2
+            bool d_changed_ch3 : 1; // признак изменения состояния канала 3
+            bool d_changed_ch4 : 1; // признак изменения состояния канала 4
+
+            bool d_batt_low : 1; // низкий уровень заряда батарей
+        };
+    } flags;
     int R;
     int U;
     int U0;
     int Ubatt0;
     int Ubatt1;
     int time;
-    int input;
     time_t ttime;
 } result_t;
 
@@ -139,13 +153,15 @@ extern TaskHandle_t xHandleNB;
 #define NOTYFY_WIFI_ESPNOW BIT2
 #define NOTYFY_WIFI_REBOOT BIT3
 
-#define OUT_JSON_ADD_NBCOMMON ",\"NBPower\":%.3f,\"RSSI\":%i,\"Temp\":%.01f}"
-#define OUT_JSON_CHANNEL "{\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"U0\":%d,\"Ubatt1\":%d}"
-#define OUT_DATA_CHANNEL(prefix) prefix.U, prefix.R, prefix.U0, prefix.Ubatt1
+#define OUT_JSON_ADD_NBCOMMON ",\"NBPower\":%.3f,\"RSSI\":%i}"
+#define OUT_JSON_ADD_COMMON ",\"Temp\":%.01f,\"Flags\":\"0x%04X\"}"
+#define OUT_JSON_CHANNEL "{\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"U0\":%d,\"Ubatt1\":%d,\"time\":%d}"
+#define OUT_DATA_CHANNEL(prefix) prefix.U, prefix.R, prefix.U0, prefix.Ubatt1, prefix.time
 
 extern int bootCount;
 extern int terminal_mode;
 extern unsigned int BattLow;
+extern float tsens_out;
 
 void adc_task(void *arg);
 void btn_task(void *arg);
