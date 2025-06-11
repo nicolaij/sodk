@@ -23,7 +23,7 @@ RTC_DATA_ATTR unsigned int BattLow = 0;
 
 // величина перегрузки измерительного канала ед. АЦП
 #define OVERLOADADC (int)(4095 - (0.03 * 4095.0))
-#define UNDERVOLTAGE 4000 // min 4 v
+#define UNDERVOLTAGE 4000 // min 4В
 
 /*
     БИТ
@@ -54,8 +54,8 @@ const int step_time_const[] = {0, 63, 125, 250, 500, 1000, 2000, 4000, 8000};
 
 // кольцевой буфер для визуализации
 static calcdata_t bufferR[RINGBUFLEN];
-uint16_t bhead = 0;
-uint16_t btail = 0;
+uint16_t buffer_head = 0;
+uint16_t buffer_tail = 0;
 
 static uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
 static uint8_t buffer_ADC_copy[ADC_BUFFER * 400];
@@ -81,7 +81,7 @@ int terminal_mode = 1;
 const measure_t chan_r[] = {
     {.channel = ADC_CHANNEL_0, .max = 15999, .maxlv = 15999},  // Напряжение акк
     {.channel = ADC_CHANNEL_1, .max = 5999, .maxlv = 159},     // Основной канал (1)
-    {.channel = ADC_CHANNEL_4, .max = 599999, .maxlv = 5999},  // Усиленный канал (2)
+    {.channel = ADC_CHANNEL_4, .max = 299999, .maxlv = 5999},  // Усиленный канал (2)
     {.channel = ADC_CHANNEL_3, .max = 599999, .maxlv = 15999}, // Напряжение 0 проводника
     {.channel = ADC_CHANNEL_2, .max = 599999, .maxlv = 15999}, // Напряжение источника питания
 };
@@ -95,8 +95,6 @@ int koeff[7][2] = {0};
 // return mV
 int volt(int adc)
 {
-    //    if (adc < 3)
-    //        return 0;
     int res = ((adc * koeff[0][0]) / 10 + koeff[0][1]);
     if (res < 0)
         return 0;
@@ -191,6 +189,7 @@ int kOmlv(int adc_u, int adc_r)
     return r;
 };
 
+// return nA
 int current2chan(int adc)
 {
     int res = (adc * koeff[3][0]) / 1000 + koeff[3][1];
@@ -205,8 +204,8 @@ int kOm2chan(int adc_u, int adc_r)
     int c = current2chan(adc_r);
     if (c <= 0)
         return chan_r[2].max;
-    int r = u * 1000 / c;
-    if (r > chan_r[2].max || r < 0)
+    int r = (u * 1000) / c;
+    if (r > chan_r[2].max)
         return chan_r[2].max;
     return r;
 };
@@ -236,7 +235,11 @@ static void continuous_adc_init()
     adc_digi_pattern_config_t adc_pattern[5] = {0};
     for (int n = 0; n < 5; n++)
     {
+#ifdef ADC12dB
+        adc_pattern[n].atten = ADC_ATTEN_DB_12;
+#else
         adc_pattern[n].atten = ADC_ATTEN_DB_6; // ADC_ATTEN_DB_12;
+#endif
         adc_pattern[n].channel = chan_r[n].channel;
         adc_pattern[n].unit = ADC_UNIT_1;
         adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
@@ -275,7 +278,7 @@ void btn_task(void *arg)
     int old_btn_state = gpio_get_level(BTN_PIN);
     int new_btn_state = old_btn_state;
 
-    int pulse = get_menu_val_by_id("pulse");
+    const int pulse = get_menu_val_by_id("pulse");
 
     while (1)
     {
@@ -292,12 +295,9 @@ void btn_task(void *arg)
                 }
                 else
                 {
-                    // step_time[1] = 7; //4000
-                    // step_time[5] = 7; //4000
                     start_measure(1, 0);
                 }
             }
-
             reset_sleep_timeout();
         }
 
@@ -347,8 +347,8 @@ void adc_task(void *arg)
     continuous_adc_init();
 
     // сбрасывем буфер
-    bhead = 0;
-    btail = 0;
+    buffer_head = 0;
+    buffer_tail = 0;
 
     int timeoutCounter = 0;
 
@@ -426,9 +426,6 @@ void adc_task(void *arg)
                 {
                     measure_flags &= ~0b1;
                 }
-                // result.channel = 1;
-                // result.input = d_input + 100;
-                // xQueueSend(send_queue, &result, 0);
             }
             continue;
         };
@@ -437,31 +434,36 @@ void adc_task(void *arg)
         // gpio_isr_handler_remove(PCF_INT_PIN);
         ESP_ERROR_CHECK(gpio_intr_disable(PCF_INT_PIN));
 
+        ESP_LOGV(TAG, "Start measure ch:%d cmd:%d", cmd_power.channel, cmd_power.cmd);
+
         // подаем питание на источник питания, OpAmp, делитель АЦП батареи
         // включаем канал
-        result.channel = cmd_power.channel; // 1..4, 5..8(LV)
+        if (cmd_power.channel > 0)
+            result.channel = cmd_power.channel; // 1..4, 5..8(LV)
+        else
+            result.channel = 0;
 
         if (result.channel < 5)
             hv_measure = 1;
 
         result.ttime = time(0);
 
-        pcf8575_set(cmd_power.channel);
-        /*
-                //TEST
-                ESP_LOGI("TEST", "Start");
-                vTaskDelay(100 / portTICK_PERIOD_MS);
-                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
-                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                ESP_LOGI("TEST", "End");
-                continue;
-        */
+        if (cmd_power.channel > 0)
+            pcf8575_set(cmd_power.channel);
+        else if (cmd_power.cmd != 4)
+        {
+            pcf8575_set(POWER_CMDON);
+        }
+
+        if (cmd_power.cmd > 3) // Калибровка ADC
+        {
+            pulse = 0;
+        }
 
         uint8_t *ptr = (uint8_t *)buffer_ADC;
         uint8_t *ptr_adc_begin = (uint8_t *)buffer_ADC;
 
-        int blocks = 0;
+        int block = 0;
         int block_power_off = 0;
         int block_power_off_step = step_time_const[step_time[result.channel]];
         int block_result = 0;
@@ -512,23 +514,22 @@ void adc_task(void *arg)
                 req = req - ret;
             }
 
-            if (blocks < sizeof(ta) / sizeof(ta[0]))
+            if (block < sizeof(ta) / sizeof(ta[0]))
             {
-                ta[blocks] = esp_timer_get_time();
+                ta[block] = esp_timer_get_time();
             }
 
-            if (blocks == ON_BLOCK) // включаем источник ВВ
+            if (block == ON_BLOCK) // включаем источник ВВ
             {
                 // t2 = esp_timer_get_time();
-
                 // включаем источник питания
                 if (pulse > 0)
                 {
-                    if (cmd_power.channel < 5)
+                    if (cmd_power.cmd == 1)
                     {
                         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
                     }
-                    else
+                    else if (cmd_power.cmd == 2)
                     {
                         pcf8575_set(LV_CMDON);
                     }
@@ -539,10 +540,10 @@ void adc_task(void *arg)
             calcdata_t current_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
 
             // расчет среднего каждую 1 мс
-            calcdata_t sum_avg_block = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
+            // calcdata_t sum_avg_block = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
 
             int n = 0;
-            int overvolt = 0;
+            // int overvolt = 0;
             uint8_t fill_data_line = 0;
             adc_digi_output_data_t *p = (void *)buffer_ADC;
             while ((uint8_t *)p <= ptr - ADC_COUNT_READ * sizeof(adc_digi_output_data_t))
@@ -595,12 +596,13 @@ void adc_task(void *arg)
                 fill_data_line = 0;
                 ptr_adc_begin = (void *)p;
 
-                current_adc.Ubatt -= offsetADC0;
-                current_adc.R1 -= offsetADC1;
-                current_adc.R2 -= offsetADC2;
-                current_adc.U0 -= offsetADC3;
-                current_adc.U -= offsetADC4;
-
+                /*
+                                current_adc.Ubatt -= offsetADC0;
+                                current_adc.R1 -= offsetADC1;
+                                current_adc.R2 -= offsetADC2;
+                                current_adc.U0 -= offsetADC3;
+                                current_adc.U -= offsetADC4;
+                */
                 median_filter[median_filter_fill % 3] = current_adc;
                 median_filter_fill++;
 
@@ -623,44 +625,6 @@ void adc_task(void *arg)
                 sum_adc.R2 += digital_filter.R2;
                 sum_adc.Ubatt += digital_filter.Ubatt;
                 sum_adc.U0 += digital_filter.U0;
-
-                int v = 0;
-                sum_avg_block.Ubatt += voltBatt(digital_filter.Ubatt);
-                if (cmd_power.channel >= 5)
-                {
-                    sum_avg_block.R1 += kOmlv(digital_filter.U, digital_filter.R1);
-                    sum_avg_block.R2 += kOm2chanlv(digital_filter.U, digital_filter.R2);
-                    v = voltlv(digital_filter.U);
-                    sum_avg_block.U += v;
-                    sum_avg_block.U0 += volt0lv(digital_filter.U0);
-                }
-                else
-                {
-                    sum_avg_block.R1 += kOm(digital_filter.U, digital_filter.R1);
-                    sum_avg_block.R2 += kOm2chan(digital_filter.U, digital_filter.R2);
-                    v = volt(digital_filter.U);
-                    sum_avg_block.U += v;
-                    sum_avg_block.U0 += volt0(digital_filter.U0);
-                }
-
-                if (v > overvolt_value * 1000)
-                {
-                    overvolt++;
-                    if (overvolt >= 3)
-                    {
-                        // ВЫРУБАЕМ
-                        if (cmd_power.channel < 5)
-                            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                        else
-                            pcf8575_set(LV_CMDOFF);
-
-                        block_power_off = blocks;
-                    }
-                }
-                else
-                {
-                    overvolt = 0;
-                }
             }; // buffer_ADC
 
             // обрывок данных
@@ -678,39 +642,47 @@ void adc_task(void *arg)
 
             if (n == 0)
             {
-                ESP_LOGE("adc", "Data error: %4d %d\n", blocks, n);
+                ESP_LOGE("adc", "Data error: %4d %d\n", block, n);
                 continue;
             }
 
             if (n != 10)
             {
-                ESP_LOGE("adc", "%4d %d\n", blocks, n);
+                ESP_LOGE("adc", "%4d %d\n", block, n);
             }
 
-            bufferR[bhead].R1 = sum_avg_block.R1 / n;
-            bufferR[bhead].U = sum_avg_block.U / n;
-            bufferR[bhead].R2 = sum_avg_block.R2 / n;
-            bufferR[bhead].Ubatt = sum_avg_block.Ubatt / n;
-            bufferR[bhead].U0 = sum_avg_block.U0 / n;
-            /*
-                        const int pin = 0;
-                        if (blocks == 100)
-                        {
-                            gpio_pulldown_en(pin);
-                            gpio_pulldown_en(4);
-                        }
-                        if (blocks == 150)
-                        {
-                            gpio_pullup_en(pin);
-                            gpio_pulldown_dis(pin);
-                        }
-                        if (blocks == 200)
-                        {
-                            gpio_pullup_dis(pin);
-                            gpio_pulldown_dis(4);
-                        }
-            */
-            if (blocks > ON_BLOCK && block_power_off == 0)
+            // Расчет по средним блокам 1 мс
+            int v = 0;
+            bufferR[buffer_head].Ubatt = voltBatt(sum_adc.Ubatt / n - offsetADC0);
+            if (cmd_power.cmd == 1)
+            {
+                bufferR[buffer_head].R1 = kOm(sum_adc.U / n - offsetADC4, sum_adc.R1 / n - offsetADC1);
+                bufferR[buffer_head].R2 = kOm2chan(sum_adc.U / n - offsetADC4, sum_adc.R2 / n - offsetADC2);
+                v = volt(sum_adc.U / n - offsetADC4);
+                bufferR[buffer_head].U = v;
+                bufferR[buffer_head].U0 = volt0(sum_adc.U0 / n - offsetADC3);
+            }
+            else
+            {
+                bufferR[buffer_head].R1 = kOmlv(sum_adc.U / n - offsetADC4, sum_adc.R1 / n - offsetADC1);
+                bufferR[buffer_head].R2 = kOm2chanlv(sum_adc.U / n - offsetADC4, sum_adc.R2 / n - offsetADC2);
+                v = voltlv(sum_adc.U / n - offsetADC4);
+                bufferR[buffer_head].U = v;
+                bufferR[buffer_head].U0 = volt0lv(sum_adc.U0 / n - offsetADC3);
+            }
+
+            if (v > overvolt_value * 1000)
+            {
+                // ВЫРУБАЕМ
+                if (cmd_power.cmd == 1)
+                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                else if (cmd_power.cmd == 2)
+                    pcf8575_set(LV_CMDOFF);
+
+                block_power_off = block;
+            }
+
+            if (block > ON_BLOCK && block_power_off == 0)
             {
                 // отсечка по времени
                 if (pulse > 0)
@@ -718,48 +690,12 @@ void adc_task(void *arg)
                     if ((esp_timer_get_time() - t1) > (pulse * 1000LL))
                     {
                         // ВЫРУБАЕМ
-                        if (cmd_power.channel < 5)
+                        if (cmd_power.cmd == 1)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                        else
+                        else if (cmd_power.cmd == 2)
                             pcf8575_set(LV_CMDOFF);
 
-                        block_power_off = blocks;
-                    }
-                    else
-                    {
-                        /*
-                        // отсечка по напряжению, Ubatt
-                        if (bufferR[bhead].Ubatt < menu[17].val)
-                        {
-                            // прекращаем измерения
-                            // ВЫРУБАЕМ
-                            if (cmd_power.channel < 5)
-                                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                            else
-                                pcf8575_set(LV_CMDOFF);
-
-                            if (terminal_mode >= 0)
-                                printf("UbattEnd: %d < %ld)\n", bufferR[bhead].Ubatt, menu[17].val);
-                            BattLow += 100;
-                            break;
-                        }
-                        else if (bufferR[bhead].Ubatt < menu[16].val)
-                        {
-                            BattLow += 1;
-                            if (BattLow > 10)
-                            {
-                                // ВЫРУБАЕМ
-                                if (cmd_power.channel < 5)
-                                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                                else
-                                    pcf8575_set(LV_CMDOFF);
-
-                                // прекращаем измерения
-                                if (terminal_mode >= 0)
-                                    printf("UbattLow: %d < %ld (%d)\n", bufferR[bhead].Ubatt, menu[16].val, BattLow);
-                                break;
-                            }
-                        }*/
+                        block_power_off = block;
                     }
                 }
                 else
@@ -770,7 +706,7 @@ void adc_task(void *arg)
             }
 
             // считаем среднее для калибровки
-            if (blocks > (ON_BLOCK + 10))
+            if (block > (ON_BLOCK + 10) && (block_result == 0 || block <= block_result))
             {
                 count_adc_full += n; // сумма на всем интервале измерения для калибровки
                 sum_adc_full.R1 += sum_adc.R1;
@@ -781,30 +717,30 @@ void adc_task(void *arg)
             };
 
             // запоминаем напряжение батареи
-            if (blocks >= (ON_BLOCK - 5) && blocks < ON_BLOCK)
+            if (block >= (ON_BLOCK - 5) && block < ON_BLOCK)
             {
-                result.Ubatt0 += bufferR[bhead].Ubatt;
+                result.Ubatt0 += bufferR[buffer_head].Ubatt;
                 Ubatt0counter++;
             }
-            else if (blocks >= (ON_BLOCK + 3) && blocks < (ON_BLOCK + 8))
+            else if (block >= (ON_BLOCK + 3) && block < (ON_BLOCK + 8))
             {
-                result.Ubatt1 += bufferR[bhead].Ubatt;
+                result.Ubatt1 += bufferR[buffer_head].Ubatt;
                 Ubatt1counter++;
             }
 
             // считаем скользящее среднее
-            if (blocks > ON_BLOCK)
+            if (block > ON_BLOCK)
             {
-                sum_moving_avg.R1 += bufferR[bhead].R1;
-                sum_moving_avg.R2 += bufferR[bhead].R2;
-                sum_moving_avg.U += bufferR[bhead].U;
-                sum_moving_avg.U0 += bufferR[bhead].U0;
+                sum_moving_avg.R1 += bufferR[buffer_head].R1;
+                sum_moving_avg.R2 += bufferR[buffer_head].R2;
+                sum_moving_avg.U += bufferR[buffer_head].U;
+                sum_moving_avg.U0 += bufferR[buffer_head].U0;
                 moving_avg_counter++;
 
                 if (moving_avg_counter > moving_avg_length)
                 {
                     moving_avg_counter--;
-                    unsigned int delpos = (bhead - moving_avg_counter) & (RINGBUFLEN - 1);
+                    uint16_t delpos = (buffer_head - moving_avg_counter) & (RINGBUFLEN - 1);
                     sum_moving_avg.R1 -= bufferR[delpos].R1;
                     sum_moving_avg.R2 -= bufferR[delpos].R2;
                     sum_moving_avg.U -= bufferR[delpos].U;
@@ -815,6 +751,8 @@ void adc_task(void *arg)
                 int r2 = sum_moving_avg.R2 / moving_avg_counter;
                 int u = sum_moving_avg.U / moving_avg_counter;
                 int u0 = sum_moving_avg.U0 / moving_avg_counter;
+
+                // ESP_DRAM_LOGD(TAG, "r2: %d / %d = %d; %d", sum_moving_avg.R2, moving_avg_counter, r2, bufferR[buffer_head].R2);
 
                 // Поиск наклона
                 int cmp_r1_max = (r1 * 1000) / (1000 - compare_delta * 10);
@@ -848,7 +786,7 @@ void adc_task(void *arg)
                     bref.U = u;
                     bref.U0 = u0;
                     compare_counter = compare_counter_val;
-                    // ESP_DRAM_LOGD("compare", "reset: %d", blocks);
+                    // ESP_DRAM_LOGD("compare", "reset: %d", block);
                 }
 
                 // окончание измерений
@@ -857,12 +795,12 @@ void adc_task(void *arg)
                     if (compare_counter == 0)
                     {
                         compare_ok = true;
-                        // ESP_DRAM_LOGD("compare", "OK: %d", blocks);
+                        // ESP_DRAM_LOGD("compare", "OK: %d", block);
                         if (step_time[result.channel] == 0) // первое измерение после старта
                         {
                             for (int i = 1; i < sizeof(step_time_const) / sizeof(step_time_const[0]); i++)
                             {
-                                if (blocks <= step_time_const[i])
+                                if (block <= step_time_const[i])
                                 {
                                     step_time[result.channel] = i;
                                     break;
@@ -872,11 +810,11 @@ void adc_task(void *arg)
                         else
                         {
                             // счетчик необходимости переключения диапазона
-                            if (blocks <= step_time_const[step_time[result.channel] - 1])
+                            if (block <= step_time_const[step_time[result.channel] - 1])
                             {
                                 step_time_switch[result.channel]--;
                             }
-                            else if (blocks <= step_time_const[step_time[result.channel]])
+                            else if (block <= step_time_const[step_time[result.channel]])
                             {
                                 step_time_switch[result.channel] = 0;
                             }
@@ -894,7 +832,7 @@ void adc_task(void *arg)
                         block_power_off_step = step_time_const[step_time[result.channel]];
                     }
 
-                    if (blocks == block_power_off_step)
+                    if (block == block_power_off_step)
                     {
                         if (compare_ok == false) // если небыло успешного сравнения
                         {
@@ -913,20 +851,20 @@ void adc_task(void *arg)
                         }
                     }
 
-                    if (blocks == block_power_off_step)
+                    if (block == block_power_off_step)
                     {
-                        ESP_LOGV("adc", "compare off %d", blocks);
+                        ESP_LOGV("adc", "compare off %d", block);
 
                         // ВЫРУБАЕМ
-                        if (cmd_power.channel < 5)
+                        if (cmd_power.cmd == 1)
                             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                        else
+                        else if (cmd_power.cmd == 2)
                             pcf8575_set(LV_CMDOFF);
 
-                        block_power_off = blocks;
+                        block_power_off = block;
 
                         if (sum_adc.R1 / n < OVERLOADADC) // НЕТ ПЕРЕГРУЗКИ измерительного канала
-                            block_result = blocks;
+                            block_result = block;
                         else
                         {
                             overload = 1;
@@ -942,13 +880,13 @@ void adc_task(void *arg)
                         {
                             if (overload > 0) // при выходе из перегрузки среднее не действительно
                             {
-                                r1 = bufferR[bhead].R1;
-                                r2 = bufferR[bhead].R2;
-                                u = bufferR[bhead].U;
-                                u0 = bufferR[bhead].U0;
+                                r1 = bufferR[buffer_head].R1;
+                                r2 = bufferR[buffer_head].R2;
+                                u = bufferR[buffer_head].U;
+                                u0 = bufferR[buffer_head].U0;
                             }
 
-                            block_result = blocks;
+                            block_result = block;
                         }
                         else
                         {
@@ -958,9 +896,9 @@ void adc_task(void *arg)
                 }
 
                 // запоминаем результат
-                if (blocks == block_result)
+                if (block == block_result)
                 {
-                    if (current(sum_adc.R1 / n) >= 100000) // > 100мкА
+                    if (current(sum_adc.R1 / n - offsetADC1) >= 100000) // > 100мкА
                     {
                         result.R = r1;
                     }
@@ -972,7 +910,13 @@ void adc_task(void *arg)
                     result.U0 = u0;
                     result.time = block_result;
 
-                    // ESP_LOGD(TAG, "block: %d = adc 0:%d (%d), 1:%d (%d), 2:%d (%d)", blocks, sum_adc.R1 / n, r1, sum_adc.U / n, u, sum_adc.R2 / n, r2);
+                    sum_adc_full.Ubatt /= count_adc_full;
+                    sum_adc_full.R1 /= count_adc_full;
+                    sum_adc_full.R2 /= count_adc_full;
+                    sum_adc_full.U0 /= count_adc_full;
+                    sum_adc_full.U /= count_adc_full;
+
+                    //  ESP_LOGD(TAG, "block: %d = adc 0:%d (%d), 1:%d (%d), 2:%d (%d)", block, sum_adc.R1 / n, r1, sum_adc.U / n, u, sum_adc.R2 / n, r2);
                     //   ESP_LOGD(TAG, "on result: Ubatt0 summ: %d, count: %d", result.Ubatt0, Ubatt0counter);
                     //   ESP_LOGD(TAG, "on result: Ubatt1 summ: %d, count: %d", result.Ubatt1, Ubatt1counter);
 
@@ -1000,38 +944,38 @@ void adc_task(void *arg)
             }
 
             // буферизируем adc
-            if (blocks >= 0) // ON_BLOCK)
+            if (block >= 0) // ON_BLOCK)
             {
                 if (counter_block_ADC_buffer < sizeof(buffer_ADC_copy) / ADC_BUFFER) // копируем буфер
                 {
                     memcpy(buffer_ADC_copy + ADC_BUFFER * counter_block_ADC_buffer, buffer_ADC, ADC_BUFFER);
                     counter_block_ADC_buffer++;
                 }
-                else if (block_result > 0 && blocks >= block_result)
+                else if (block_result > 0 && block >= block_result)
                 {
                     // заканчиваем измерение
                     break;
                 }
             }
 
-            bhead = (bhead + 1) & (RINGBUFLEN - 1);
-            if (bhead == btail) // увеличиваем хвост
-                btail = (btail + 1) & (RINGBUFLEN - 1);
+            buffer_head = (buffer_head + 1) & (RINGBUFLEN - 1);
+            if (buffer_head == buffer_tail) // увеличиваем хвост
+                buffer_tail = (buffer_head + 1) & (RINGBUFLEN - 1);
 
-            if (blocks < sizeof(ta) / sizeof(ta[0]))
+            if (block < sizeof(ta) / sizeof(ta[0]))
             {
-                ta[blocks] = esp_timer_get_time() - ta[blocks];
+                ta[block] = esp_timer_get_time() - ta[block];
             }
 
-            blocks++;
-        } while (blocks < 9000); // ограничение 9 сек
+            block++;
+        } while (block < 9000); // ограничение 9 сек
 
         ESP_ERROR_CHECK(adc_continuous_stop(adc_handle));
 
         // сравниваем с предыдущими измерениями измерения
         if (result.R > 0)
         {
-            if (abs(measure_chan[cmd_power.channel] - result.R) * 100 / abs(result.R) > percRlv)
+            if (abs(measure_chan[result.channel] - result.R) * 100 / abs(result.R) > percRlv)
             {
                 if (xHandleNB)
                     xTaskNotifyGive(xHandleNB); // включаем NBIoT модуль
@@ -1039,7 +983,7 @@ void adc_task(void *arg)
                 ESP_LOGD(TAG, "Differences in measurements found.");
 
                 // запоминаем данные для сравнения
-                measure_chan[cmd_power.channel] = result.R;
+                measure_chan[result.channel] = result.R;
             }
         }
 
@@ -1047,25 +991,26 @@ void adc_task(void *arg)
         int pr = (result.U0 * 100) / result.U;
         if (pr > percU0lv) // 75%
         {
-            measure_current_flags |= BIT(cmd_power.channel);
+            measure_current_flags |= BIT(result.channel);
         }
         else
         {
-            measure_current_flags &= ~BIT(cmd_power.channel);
+            measure_current_flags &= ~BIT(result.channel);
         }
 
         result.flags.d_in = measure_flags & 1;
 
-        if (cmd_power.channel % 4 == 1)
-            result.flags.d_changed_ch1 |= ((measure_current_flags & BIT(cmd_power.channel)) > 0);
-        if (cmd_power.channel % 4 == 2)
-            result.flags.d_changed_ch2 |= ((measure_current_flags & BIT(cmd_power.channel)) > 0);
-        if (cmd_power.channel % 4 == 3)
-            result.flags.d_changed_ch3 |= ((measure_current_flags & BIT(cmd_power.channel)) > 0);
-        if (cmd_power.channel % 4 == 0)
-            result.flags.d_changed_ch4 |= ((measure_current_flags & BIT(cmd_power.channel)) > 0);
+        if (result.channel % 4 == 1)
+            result.flags.d_changed_ch1 |= ((measure_current_flags & BIT(result.channel)) > 0);
+        if (result.channel % 4 == 2)
+            result.flags.d_changed_ch2 |= ((measure_current_flags & BIT(result.channel)) > 0);
+        if (result.channel % 4 == 3)
+            result.flags.d_changed_ch3 |= ((measure_current_flags & BIT(result.channel)) > 0);
+        if (result.channel % 4 == 0)
+            result.flags.d_changed_ch4 |= ((measure_current_flags & BIT(result.channel)) > 0);
 
         xQueueSend(send_queue, &result, (TickType_t)0);
+        xQueueSend(adc_queue, &sum_adc_full, (TickType_t)0);
 
         // проверяем изменения U0lv и запускаем hv измерения
         // выключаем питание, если больше нет каналов в очереди
@@ -1102,7 +1047,7 @@ void adc_task(void *arg)
         xRingbufferSend(wsbuf_handle, buf, len_data + 1, 0);
 
         ESP_LOGI("result", "%s", buf);
-        ESP_LOGD("result", "Avg ADC (%d) 0:%d, 1:%d, 2:%d, 3:%d, 4:%d", count_adc_full, sum_adc_full.Ubatt / count_adc_full, sum_adc_full.R1 / count_adc_full, sum_adc_full.R2 / count_adc_full, sum_adc_full.U0 / count_adc_full, sum_adc_full.U / count_adc_full);
+        ESP_LOGD("result", "Avg ADC (%d) 0:%d, 1:%d, 2:%d, 3:%d, 4:%d", count_adc_full, sum_adc_full.Ubatt, sum_adc_full.R1, sum_adc_full.R2, sum_adc_full.U0, sum_adc_full.U);
 
         for (int i = 0; i < sizeof(ta) / sizeof(ta[0]) - 1; i++)
         {
@@ -1119,7 +1064,7 @@ int getResult_Data(char *line, int data_pos)
     const char *header = {"id,R1,U,R2\n"};
     char *pos = line;
     int l = 0;
-    unsigned int ringpos = (unsigned int)(btail + data_pos) & (RINGBUFLEN - 1);
+    unsigned int ringpos = (unsigned int)(buffer_tail + data_pos) & (RINGBUFLEN - 1);
 
     if (data_pos == 0)
     {
@@ -1128,7 +1073,7 @@ int getResult_Data(char *line, int data_pos)
         pos = line + l;
     }
 
-    if (data_pos >= ((bhead - btail) & (RINGBUFLEN - 1)))
+    if (data_pos >= ((buffer_head - buffer_tail) & (RINGBUFLEN - 1)))
     {
         return 0;
     }

@@ -44,7 +44,11 @@
 #define NB_PWR_BIT 9
 #define PSM_BIT 10
 #define LV_BIT 13
+
+#ifndef LV_POWER_BIT
 #define LV_POWER_BIT 12
+#endif
+
 #define IN1_BIT 15
 
 #define NB_PWR_CMDON 200
@@ -63,8 +67,8 @@
 
 typedef struct
 {
-    short int cmd;     // причина измерения 1 - по таймеру низковольные, 2 - по таймеру высоковольные, 3- прерывание от PCF
-    short int channel; // канал измерения 1-4, 5-8
+    short int channel; // канал измерения 1-4, 5-8, -1 - без выбора канала
+    short int cmd;     // причина измерения 1 - высоковольные, 2 - низковольные, 3- прерывание от PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON
 } cmd_t;
 
 typedef struct
@@ -128,7 +132,7 @@ typedef struct
 
 extern QueueHandle_t uicmd_queue;
 extern QueueHandle_t send_queue;
-extern QueueHandle_t set_lora_queue;
+extern QueueHandle_t adc_queue;
 extern RingbufHandle_t wsbuf_handle;
 
 extern EventGroupHandle_t status_event_group;
@@ -180,7 +184,7 @@ int read_nvs_lora(int32_t *id, int32_t *fr, int32_t *bw, int32_t *sf, int32_t *o
 int write_nvs_lora(const char *key, int value);
 int write_nvs_nbiot();
 
-int read_nvs_menu(void);
+esp_err_t read_nvs_menu(void);
 
 void reset_sleep_timeout(void);
 
@@ -195,8 +199,8 @@ void pcf8575_set(int channel_cmd);
 int pcf8575_read(int bit);
 
 /*
-channel - номер канала, если 0 - то по списку menu[20]
-flag - 0: lv,hv; 1:hv only, 2:lv only;
+channel - номер канала, если 0 - то по списку menu[]; -1 - без выбора канала
+flag - 0: lv,hv; 1:hv only, 2:lv only; 3 - read PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON
 */
 void start_measure(int channel, int flag);
 
@@ -210,6 +214,7 @@ int getResult_Data(char *line, int data_pos);
 */
 int getADC_Data(char *line, int data_pos, const int mode);
 
+int get_menu_pos_by_id(const char *id);
 int get_menu_val_by_id(const char *id);
 esp_err_t set_menu_val_by_id(const char *id, int value);
 

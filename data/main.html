@@ -9,17 +9,23 @@
     <title>Настройки</title>
   </head>
   <body>
-    <form name="settings" action="" method="post" onsubmit="validate()">
+    <form name="settings" action="" method="post">
       <div id="settingscontent"></div>
       <input type="submit" value="Submit" />
     </form>
     <br />
     <p>
-      <a href="/d?mode=2">Буфер данных</a>&nbsp;&nbsp;<a href="/d3?mode=3">График АЦП</a>&nbsp;&nbsp;<a href="/d3?mode=1">График АЦП(фильтр)</a>&nbsp;&nbsp;<a href="/d3?mode=4">График АЦП (U0,U,Ubatt)</a>&nbsp;&nbsp;<a href="/d3?mode=2">График R</a>
+      <a href="/d?mode=2">Буфер данных</a>&nbsp;&nbsp;<a href="/d3?mode=3">График АЦП</a>&nbsp;&nbsp;<a
+        href="/d3?mode=1"
+        >График АЦП(фильтр)</a
+      >&nbsp;&nbsp;<a href="/d3?mode=4">График АЦП (U0,U,Ubatt)</a>&nbsp;&nbsp;<a href="/d3?mode=2">График R</a>
     </p>
     <p>
-      <button onclick="measure(1)">Измерить 1</button>&nbsp;<button onclick="measure(2)">Измерить 2</button>&nbsp;<button onclick="measure(3)">Измерить 3</button>&nbsp;<button onclick="measure(4)">Измерить 4</button>&nbsp;&nbsp;
-      <button onclick="measure(5)">Измерить 5</button>&nbsp;<button onclick="measure(6)">Измерить 6</button>&nbsp;<button onclick="measure(7)">Измерить 7</button>&nbsp;<button onclick="measure(8)">Измерить 8</button>
+      <button onclick="measure(1)">Измерить 1</button>&nbsp;<button onclick="measure(2)">Измерить 2</button
+      >&nbsp;<button onclick="measure(3)">Измерить 3</button>&nbsp;<button onclick="measure(4)">Измерить 4</button
+      >&nbsp;&nbsp; <button onclick="measure(5)">Измерить 5</button>&nbsp;<button onclick="measure(6)">
+        Измерить 6</button
+      >&nbsp;<button onclick="measure(7)">Измерить 7</button>&nbsp;<button onclick="measure(8)">Измерить 8</button>
     </p>
     <p><textarea id="text" style="width: 98%; height: 400px"></textarea></p>
     <a href="?restart=true">Restart</a>
@@ -44,7 +50,6 @@
           })
           .then((data) => {
             document.getElementById("settingscontent").innerHTML = data;
-            document.getElementById("ip").value = num2string(document.getElementById("ip").value);
           });
 
         fetch("/history")
@@ -58,17 +63,6 @@
           });
       });
 
-      function validate() {
-        document.getElementById("ip").value = string2num(document.getElementById("ip").value);
-      }
-
-      function num2string(ip) {
-        return [24, 16, 8, 0].map((n) => (ip >> n) & 0xff).join(".");
-      }
-
-      function string2num(ip) {
-        return ip.split(".").reduce((sum, x, i) => sum + (x << (8 * (3 - i))), 0);
-      }
       function measure(chan) {
         socket.send("start:" + String(chan));
       }

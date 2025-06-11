@@ -41,10 +41,13 @@ int i2c_err = 1;
 
 QueueHandle_t uicmd_queue;
 QueueHandle_t send_queue;
+QueueHandle_t adc_queue;
 QueueHandle_t set_lora_queue;
 RingbufHandle_t wsbuf_handle;
 
 EventGroupHandle_t status_event_group;
+
+bool start_adc_init = false;
 
 int pcf8575_read(int bit)
 {
@@ -109,6 +112,10 @@ void pcf8575_set(int channel_cmd)
     case NB_RESET_CMD:
         // cmd_mask = current_mask | BIT(NB_RESET_BIT);
         break;
+    case POWER_CMDON:
+        current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
+        cmd_mask = current_mask;
+        break;
     case POWER_CMDOFF:
         current_mask |= BIT(POWER_BIT); // Off HV power
         current_mask &= ~(0x60ff);      // очищаем каналы 0..7 bit + LV
@@ -117,38 +124,34 @@ void pcf8575_set(int channel_cmd)
     case 1:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-
-        current_mask |= BIT(6); // ADC R
-        current_mask |= BIT(7); // Uout + U0
+        current_mask |= BIT(6);          // ADC R
+        current_mask |= BIT(7);          // Uout + U0
 
         cmd_mask = current_mask;
         break;
     case 5:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-
-        current_mask |= BIT(LV_BIT); // LV
-        current_mask |= BIT(6);      // ADC R
-        current_mask |= BIT(7);      // Uout + U0
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(6);          // ADC R
+        current_mask |= BIT(7);          // Uout + U0
 
         cmd_mask = current_mask;
         break;
     case 2:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-
-        current_mask |= BIT(4); // ADC R
-        current_mask |= BIT(5); // Uout + U0
+        current_mask |= BIT(4);          // ADC R
+        current_mask |= BIT(5);          // Uout + U0
 
         cmd_mask = current_mask;
         break;
     case 6:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-
-        current_mask |= BIT(LV_BIT); // LV
-        current_mask |= BIT(4);      // ADC R
-        current_mask |= BIT(5);      // Uout + U0
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(4);          // ADC R
+        current_mask |= BIT(5);          // Uout + U0
 
         cmd_mask = current_mask;
         break;
@@ -163,28 +166,26 @@ void pcf8575_set(int channel_cmd)
     case 7:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(2);          // ADC R
+        current_mask |= BIT(3);          // Uout + U0
 
-        current_mask |= BIT(LV_BIT); // LV
-        current_mask |= BIT(2);      // ADC R
-        current_mask |= BIT(3);      // Uout + U0
         cmd_mask = current_mask;
         break;
     case 4:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-
-        current_mask |= BIT(0); // ADC R
-        current_mask |= BIT(1); // Uout + U0
+        current_mask |= BIT(0);          // ADC R
+        current_mask |= BIT(1);          // Uout + U0
 
         cmd_mask = current_mask;
         break;
     case 8:                              // LV Measure
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
-
-        current_mask |= BIT(LV_BIT); // LV
-        current_mask |= BIT(0);      // ADC R
-        current_mask |= BIT(1);      // Uout + U0
+        current_mask |= BIT(LV_BIT);     // LV
+        current_mask |= BIT(0);          // ADC R
+        current_mask |= BIT(1);          // Uout + U0
 
         cmd_mask = current_mask;
         break;
@@ -205,23 +206,22 @@ void pcf8575_set(int channel_cmd)
 
 void start_measure(int channel, int flag)
 {
-    cmd_t cmd = {.channel = 0, .cmd = 0};
-    int pos;
-    if (channel >= 1 && channel <= 8)
+    cmd_t cmd;
+
+    cmd.channel = channel;
+    cmd.cmd = flag;
+
+    if (channel == 0)
     {
-        cmd.channel = channel;
-        xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
-    }
-    else
-    {
-        int channels = get_menu_val_by_id("chanord");
+        const int channels = get_menu_val_by_id("chanord");
 
         if (flag != 1)
         {
-            pos = 100000000;
+            int pos = 100000000;
             while (pos > 0) // First LV
             {
                 cmd.channel = (channels % (pos * 10)) / pos;
+                cmd.cmd = 2;
                 if (cmd.channel > 0)
                 {
                     if (cmd.channel <= 4)
@@ -236,10 +236,11 @@ void start_measure(int channel, int flag)
 
         if (flag != 2)
         {
-            pos = 100000000;
+            int pos = 100000000;
             while (pos > 0) // HV
             {
                 cmd.channel = (channels % (pos * 10)) / pos;
+                cmd.cmd = 1;
                 if (cmd.channel > 0 && cmd.channel <= 4)
                 {
                     xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
@@ -248,6 +249,178 @@ void start_measure(int channel, int flag)
             }
         }
     }
+    else
+    {
+        if (flag == 0)
+        {
+            if (channel > 0 && channel <= 4)
+                cmd.cmd = 1;
+            else if (channel >= 5)
+                cmd.cmd = 2;
+        }
+        xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
+    }
+}
+
+esp_err_t start_adc_calibrate()
+{
+    calcdata_t adc_result;
+    calcdata_t adc_corr = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    gpio_pulldown_en(0);
+    gpio_pulldown_en(1);
+    gpio_pulldown_en(2);
+    gpio_pulldown_en(3);
+    gpio_pulldown_en(4);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    gpio_pulldown_dis(0);
+    gpio_pulldown_dis(1);
+    gpio_pulldown_dis(2);
+    gpio_pulldown_dis(3);
+    gpio_pulldown_dis(4);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    // Запускаем опрос портов ADC без каналов и ВВ
+    start_measure(-1, 4);
+    /* Ждем окончания измерений */
+    xEventGroupWaitBits(
+        status_event_group, /* The event group being tested. */
+        END_MEASURE,        /* The bits within the event group to wait for. */
+        pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdFALSE,
+        60000 / portTICK_PERIOD_MS);
+
+    if (pdTRUE == xQueueReceive(adc_queue, &adc_result, 1000 / portTICK_PERIOD_MS))
+    {
+        adc_corr.Ubatt = adc_result.Ubatt;
+
+        if (adc_result.Ubatt > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error Ubat!");
+            return ESP_FAIL;
+        }
+        if (adc_result.R1 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error R1!");
+            return ESP_FAIL;
+        }
+        if (adc_result.R2 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error R2!");
+            return ESP_FAIL;
+        }
+        if (adc_result.U > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error U!");
+            return ESP_FAIL;
+        }
+        if (adc_result.U0 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error U0!");
+            return ESP_FAIL;
+        }
+    }
+    else
+        return ESP_FAIL;
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // Запускаем опрос портов ADC без каналов с POWER_ON
+    start_measure(-1, 5);
+    /* Ждем окончания измерений */
+    xEventGroupWaitBits(
+        status_event_group, /* The event group being tested. */
+        END_MEASURE,        /* The bits within the event group to wait for. */
+        pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdFALSE,
+        60000 / portTICK_PERIOD_MS);
+
+    if (pdTRUE == xQueueReceive(adc_queue, &adc_result, 1000 / portTICK_PERIOD_MS))
+    {
+        adc_corr.R1 = adc_result.R1;
+        adc_corr.R2 = adc_result.R2;
+        adc_corr.U0 = adc_result.U0;
+        adc_corr.U = adc_result.U;
+
+        if (adc_result.Ubatt < 2000)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error Ubat!");
+            return ESP_FAIL;
+        }
+        if (adc_result.R1 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error R1!");
+            return ESP_FAIL;
+        }
+        if (adc_result.R2 > 100)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error R2!");
+            return ESP_FAIL;
+        }
+        if (adc_result.U > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error U!");
+            return ESP_FAIL;
+        }
+        if (adc_result.U0 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error U0!");
+            return ESP_FAIL;
+        }
+    }
+    else
+        return ESP_FAIL;
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // Запускаем опрос портов ADC без каналов и ВВ
+    start_measure(-1, 4);
+    /* Ждем окончания измерений */
+    xEventGroupWaitBits(
+        status_event_group, /* The event group being tested. */
+        END_MEASURE,        /* The bits within the event group to wait for. */
+        pdFALSE,            /* BIT_0 & BIT_1 should be cleared before returning. */
+        pdFALSE,
+        60000 / portTICK_PERIOD_MS);
+
+    if (pdTRUE == xQueueReceive(adc_queue, &adc_result, 1000 / portTICK_PERIOD_MS))
+    {
+        if (adc_result.Ubatt > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error Ubat!");
+            return ESP_FAIL;
+        }
+        if (adc_result.R1 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error R1!");
+            return ESP_FAIL;
+        }
+        if (adc_result.R2 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error R2!");
+            return ESP_FAIL;
+        }
+        if (adc_result.U > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error U!");
+            return ESP_FAIL;
+        }
+        if (adc_result.U0 > 50)
+        {
+            ESP_LOGI("AUTOCALIBRATE", "Error U0!");
+            return ESP_FAIL;
+        }
+    }
+    else
+        return ESP_FAIL;
+
+    if ((ESP_OK == set_menu_val_by_id("offstADC0", adc_corr.Ubatt)) &&
+        (ESP_OK == set_menu_val_by_id("offstADC1", adc_corr.R1)) &&
+        (ESP_OK == set_menu_val_by_id("offstADC2", adc_corr.R2)) &&
+        (ESP_OK == set_menu_val_by_id("offstADC3", adc_corr.U0)) &&
+        (ESP_OK == set_menu_val_by_id("offstADC4", adc_corr.U)))
+        return ESP_OK;
+
+    return ESP_FAIL;
 }
 
 void app_main()
@@ -351,11 +524,17 @@ void app_main()
     nvs_get_stats(NULL, &nvs_stats);
     ESP_LOGI("NVS", "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
 
-    read_nvs_menu();
+    err = read_nvs_menu();
+
+    if (err != ESP_OK)
+    {
+        // Первый запуск
+        start_adc_init = true;
+    }
 
     i2c_master_bus_config_t i2c_bus_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = -1,
+        .i2c_port = I2C_NUM_0,
         .scl_io_num = I2C_MASTER_SCL_PIN,
         .sda_io_num = I2C_MASTER_SDA_PIN,
         .glitch_ignore_cnt = 7,
@@ -388,6 +567,7 @@ void app_main()
     uicmd_queue = xQueueCreate(8, sizeof(cmd_t));
 
     send_queue = xQueueCreate(10, sizeof(result_t));
+    adc_queue = xQueueCreate(3, sizeof(calcdata_t));
 
     status_event_group = xEventGroupCreate();
 
@@ -405,6 +585,15 @@ void app_main()
 
     const int Trepeatlv = get_menu_val_by_id("Trepeatlv");
     const int Trepeathv = get_menu_val_by_id("Trepeathv");
+
+    if (start_adc_init) // АВТОКАЛИБРОВКА ADC
+    {
+        if (ESP_OK == start_adc_calibrate())
+        {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            esp_restart();
+        }
+    }
 
     if (bootCount % (Trepeathv / Trepeatlv) == 1 && BattLow < 100)
     {
@@ -429,7 +618,7 @@ void app_main()
         60000 / portTICK_PERIOD_MS);
 
     // время ожидания
-    int wait = get_menu_val_by_id("waitwifi");
+    const int wait = get_menu_val_by_id("waitwifi");
 
     // запускаем WiFi если подали питание или сработал концевик
     if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset

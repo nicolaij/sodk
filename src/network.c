@@ -20,6 +20,8 @@
 
 #include "esp_spiffs.h"
 
+#include <arpa/inet.h>
+
 extern uint8_t mac[6];
 extern char pdp_ip[20];
 extern char net_status_current[32];
@@ -349,13 +351,50 @@ static esp_err_t menu_post_handler(httpd_req_t *req)
 
     char *s = network_buf;
     char name[16];
+    int v;
+    int mac2 = 0;
+    uint8_t mac_addr[6];
     while (s && s < (network_buf + req->content_len))
     {
         char *e = strchr(s, '=');
         *e = '\0';
         strncpy(name, s, sizeof(name));
 
-        int v = atoi(e + 1);
+        v = 0;
+        if (strlen(name) == 2 && strncmp(name, "ip", 2) == 0)
+        {
+            int parsed = sscanf((const char *)e + 1, "%hhu.%hhu.%hhu.%hhu", &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3]);
+            if (parsed == 4)
+            {
+                v = (mac_addr[0] << 0) | (mac_addr[1] << 8) | (mac_addr[2] << 16) | (mac_addr[3] << 24);
+            }
+        }
+        else if (strlen(name) == 4 && strncmp(name, "MAC1", 4) == 0)
+        {
+            //&MAC1=00%3A00%3A00%3A00%3A00%3A51&MAC2=81
+            int parsed = sscanf((const char *)e + 1,
+                                "%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx",
+                                &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3], &mac_addr[4], &mac_addr[5]);
+
+            if (parsed == 6)
+            {
+                v = (mac_addr[0] << 16) | (mac_addr[1] << 8) | mac_addr[2];
+                mac2 = (mac_addr[3] << 16) | (mac_addr[4] << 8) | mac_addr[5];
+            }
+            else
+            {
+                mac2 = 0;
+            }
+        }
+        else if (strlen(name) == 4 && strncmp(name, "MAC2", 4) == 0)
+        {
+            v = mac2;
+        }
+        else
+        {
+            v = atoi(e + 1);
+        }
+
         // ESP_LOGD("menu_post_handler", "Name  \"%s\" : \"%i\"", name, v);
         set_menu_val_by_id(name, v);
 

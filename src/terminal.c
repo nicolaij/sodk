@@ -9,6 +9,10 @@
 #include "nvs_flash.h"
 
 #include "esp_now.h"
+#include "esp_mac.h"
+
+#include <arpa/inet.h>
+#include "esp_netif.h"
 
 uint8_t serialbuffer[256];
 
@@ -18,45 +22,45 @@ nvs_handle_t my_handle;
 extern TaskHandle_t xHandleWifi;
 
 menu_t menu[] = {
-    {.id = "idn", .name = "Номер датчика", .izm = "", .val = 1, .min = 1, .max = 1000000},
-    {.id = "waitwifi", .name = "Ожидание WiFi", .izm = "мин", .val = 3, .min = 1, .max = 1000000},
-    {.id = "Trepeatlv", .name = "Интервал измер. низ.", .izm = "мин", .val = 60, .min = 1, .max = 1000000},
-    {.id = "Trepeathv", .name = "Интервал измер. выс.", .izm = "мин", .val = 720, .min = 1, .max = 1000000},
-    {.id = "ip", .name = "IP сервера", .izm = "", .val = ((172 << 24) | (30 << 16) | (239 << 8) | (20)), .min = INT32_MIN, .max = INT32_MAX}, // 172.30.239.20
-    {.id = "tcpport", .name = "TCP порт сервера (0: не исп.)", .izm = "", .val = 48884, .min = 0, .max = UINT16_MAX},
-    {.id = "udpport", .name = "UDP порт сервера (0: не исп.)", .izm = "", .val = 0, .min = 0, .max = UINT16_MAX},
-    {.id = "MAC1", .name = "ESPNOW! Target MAC[0,1,2]", .izm = "", .val = 0, .min = 0, .max = INT32_MAX},
-    {.id = "MAC2", .name = "ESPNOW! Target MAC[3,4,5]", .izm = "", .val = 0, .min = 0, .max = INT32_MAX},
-    {.id = "pulse", .name = "Макс. время импульса", .izm = "мс", .val = 5000, .min = -1, .max = 10000},
-    {.id = "chanord", .name = "Порядок опроса каналов", .izm = "", .val = 1234, .min = 0, .max = 999999999},
-    {.id = "Overvolt", .name = "Ограничение U", .izm = "В", .val = 600, .min = 0, .max = 1000},
-    {.id = "kU", .name = "коэф. U", .izm = "", .val = 1432, .min = 1, .max = 1000000},
-    {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3784, .min = 1, .max = 1000000},
-    {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
-    {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8086, .min = 1, .max = 1000000},            // ADC_ATTEN_DB_6
-    {.id = "offsAR1", .name = "смещ. R (ch 1)", .izm = "", .val = -15160, .min = -1000000, .max = 1000000}, // ADC_ATTEN_DB_6
-    {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30560, .min = 1, .max = 100000},              // ADC_ATTEN_DB_6
-    {.id = "offsAR2", .name = "смещ. R (ch 2)", .izm = "", .val = -239, .min = -1000000, .max = 1000000},   // ADC_ATTEN_DB_6
-    {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1418, .min = 1, .max = 1000000},
-    {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -100000, .max = 1000000},
-    {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 124535, .min = 1, .max = 1000000},
-    {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3784, .min = 1, .max = 1000000},
-    {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
-    {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "В", .val = 0, .min = 0, .max = 12000},
-    {.id = "UbatEnd", .name = "U bat отключения", .izm = "В", .val = 0, .min = 0, .max = 12000},
-    {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .izm = "", .val = 10, .min = 1, .max = 100},
-    {.id = "WiFichan", .name = "WiFi channel", .izm = "", .val = 11, .min = 1, .max = 20},
-    {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
-    {.id = "avgcnt", .name = "Кол-во усред. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
-    {.id = "percU0lv", .name = "\% U петли низ.", .izm = "\%", .val = 75, .min = 0, .max = 100}, /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
-    {.id = "percRlv", .name = "\% R низ.", .izm = "\%", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
-    {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 200},
-    {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 200},
-    {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
-    {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
-    {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*0*/ {.id = "idn", .name = "Номер датчика", .izm = "", .val = 1, .min = 1, .max = 1000000},
+    /*1*/ {.id = "waitwifi", .name = "Ожидание WiFi", .izm = "мин", .val = 3, .min = 1, .max = 1000000},
+    /*2*/ {.id = "Trepeatlv", .name = "Интервал измер. низ.", .izm = "мин", .val = 60, .min = 1, .max = 1000000},
+    /*3*/ {.id = "Trepeathv", .name = "Интервал измер. выс.", .izm = "мин", .val = 720, .min = 1, .max = 1000000},
+    /*4*/ {.id = "ip", .name = "IP сервера", .izm = "", .val = ((172 << 0) | (30 << 8) | (239 << 16) | (20 << 24)), .min = INT32_MIN, .max = INT32_MAX}, // 172.30.239.20
+    /*5*/ {.id = "tcpport", .name = "TCP порт сервера (0: не исп.)", .izm = "", .val = 48884, .min = 0, .max = UINT16_MAX},
+    /*6*/ {.id = "udpport", .name = "UDP порт сервера (0: не исп.)", .izm = "", .val = 0, .min = 0, .max = UINT16_MAX},
+    /*7*/ {.id = "MAC1", .name = "ESPNOW! Target MAC", .izm = "", .val = 0, .min = 0, .max = INT32_MAX},
+    /*8*/ {.id = "MAC2", .name = "", .izm = "", .val = 0, .min = 0, .max = INT32_MAX},
+    /*9*/ {.id = "pulse", .name = "Макс. время импульса", .izm = "мс", .val = 5000, .min = -1, .max = 10000},
+    /*10*/ {.id = "chanord", .name = "Порядок опроса каналов", .izm = "", .val = 1234, .min = 0, .max = 999999999},
+    /*11*/ {.id = "Overvolt", .name = "Ограничение U", .izm = "В", .val = 600, .min = 0, .max = 1000},
+    /*12*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1432, .min = 1, .max = 1000000},
+    /*13*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*14*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3784, .min = 1, .max = 1000000},
+    /*15*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
+    /*16*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8086, .min = 1, .max = 1000000},             // ADC_ATTEN_DB_6
+    /*17*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = -15160, .min = -1000000, .max = 1000000}, // ADC_ATTEN_DB_6
+    /*18*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30560, .min = 1, .max = 100000},             // ADC_ATTEN_DB_6
+    /*19*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = -239, .min = -1000000, .max = 1000000},   // ADC_ATTEN_DB_6
+    /*20*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1418, .min = 1, .max = 1000000},
+    /*21*/ {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -100000, .max = 1000000},
+    /*22*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 124535, .min = 1, .max = 1000000},
+    /*23*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*24*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3784, .min = 1, .max = 1000000},
+    /*25*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
+    /*26*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "В", .val = 0, .min = 0, .max = 12000},
+    /*27*/ {.id = "UbatEnd", .name = "U bat отключения", .izm = "В", .val = 0, .min = 0, .max = 12000},
+    /*28*/ {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .izm = "", .val = 10, .min = 1, .max = 100},
+    /*29*/ {.id = "WiFichan", .name = "WiFi channel", .izm = "", .val = 11, .min = 1, .max = 20},
+    /*30*/ {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
+    /*31*/ {.id = "avgcnt", .name = "Кол-во усред. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
+    /*32*/ {.id = "percU0lv", .name = "\% U петли низ.", .izm = "\%", .val = 75, .min = 0, .max = 100}, /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
+    /*33*/ {.id = "percRlv", .name = "\% R низ.", .izm = "\%", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
+    /*34*/ {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*35*/ {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*36*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*37*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*38*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
 };
 
 esp_err_t init_nvs()
@@ -165,7 +169,7 @@ int get_menu_val_by_id(const char *id)
 
 esp_err_t set_menu_val_by_id(const char *id, int value)
 {
-    esp_err_t err = ESP_OK;
+    esp_err_t err = ESP_FAIL;
     int ll = strlen(id);
 
     for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
@@ -216,7 +220,25 @@ int get_menu_html(char *buf)
 
     for (int i = index; i < sizeof(menu) / sizeof(menu_t); i++)
     {
-        if (strlen(menu[i].name) > 0)
+        if (i == 4) // IP
+        {
+            esp_ip4_addr_t ip_addr;
+            ip_addr.addr = (unsigned int)menu[i].val;
+            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" IPSTR "\"/></td></tr>\n", menu[i].id, menu[i].name, menu[i].id, menu[i].id, IP2STR(&ip_addr));
+        }
+        else if (i == 7) // MAC
+        {
+            uint8_t mac_addr[6];
+            mac_addr[0] = (menu[i].val >> 16) & 0xFF;
+            mac_addr[1] = (menu[i].val >> 8) & 0xFF;
+            mac_addr[2] = (menu[i].val >> 0) & 0xFF;
+            mac_addr[3] = (menu[i + 1].val >> 16) & 0xFF;
+            mac_addr[4] = (menu[i + 1].val >> 8) & 0xFF;
+            mac_addr[5] = (menu[i + 1].val >> 0) & 0xFF;
+            ESP_LOGI("menu", "%2i. %s: " MACSTR, i + 1, menu[i].name, MAC2STR(mac_addr));
+            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" MACSTR "\"/></td></tr>\n", menu[i].id, menu[i].name, menu[i].id, menu[i].id, MAC2STR(mac_addr));
+        }
+        else if (strlen(menu[i].name) > 0)
         {
             pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"%i\"/>%s</td></tr>\n", menu[i].id, menu[i].name, menu[i].id, menu[i].id, menu[i].val, menu[i].izm);
         }
@@ -273,6 +295,10 @@ void console_task(void *arg)
 
     int n = 0;
 
+    uint8_t mac_addr[6];
+
+    esp_ip4_addr_t ip_addr;
+
     while (1)
     {
         const int rxBytes = uart_read_bytes(UART_NUM_0, data, 1, 50 / portTICK_PERIOD_MS);
@@ -314,9 +340,57 @@ void console_task(void *arg)
                 data[rxBytes - 1] = 0;
                 ESP_LOGD(TAG, "Read bytes: '%s'", serialbuffer);
                 // ESP_LOG_BUFFER_HEXDUMP(TAG, data, rxBytes, ESP_LOG_INFO);
+                n = atoi((const char *)serialbuffer);
                 data = serialbuffer;
-                n = atoi((const char *)data);
-                if (enter_value > 0)
+                if (enter_value == 5) // IP сервера
+                {
+                    int parsed = sscanf((const char *)serialbuffer, "%hhu.%hhu.%hhu.%hhu", &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3]);
+                    if (parsed == 4)
+                    {
+                        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+                        if (err == ESP_OK)
+                        {
+                            esp_ip4_addr_t ip_addr;
+                            ip_addr.addr = (mac_addr[0] << 0) | (mac_addr[1] << 8) | (mac_addr[2] << 16) | (mac_addr[3] << 24);
+                            ESP_LOGD("NVS", "Write  \"%s\" : \"" IPSTR "\"", menu[4].id, IP2STR(&ip_addr));
+                            menu[4].val = (int)ip_addr.addr;
+                            nvs_set_i32(my_handle, menu[4].id, menu[4].val);
+                            nvs_close(my_handle);
+                        }
+                    }
+                    else
+                    {
+                        ESP_LOGE(TAG, "Error IP address format");
+                    }
+                    enter_value = 0;
+                }
+                else if (enter_value == 8) // MAC ESPNOW!
+                {
+                    // Поддержка форматов: 00:1A:2B:3C:4D:5E и 00-1A-2B-3C-4D-5E
+                    int parsed = sscanf((const char *)serialbuffer,
+                                        "%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx",
+                                        &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3], &mac_addr[4], &mac_addr[5]);
+
+                    if (parsed == 6)
+                    {
+                        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+                        if (err == ESP_OK)
+                        {
+                            ESP_LOGD("NVS", "Write  \"%s\" : \"" MACSTR "\"", menu[7].id, MAC2STR(mac_addr));
+                            menu[7].val = (mac_addr[0] << 16) | (mac_addr[1] << 8) | (mac_addr[2]);
+                            nvs_set_i32(my_handle, menu[7].id, menu[7].val);
+                            menu[8].val = (mac_addr[3] << 16) | (mac_addr[4] << 8) | (mac_addr[5]);
+                            nvs_set_i32(my_handle, menu[8].id, menu[8].val);
+                            nvs_close(my_handle);
+                        }
+                    }
+                    else
+                    {
+                        ESP_LOGE(TAG, "Error MAC format");
+                    }
+                    enter_value = 0;
+                }
+                else if (enter_value > 0)
                 {
                     if (n >= menu[enter_value - 1].min && n <= menu[enter_value - 1].max)
                     {
@@ -357,7 +431,29 @@ void console_task(void *arg)
                 }
                 else
                 {
-                    if (n > 0 && n <= sizeof(menu) / sizeof(menu_t))
+                    if (n == 5) // IP сервера
+                    {
+                        ip_addr.addr = (unsigned int)menu[n - 1].val;
+                        ESP_LOGI("menu", "-------------------------------------------");
+                        ESP_LOGI("menu", "%2i. %s: " IPSTR ". Введите новое значение: ", n, menu[n - 1].name, IP2STR(&ip_addr));
+                        ESP_LOGI("menu", "-------------------------------------------");
+                        enter_value = n;
+                    }
+                    else if (n == 8) // MAC Address
+                    {
+                        mac_addr[0] = (menu[7].val >> 16) & 0xFF;
+                        mac_addr[1] = (menu[7].val >> 8) & 0xFF;
+                        mac_addr[2] = (menu[7].val >> 0) & 0xFF;
+                        mac_addr[3] = (menu[8].val >> 16) & 0xFF;
+                        mac_addr[4] = (menu[8].val >> 8) & 0xFF;
+                        mac_addr[5] = (menu[8].val >> 0) & 0xFF;
+
+                        ESP_LOGI("menu", "-------------------------------------------");
+                        ESP_LOGI("menu", "%2i. %s: " MACSTR ". Введите новое значение: ", n, menu[n - 1].name, MAC2STR(mac_addr));
+                        ESP_LOGI("menu", "-------------------------------------------");
+                        enter_value = n;
+                    }
+                    else if (n > 0 && n <= sizeof(menu) / sizeof(menu_t))
                     {
                         ESP_LOGI("menu", "-------------------------------------------");
                         ESP_LOGI("menu", "%2i. %s: %i %s. Введите новое значение: ", n, menu[n - 1].name, menu[n - 1].val, menu[n - 1].izm);
@@ -424,6 +520,11 @@ void console_task(void *arg)
                         ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
                         enter_value = 0;
                     }
+                    else if (n == 113) // Включить Power_ON
+                    {
+                        pcf8575_set(POWER_CMDON);
+                        enter_value = 0;
+                    }
                     else if (n == 120) // Непрерывная передача ESP-NOW
                     {
                         if (esp_now_init() == ESP_OK)
@@ -443,25 +544,51 @@ void console_task(void *arg)
                         }
                         enter_value = 0;
                     }
+                    else if (n == 200) // Измерения каналов c ВВ
+                    {
+                        start_measure(-1, 1);
+                        enter_value = 0;
+                    }
                     else if (n > 200 && n <= 208) // Измерения каналов
                     {
-                        start_measure(n - 200, 1);
+                        start_measure(n - 200, 0);
+                        enter_value = 0;
+                    }
+                    else if (n == 209) // Измерения каналов с POWER ON
+                    {
+                        start_measure(-1, 5);
+                        enter_value = 0;
+                    }
+                    else if (n == 210) // Измерения каналов
+                    {
+                        start_measure(-1, 4);
                         enter_value = 0;
                     }
                     else
                     {
-
-                        // ESP_LOGI("result", OUT_JSON, get_menu_val_by_id("idn"), result.measure.bootcount, get_datetime(result.ttime), OUT_MEASURE_VARS(result.measure));
-
                         ESP_LOGI("menu", "-------------------------------------------");
                         int i = 0;
                         for (i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
                         {
-                            if (strlen(menu[i].name) == 0)
-                                ESP_LOGI("menu", "%2i. %s: %i %s", i + 1, menu[i].id, menu[i].val, menu[i].izm);
-                            else
+                            if (i == 4) // IP сервера
+                            {
+                                ip_addr.addr = (unsigned int)menu[i].val;
+                                ESP_LOGI("menu", "%2i. %s: " IPSTR, i + 1, menu[i].name, IP2STR(&ip_addr));
+                            }
+                            else if (i == 7) // MAC
+                            {
+                                mac_addr[0] = (menu[7].val >> 16) & 0xFF;
+                                mac_addr[1] = (menu[7].val >> 8) & 0xFF;
+                                mac_addr[2] = (menu[7].val >> 0) & 0xFF;
+                                mac_addr[3] = (menu[8].val >> 16) & 0xFF;
+                                mac_addr[4] = (menu[8].val >> 8) & 0xFF;
+                                mac_addr[5] = (menu[8].val >> 0) & 0xFF;
+                                ESP_LOGI("menu", "%2i. %s: " MACSTR, i + 1, menu[i].name, MAC2STR(mac_addr));
+                            }
+                            else if (strlen(menu[i].name) > 0)
                                 ESP_LOGI("menu", "%2i. %s: %i %s", i + 1, menu[i].name, menu[i].val, menu[i].izm);
                         }
+
                         ESP_LOGI("menu", "%2i. История: %i", ++i, bootCount);
                         ESP_LOGI("menu", "%2i. AT терминал NBIoT", ++i);
                         ESP_LOGI("menu", "%2i. Start WiFi", ++i);
@@ -469,9 +596,13 @@ void console_task(void *arg)
                         ESP_LOGI("menu", "101 - 108. Включить канал");
                         ESP_LOGI("menu", "110. Включить LV_measure");
                         ESP_LOGI("menu", "111. Включить LV_sw");
-                        ESP_LOGI("menu", "112. Включить Enable_PWM");
+                        ESP_LOGI("menu", "112. ! Включить Enable_PWM !");
+                        ESP_LOGI("menu", "113. Включить Power_ON");
                         ESP_LOGI("menu", "120. ESP-NOW transmit");
+                        ESP_LOGI("menu", "200. Измерение ВВ без подключ. канала");
                         ESP_LOGI("menu", "201 - 208. Измерение канала 1 - 8");
+                        ESP_LOGI("menu", "209. Измерение c POWER_ON и подключ. канала");
+                        ESP_LOGI("menu", "210. Измерение без ВВ и подключ. канала");
                         ESP_LOGI("menu", "-------------------------------------------");
                         enter_value = 0;
                     }

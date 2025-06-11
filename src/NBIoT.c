@@ -26,6 +26,8 @@ RTC_DATA_ATTR bool first_run_completed = false;
 
 extern TaskHandle_t xHandleWifi;
 
+extern int32_t timezone;
+
 unsigned int fromActiveTime(uint8_t val)
 {
     uint8_t unit = val >> 5;
@@ -82,9 +84,15 @@ unsigned int fromPeriodicTAU(uint8_t val)
 
 void nbiot_power_pin(const TickType_t xTicksToDelay)
 {
+#ifdef PCFNBPOWER
+    pcf8575_set(NB_PWR_CMDON);
+    vTaskDelay(xTicksToDelay);
+    pcf8575_set(NB_PWR_CMDOFF);
+#else
     gpio_set_level(MODEM_POWER, 0);
     vTaskDelay(xTicksToDelay);
     gpio_set_level(MODEM_POWER, 1);
+#endif
 };
 
 esp_err_t print_atcmd(const char *cmd, char *buffer)
@@ -309,10 +317,26 @@ esp_err_t apply_command(const char *cmd, size_t len)
         cJSON *item = NULL;
         cJSON_ArrayForEach(item, json)
         {
-            ESP_LOGI(TAG, "Setup %s: %d\n", item->string, item->valueint);
-            if (get_menu_val_by_id(item->string) != item->valueint)
+            if (get_menu_pos_by_id(item->string) >= 0)
             {
-                set_menu_val_by_id(item->string, item->valueint);
+                ESP_LOGI(TAG, "Setup %s: %d\n", item->string, item->valueint);
+                if (get_menu_val_by_id(item->string) != item->valueint)
+                {
+                    set_menu_val_by_id(item->string, item->valueint);
+                }
+            }
+            else
+            {
+                if (strncmp(item->string, "timestamp", 9) == 0)
+                {
+                    long long ts = atoll((const char *)item->valuestring);
+                    if (ts > 1715923962LL) // 17 May 2024 05:32:42
+                    {
+                        struct timeval now = {.tv_sec = ts + timezone * 3600}; // UNIX time + timezone offset
+                        settimeofday(&now, NULL);
+                        ESP_LOGI(TAG, "Set date and time: %s", get_datetime(time(0)));
+                    }
+                }
             }
         }
     }
@@ -398,8 +422,8 @@ void modem_task(void *arg)
 
     int protocol = 1; // ESPNOW = 0, TCP = 1, UDP =2
 
-    int mac1 = get_menu_val_by_id("MAC1");
-    int mac2 = get_menu_val_by_id("MAC2");
+    const int mac1 = get_menu_val_by_id("MAC1");
+    const int mac2 = get_menu_val_by_id("MAC2");
     uint8_t mac_addr[6] = {
         (mac1 >> 16) & 0xFF,
         (mac1 >> 8) & 0xFF,
@@ -748,7 +772,9 @@ void modem_task(void *arg)
                 }
             };
 
-            int ip = get_menu_val_by_id("ip");
+            esp_ip4_addr_t ip;
+            ip.addr = (unsigned int)get_menu_val_by_id("ip");
+
             /*
                                     // ping
                                     // AT+CIPPING
@@ -774,8 +800,10 @@ void modem_task(void *arg)
 
             int socket = 0;
 
-            int tcpport = get_menu_val_by_id("tcpport");
-            int udpport = get_menu_val_by_id("udpport");
+            const int tcpport = get_menu_val_by_id("tcpport");
+            const int udpport = get_menu_val_by_id("udpport");
+
+            int port = tcpport;
 
             if (tcpport > 0)
             {
@@ -784,8 +812,8 @@ void modem_task(void *arg)
             }
             else if (udpport > 0)
             {
+                port = udpport;
                 protocol = 2;
-                tcpport = udpport;
             }
             else
             {
@@ -809,7 +837,7 @@ void modem_task(void *arg)
                     try_counter = 3;
                     while (try_counter--)
                     {
-                        snprintf(send_data, sizeof(send_data), "AT+CSOCON=%i,%i,\"%i.%i.%i.%i\"\r\n", socket, tcpport, (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, (ip) & 0xff);
+                        snprintf(send_data, sizeof(send_data), "AT+CSOCON=%i,%i,\"" IPSTR "\"\r\n", socket, port, IP2STR(&ip));
                         ESP_LOGI(TAG, "%i Socket %i connect...", 3 - try_counter, socket);
                         ee = at_reply_wait_OK(send_data, (char *)data, 60000 / portTICK_PERIOD_MS);
 
