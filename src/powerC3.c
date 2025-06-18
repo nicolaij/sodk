@@ -19,7 +19,11 @@
 static const char *TAG = "power";
 
 // Счетчик разряда батареи
-RTC_DATA_ATTR unsigned int BattLow = 0;
+RTC_DATA_ATTR uint8_t BattLow = 0;
+
+RTC_DATA_ATTR result_t history_data[HISTORY_SIZE];
+RTC_DATA_ATTR uint16_t history_head = 0;
+RTC_DATA_ATTR uint16_t history_tail = 0;
 
 // величина перегрузки измерительного канала ед. АЦП
 #define OVERLOADADC (int)(4095 - (0.03 * 4095.0))
@@ -81,7 +85,7 @@ int terminal_mode = 1;
 const measure_t chan_r[] = {
     {.channel = ADC_CHANNEL_0, .max = 15999, .maxlv = 15999},  // Напряжение акк
     {.channel = ADC_CHANNEL_1, .max = 5999, .maxlv = 159},     // Основной канал (1)
-    {.channel = ADC_CHANNEL_4, .max = 299999, .maxlv = 5999},  // Усиленный канал (2)
+    {.channel = ADC_CHANNEL_4, .max = 599999, .maxlv = 5999},  // Усиленный канал (2)
     {.channel = ADC_CHANNEL_3, .max = 599999, .maxlv = 15999}, // Напряжение 0 проводника
     {.channel = ADC_CHANNEL_2, .max = 599999, .maxlv = 15999}, // Напряжение источника питания
 };
@@ -410,10 +414,10 @@ void adc_task(void *arg)
         {
             ESP_LOGV("pcf8575", "read pcf8575");
 
-            char buf[10];
             d_input = pcf8575_read(IN1_BIT);
             if (d_input != d_in)
             {
+                char buf[10];
                 d_in = d_input;
                 int l = snprintf((char *)buf, sizeof(buf), "IN: %d", d_input);
                 ESP_LOGI("pcf8575", "%s", buf);
@@ -460,8 +464,8 @@ void adc_task(void *arg)
             pulse = 0;
         }
 
-        uint8_t *ptr = (uint8_t *)buffer_ADC;
-        uint8_t *ptr_adc_begin = (uint8_t *)buffer_ADC;
+        uint8_t *ptr = buffer_ADC;
+        uint8_t *ptr_adc_begin = buffer_ADC;
 
         int block = 0;
         int block_power_off = 0;
@@ -507,7 +511,6 @@ void adc_task(void *arg)
 
             while (req > 0)
             {
-
                 ESP_ERROR_CHECK(adc_continuous_read(adc_handle, ptr, req, &ret, ADC_MAX_DELAY));
 
                 ptr = ptr + ret;
@@ -937,7 +940,7 @@ void adc_task(void *arg)
                         // отключаем если при lv измерении напряжение упало ниже минимума
                         if (result.Ubatt1 < UbatEnd)
                         {
-                            BattLow += 100000;
+                            BattLow = 100;
                         }
                     }
                 }
@@ -1012,6 +1015,12 @@ void adc_task(void *arg)
         xQueueSend(send_queue, &result, (TickType_t)0);
         xQueueSend(adc_queue, &sum_adc_full, (TickType_t)0);
 
+        // История
+        history_data[history_head] = result;
+        history_head = (history_head + 1) % HISTORY_SIZE;
+        if (history_head == history_tail)
+            history_tail = (history_tail + 1) % HISTORY_SIZE;
+
         // проверяем изменения U0lv и запускаем hv измерения
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
@@ -1039,10 +1048,9 @@ void adc_task(void *arg)
         // РЕЗУЛЬТАТ
         static char buf[WS_BUF_SIZE];
         // int len_data = snprintf((char *)buf, sizeof(buf), "{\"channel\":\"%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d,\"Temp\":%.01f,\"Flags\":\"0x%04X\"}", result.channel, bootCount + timeoutCounter, get_datetime(result.ttime), result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time, result.flags.value);
-        int len_data = snprintf(buf, WS_BUF_SIZE, OUT_JSON_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
+        int len_data = snprintf(buf, WS_BUF_SIZE, OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
 
-        len_data -= 1;
-        len_data += snprintf(buf + len_data, WS_BUF_SIZE - len_data, OUT_JSON_ADD_COMMON, tsens_out, result.flags.value);
+        len_data += snprintf(buf + len_data, WS_BUF_SIZE - len_data, OUT_ADD_COMMON, tsens_out, result.flags.value);
 
         xRingbufferSend(wsbuf_handle, buf, len_data + 1, 0);
 
@@ -1182,4 +1190,12 @@ int getADC_Data(char *line, int data_pos, const int mode)
     }
 
     return 0;
+};
+
+result_t *get_history_data(int id)
+{
+    int pos = (history_tail + id) % HISTORY_SIZE;
+    if (pos == history_head)
+        return NULL;
+    return &history_data[pos];
 };

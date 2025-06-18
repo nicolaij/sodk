@@ -1,5 +1,6 @@
 #include "main.h"
 #include "driver/uart.h"
+#include "driver/uart_vfs.h"
 #include <stdio.h>
 #include <string.h>
 #include "esp_event.h"
@@ -85,16 +86,16 @@ esp_err_t init_nvs()
 esp_err_t read_nvs_menu()
 {
     // Open
-    esp_err_t err = nvs_open("storage", NVS_READONLY, &my_handle);
-    if (err != ESP_OK)
+    esp_err_t erro = nvs_open("storage", NVS_READONLY, &my_handle);
+    if (erro != ESP_OK)
     {
-        ESP_LOGE("storage", "Error (%s) opening NVS handle!", esp_err_to_name(err));
+        ESP_LOGE("storage", "Error (%s) opening NVS handle!", esp_err_to_name(erro));
     }
     else
     {
         for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
         {
-            err = nvs_get_i32(my_handle, menu[i].id, (int32_t *)&menu[i].val);
+            esp_err_t err = nvs_get_i32(my_handle, menu[i].id, (int32_t *)&menu[i].val);
             switch (err)
             {
             case ESP_OK:
@@ -111,7 +112,7 @@ esp_err_t read_nvs_menu()
         // Close
         nvs_close(my_handle);
     }
-    return err;
+    return erro;
 }
 
 esp_err_t read_nvs_id(const char *key, uint64_t *out_value)
@@ -216,7 +217,7 @@ int get_menu_html(char *buf)
     static int index = 0;
 
     if (index == 0)
-        pos += sprintf(&buf[pos], "<table>");
+        pos = sprintf(buf, "<table>");
 
     for (int i = index; i < sizeof(menu) / sizeof(menu_t); i++)
     {
@@ -242,7 +243,7 @@ int get_menu_html(char *buf)
         {
             pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"%i\"/>%s</td></tr>\n", menu[i].id, menu[i].name, menu[i].id, menu[i].id, menu[i].val, menu[i].izm);
         }
-        else
+        else // hidden
         {
             pos += sprintf(&buf[pos], "<input type=\"hidden\" id=\"%s\" name=\"%s\" value=\"%i\">", menu[i].id, menu[i].id, menu[i].val);
         }
@@ -269,23 +270,6 @@ int get_menu_html(char *buf)
 
 void console_task(void *arg)
 {
-    uint8_t *data = serialbuffer;
-
-    const uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_DEFAULT,
-    };
-    // We won't use a buffer for sending data.
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, sizeof(serialbuffer), 0, 0, NULL, 0));
-    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-
-    ESP_ERROR_CHECK(uart_flush(UART_NUM_0));
-
     int enter_value = 0;
 
     bool NB_terminal_mode = 0;
@@ -299,24 +283,77 @@ void console_task(void *arg)
 
     esp_ip4_addr_t ip_addr;
 
+    // configure_stdin_stdout();
+
+    char *data = (char *)serialbuffer;
+    int pos = 0;
+
     while (1)
     {
-        const int rxBytes = uart_read_bytes(UART_NUM_0, data, 1, 50 / portTICK_PERIOD_MS);
+        const int c = fgetc(stdin);
+        if (c > 0) // EOF = -1
+        {
+            if (c == '\n')
+            {
+                data[pos] = 0;
 
-        // if (rxBytes > 0)
-        // ESP_LOGE(TAG, "%c(%02x)", *data, *data);
+                const int nc = fgetc(stdin); // remove CRLF
+                if (nc != '\n' && nc != '\r')
+                    ungetc(nc, stdin);
+            }
+            else
+            {
+                if (pos < sizeof(serialbuffer))
+                    data[pos++] = c;
+            }
+
+            if (espnow_send)
+            {
+                esp_now_deinit();
+                espnow_send = false;
+            }
+
+            if (n > 100)
+            {
+                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+            }
+        }
+        else
+        {
+            if (espnow_send)
+            {
+                esp_now_send(peerInfo.peer_addr, serialbuffer, ESP_NOW_MAX_DATA_LEN);
+            }
+
+            vTaskDelay(10);
+            continue;
+        }
+
+        /*
+                if (fgets(data + pos, sizeof(serialbuffer) - pos, stdin) != NULL)
+                {
+                    pos = pos + strlen(data + pos);
+
+                    if (fgets(data + pos, sizeof(serialbuffer) - pos, stdin) != NULL) // CRLF replaced \n\n
+                    {
+                        pos = pos + strlen(data + pos);
+                    }
+
+                    //ESP_LOG_BUFFER_HEXDUMP(TAG, data, pos + 1, ESP_LOG_INFO);
+                }
+        */
+        xEventGroupSetBits(status_event_group, SERIAL_TERMINAL_ACTIVE);
 
         if (NB_terminal_mode)
         {
-            if (rxBytes > 0)
+            if (c == '\n')
             {
-                uart_write_bytes(UART_NUM_1, data, rxBytes);
-                // ESP_LOGE(TAG, "%c(%02x)", *data, *data);
-                // print_atcmd("ATI", (char*)data);
-                if (data[rxBytes - 1] == '\n')
-                {
-                    xEventGroupSetBits(status_event_group, SERIAL_TERMINAL_ACTIVE);
-                }
+                const char cl_return = '\r';
+                uart_write_bytes(UART_NUM_1, &cl_return, 1);
+            }
+            else
+            {
+                uart_write_bytes(UART_NUM_1, &c, 1);
             }
 
             while (uart_read_bytes(UART_NUM_1, data, 1, 50 / portTICK_PERIOD_MS) > 0)
@@ -326,311 +363,280 @@ void console_task(void *arg)
             continue;
         }
 
-        if (rxBytes > 0)
+        if (c == '\n')
         {
-            if (data[rxBytes - 1] == '\n')
+            ESP_LOG_BUFFER_HEXDUMP(TAG, data, pos + 1, ESP_LOG_INFO);
+
+            //ESP_LOGD(TAG, "Read bytes: '%s'", data);
+            n = atoi((const char *)data);
+            if (enter_value == 5) // IP сервера
             {
-                xEventGroupSetBits(status_event_group, SERIAL_TERMINAL_ACTIVE);
-
-                if (data[rxBytes - 2] == '\r')
+                int parsed = sscanf((const char *)serialbuffer, "%hhu.%hhu.%hhu.%hhu", &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3]);
+                if (parsed == 4)
                 {
-                    data[rxBytes - 2] = 0;
-                };
-
-                data[rxBytes - 1] = 0;
-                ESP_LOGD(TAG, "Read bytes: '%s'", serialbuffer);
-                // ESP_LOG_BUFFER_HEXDUMP(TAG, data, rxBytes, ESP_LOG_INFO);
-                n = atoi((const char *)serialbuffer);
-                data = serialbuffer;
-                if (enter_value == 5) // IP сервера
-                {
-                    int parsed = sscanf((const char *)serialbuffer, "%hhu.%hhu.%hhu.%hhu", &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3]);
-                    if (parsed == 4)
+                    esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+                    if (err == ESP_OK)
                     {
-                        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
-                        if (err == ESP_OK)
-                        {
-                            esp_ip4_addr_t ip_addr;
-                            ip_addr.addr = (mac_addr[0] << 0) | (mac_addr[1] << 8) | (mac_addr[2] << 16) | (mac_addr[3] << 24);
-                            ESP_LOGD("NVS", "Write  \"%s\" : \"" IPSTR "\"", menu[4].id, IP2STR(&ip_addr));
-                            menu[4].val = (int)ip_addr.addr;
-                            nvs_set_i32(my_handle, menu[4].id, menu[4].val);
-                            nvs_close(my_handle);
-                        }
+                        esp_ip4_addr_t ip_addr;
+                        ip_addr.addr = (mac_addr[0] << 0) | (mac_addr[1] << 8) | (mac_addr[2] << 16) | (mac_addr[3] << 24);
+                        ESP_LOGD("NVS", "Write  \"%s\" : \"" IPSTR "\"", menu[4].id, IP2STR(&ip_addr));
+                        menu[4].val = (int)ip_addr.addr;
+                        nvs_set_i32(my_handle, menu[4].id, menu[4].val);
+                        nvs_close(my_handle);
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "Error IP address format");
+                }
+                enter_value = 0;
+            }
+            else if (enter_value == 8) // MAC ESPNOW!
+            {
+                // Поддержка форматов: 00:1A:2B:3C:4D:5E и 00-1A-2B-3C-4D-5E
+                int parsed = sscanf((const char *)serialbuffer,
+                                    "%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx",
+                                    &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3], &mac_addr[4], &mac_addr[5]);
+
+                if (parsed == 6)
+                {
+                    esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+                    if (err == ESP_OK)
+                    {
+                        ESP_LOGD("NVS", "Write  \"%s\" : \"" MACSTR "\"", menu[7].id, MAC2STR(mac_addr));
+                        menu[7].val = (mac_addr[0] << 16) | (mac_addr[1] << 8) | (mac_addr[2]);
+                        nvs_set_i32(my_handle, menu[7].id, menu[7].val);
+                        menu[8].val = (mac_addr[3] << 16) | (mac_addr[4] << 8) | (mac_addr[5]);
+                        nvs_set_i32(my_handle, menu[8].id, menu[8].val);
+                        nvs_close(my_handle);
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(TAG, "Error MAC format");
+                }
+                enter_value = 0;
+            }
+            else if (enter_value > 0)
+            {
+                if (n >= menu[enter_value - 1].min && n <= menu[enter_value - 1].max)
+                {
+                    menu[enter_value - 1].val = n;
+                    esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+                    if (err != ESP_OK)
+                    {
+                        ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
                     }
                     else
                     {
-                        ESP_LOGE(TAG, "Error IP address format");
-                    }
-                    enter_value = 0;
-                }
-                else if (enter_value == 8) // MAC ESPNOW!
-                {
-                    // Поддержка форматов: 00:1A:2B:3C:4D:5E и 00-1A-2B-3C-4D-5E
-                    int parsed = sscanf((const char *)serialbuffer,
-                                        "%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx",
-                                        &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3], &mac_addr[4], &mac_addr[5]);
-
-                    if (parsed == 6)
-                    {
-                        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
-                        if (err == ESP_OK)
-                        {
-                            ESP_LOGD("NVS", "Write  \"%s\" : \"" MACSTR "\"", menu[7].id, MAC2STR(mac_addr));
-                            menu[7].val = (mac_addr[0] << 16) | (mac_addr[1] << 8) | (mac_addr[2]);
-                            nvs_set_i32(my_handle, menu[7].id, menu[7].val);
-                            menu[8].val = (mac_addr[3] << 16) | (mac_addr[4] << 8) | (mac_addr[5]);
-                            nvs_set_i32(my_handle, menu[8].id, menu[8].val);
-                            nvs_close(my_handle);
-                        }
-                    }
-                    else
-                    {
-                        ESP_LOGE(TAG, "Error MAC format");
-                    }
-                    enter_value = 0;
-                }
-                else if (enter_value > 0)
-                {
-                    if (n >= menu[enter_value - 1].min && n <= menu[enter_value - 1].max)
-                    {
-                        menu[enter_value - 1].val = n;
-                        esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+                        err = nvs_set_i32(my_handle, menu[enter_value - 1].id, menu[enter_value - 1].val);
                         if (err != ESP_OK)
                         {
-                            ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+                            ESP_LOGE(TAG, "%s", esp_err_to_name(err));
                         }
                         else
                         {
-                            err = nvs_set_i32(my_handle, menu[enter_value - 1].id, menu[enter_value - 1].val);
-                            if (err != ESP_OK)
-                            {
-                                ESP_LOGE(TAG, "%s", esp_err_to_name(err));
-                            }
-                            else
-                            {
-                                ESP_LOGI("menu", "-------------------------------------------");
-                                ESP_LOGI("menu", "%2i. %s: %i %s.", enter_value, menu[enter_value - 1].name, menu[enter_value - 1].val, menu[enter_value - 1].izm);
-                                ESP_LOGI("menu", "-------------------------------------------");
-                            }
+                            ESP_LOGI("menu", "-------------------------------------------");
+                            ESP_LOGI("menu", "%2i. %s: %i %s.", enter_value, menu[enter_value - 1].name, menu[enter_value - 1].val, menu[enter_value - 1].izm);
+                            ESP_LOGI("menu", "-------------------------------------------");
                         }
-
-                        // Commit written value.
-                        // After setting any values, nvs_commit() must be called to ensure changes are written
-                        // to flash storage. Implementations may write to storage at other times,
-                        // but this is not guaranteed.
-                        ESP_LOGD(TAG, "Committing updates in NVS ... ");
-                        err = nvs_commit(my_handle);
-                        if (err != ESP_OK)
-                            ESP_LOGE(TAG, "Committing updates in NVS ... - Failed!");
-
-                        // Close
-                        nvs_close(my_handle);
                     }
+
+                    // Commit written value.
+                    // After setting any values, nvs_commit() must be called to ensure changes are written
+                    // to flash storage. Implementations may write to storage at other times,
+                    // but this is not guaranteed.
+                    ESP_LOGD(TAG, "Committing updates in NVS ... ");
+                    err = nvs_commit(my_handle);
+                    if (err != ESP_OK)
+                        ESP_LOGE(TAG, "Committing updates in NVS ... - Failed!");
+
+                    // Close
+                    nvs_close(my_handle);
+                }
+                enter_value = 0;
+            }
+            else
+            {
+                if (n == 5) // IP сервера
+                {
+                    ip_addr.addr = (unsigned int)menu[n - 1].val;
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    ESP_LOGI("menu", "%2i. %s: " IPSTR ". Введите новое значение: ", n, menu[n - 1].name, IP2STR(&ip_addr));
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    enter_value = n;
+                }
+                else if (n == 8) // MAC Address
+                {
+                    mac_addr[0] = (menu[7].val >> 16) & 0xFF;
+                    mac_addr[1] = (menu[7].val >> 8) & 0xFF;
+                    mac_addr[2] = (menu[7].val >> 0) & 0xFF;
+                    mac_addr[3] = (menu[8].val >> 16) & 0xFF;
+                    mac_addr[4] = (menu[8].val >> 8) & 0xFF;
+                    mac_addr[5] = (menu[8].val >> 0) & 0xFF;
+
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    ESP_LOGI("menu", "%2i. %s: " MACSTR ". Введите новое значение: ", n, menu[n - 1].name, MAC2STR(mac_addr));
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    enter_value = n;
+                }
+                else if (n > 0 && n <= sizeof(menu) / sizeof(menu_t))
+                {
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    ESP_LOGI("menu", "%2i. %s: %i %s. Введите новое значение: ", n, menu[n - 1].name, menu[n - 1].val, menu[n - 1].izm);
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    enter_value = n;
+                }
+                else if (n == sizeof(menu) / sizeof(menu_t) + 1) // выводим историю
+                {
+                    /*                        int pos = history_pos + HISTORY_SIZE;
+                                            int end = history_pos;
+                                            ESP_LOGI("menu", "-------------------------------------------");
+                                            ESP_LOGI("menu", "Datetime, Bootcount, " OUT_MEASURE_HEADERS);
+                                            while (pos > end)
+                                            {
+                                                int indx = pos % HISTORY_SIZE;
+
+                                                ESP_LOGI("menu", "%s, %3u, " OUT_MEASURE_FORMATS, get_datetime(history[indx].ttime), history[indx].measure.bootcount, OUT_MEASURE_VARS(history[indx].measure));
+                                                pos--;
+                                            }
+
+                                            ESP_LOGI("menu", "-------------------------------------------");
+                                            enter_value = 0;
+                    */
+                }
+                else if (n == sizeof(menu) / sizeof(menu_t) + 2) // AT терминал NBIoT
+                {
+                    NB_terminal_mode = 1;
+                    xEventGroupSetBits(status_event_group, NB_TERMINAL);
+                    if (xHandleNB)
+                        xTaskNotifyGive(xHandleNB); // если уже уснули
+                    // vTaskSuspend(xHandleNB); // Suspend NBIot task
+                    // wait_max_counter = 3;
+                    enter_value = 0;
+                }
+                else if (n == sizeof(menu) / sizeof(menu_t) + 3) // WiFi
+                {
+                    if (xHandleWifi)
+                        xTaskNotifyGive(xHandleWifi); // включаем WiFi
+                    enter_value = 0;
+                }
+                else if (n == 100)
+                {
+                    pcf8575_set(0);
+                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                    enter_value = 0;
+                }
+                else if (n > 100 && n <= 108) // Тест каналов
+                {
+                    pcf8575_set(n - 100);
+                    enter_value = 0;
+                }
+                else if (n == 110) // Включить LV_measure
+                {
+                    pcf8575_set(LV_MEASUREON);
+                    enter_value = 0;
+                }
+                else if (n == 111) // Включить LV_sw (LV_POWER)
+                {
+                    pcf8575_set(LV_CMDON);
+                    enter_value = 0;
+                }
+                else if (n == 112) // Включить Enable_PWM
+                {
+                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                    enter_value = 0;
+                }
+                else if (n == 113) // Включить Power_ON
+                {
+                    pcf8575_set(POWER_CMDON);
+                    enter_value = 0;
+                }
+                else if (n == 120) // Непрерывная передача ESP-NOW
+                {
+                    if (esp_now_init() == ESP_OK)
+                    {
+                        // ESP_ERROR_CHECK(esp_now_register_send_cb(espnow_send_cb));
+                        esp_now_add_peer(&peerInfo);
+                        esp_err_t result = esp_now_send(peerInfo.peer_addr, serialbuffer, ESP_NOW_MAX_DATA_LEN);
+                        if (result == ESP_OK)
+                        {
+                            ESP_LOGI("ESPNOW", "Start sending espnow..");
+                            espnow_send = true;
+                        }
+                        else
+                        {
+                            ESP_LOGE("ESPNOW", "esp_now_send status 0x%04x", result);
+                        }
+                    }
+                    enter_value = 0;
+                }
+                else if (n == 200) // Измерения каналов c ВВ
+                {
+                    start_measure(-1, 1);
+                    enter_value = 0;
+                }
+                else if (n > 200 && n <= 208) // Измерения каналов
+                {
+                    start_measure(n - 200, 0);
+                    enter_value = 0;
+                }
+                else if (n == 209) // Измерения каналов с POWER ON
+                {
+                    start_measure(-1, 5);
+                    enter_value = 0;
+                }
+                else if (n == 210) // Измерения каналов
+                {
+                    start_measure(-1, 4);
                     enter_value = 0;
                 }
                 else
                 {
-                    if (n == 5) // IP сервера
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    int i = 0;
+                    for (i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
                     {
-                        ip_addr.addr = (unsigned int)menu[n - 1].val;
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        ESP_LOGI("menu", "%2i. %s: " IPSTR ". Введите новое значение: ", n, menu[n - 1].name, IP2STR(&ip_addr));
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        enter_value = n;
-                    }
-                    else if (n == 8) // MAC Address
-                    {
-                        mac_addr[0] = (menu[7].val >> 16) & 0xFF;
-                        mac_addr[1] = (menu[7].val >> 8) & 0xFF;
-                        mac_addr[2] = (menu[7].val >> 0) & 0xFF;
-                        mac_addr[3] = (menu[8].val >> 16) & 0xFF;
-                        mac_addr[4] = (menu[8].val >> 8) & 0xFF;
-                        mac_addr[5] = (menu[8].val >> 0) & 0xFF;
-
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        ESP_LOGI("menu", "%2i. %s: " MACSTR ". Введите новое значение: ", n, menu[n - 1].name, MAC2STR(mac_addr));
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        enter_value = n;
-                    }
-                    else if (n > 0 && n <= sizeof(menu) / sizeof(menu_t))
-                    {
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        ESP_LOGI("menu", "%2i. %s: %i %s. Введите новое значение: ", n, menu[n - 1].name, menu[n - 1].val, menu[n - 1].izm);
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        enter_value = n;
-                    }
-                    else if (n == sizeof(menu) / sizeof(menu_t) + 1) // выводим историю
-                    {
-                        /*                        int pos = history_pos + HISTORY_SIZE;
-                                                int end = history_pos;
-                                                ESP_LOGI("menu", "-------------------------------------------");
-                                                ESP_LOGI("menu", "Datetime, Bootcount, " OUT_MEASURE_HEADERS);
-                                                while (pos > end)
-                                                {
-                                                    int indx = pos % HISTORY_SIZE;
-
-                                                    ESP_LOGI("menu", "%s, %3u, " OUT_MEASURE_FORMATS, get_datetime(history[indx].ttime), history[indx].measure.bootcount, OUT_MEASURE_VARS(history[indx].measure));
-                                                    pos--;
-                                                }
-
-                                                ESP_LOGI("menu", "-------------------------------------------");
-                                                enter_value = 0;
-                        */
-                    }
-                    else if (n == sizeof(menu) / sizeof(menu_t) + 2) // AT терминал NBIoT
-                    {
-                        NB_terminal_mode = 1;
-                        xEventGroupSetBits(status_event_group, NB_TERMINAL);
-                        if (xHandleNB)
-                            xTaskNotifyGive(xHandleNB); // если уже уснули
-                        // vTaskSuspend(xHandleNB); // Suspend NBIot task
-                        // wait_max_counter = 3;
-                        enter_value = 0;
-                    }
-                    else if (n == sizeof(menu) / sizeof(menu_t) + 3) // WiFi
-                    {
-                        if (xHandleWifi)
-                            xTaskNotifyGive(xHandleWifi); // включаем WiFi
-                        enter_value = 0;
-                    }
-                    else if (n == 100)
-                    {
-                        pcf8575_set(0);
-                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                        enter_value = 0;
-                    }
-                    else if (n > 100 && n <= 108) // Тест каналов
-                    {
-                        pcf8575_set(n - 100);
-                        enter_value = 0;
-                    }
-                    else if (n == 110) // Включить LV_measure
-                    {
-                        pcf8575_set(LV_MEASUREON);
-                        enter_value = 0;
-                    }
-                    else if (n == 111) // Включить LV_sw (LV_POWER)
-                    {
-                        pcf8575_set(LV_CMDON);
-                        enter_value = 0;
-                    }
-                    else if (n == 112) // Включить Enable_PWM
-                    {
-                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
-                        enter_value = 0;
-                    }
-                    else if (n == 113) // Включить Power_ON
-                    {
-                        pcf8575_set(POWER_CMDON);
-                        enter_value = 0;
-                    }
-                    else if (n == 120) // Непрерывная передача ESP-NOW
-                    {
-                        if (esp_now_init() == ESP_OK)
+                        if (i == 4) // IP сервера
                         {
-                            // ESP_ERROR_CHECK(esp_now_register_send_cb(espnow_send_cb));
-                            esp_now_add_peer(&peerInfo);
-                            esp_err_t result = esp_now_send(peerInfo.peer_addr, serialbuffer, ESP_NOW_MAX_DATA_LEN);
-                            if (result == ESP_OK)
-                            {
-                                ESP_LOGI("ESPNOW", "Start sending espnow..");
-                                espnow_send = true;
-                            }
-                            else
-                            {
-                                ESP_LOGE("ESPNOW", "esp_now_send status 0x%04x", result);
-                            }
+                            ip_addr.addr = (unsigned int)menu[i].val;
+                            ESP_LOGI("menu", "%2i. %s: " IPSTR, i + 1, menu[i].name, IP2STR(&ip_addr));
                         }
-                        enter_value = 0;
-                    }
-                    else if (n == 200) // Измерения каналов c ВВ
-                    {
-                        start_measure(-1, 1);
-                        enter_value = 0;
-                    }
-                    else if (n > 200 && n <= 208) // Измерения каналов
-                    {
-                        start_measure(n - 200, 0);
-                        enter_value = 0;
-                    }
-                    else if (n == 209) // Измерения каналов с POWER ON
-                    {
-                        start_measure(-1, 5);
-                        enter_value = 0;
-                    }
-                    else if (n == 210) // Измерения каналов
-                    {
-                        start_measure(-1, 4);
-                        enter_value = 0;
-                    }
-                    else
-                    {
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        int i = 0;
-                        for (i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
+                        else if (i == 7) // MAC
                         {
-                            if (i == 4) // IP сервера
-                            {
-                                ip_addr.addr = (unsigned int)menu[i].val;
-                                ESP_LOGI("menu", "%2i. %s: " IPSTR, i + 1, menu[i].name, IP2STR(&ip_addr));
-                            }
-                            else if (i == 7) // MAC
-                            {
-                                mac_addr[0] = (menu[7].val >> 16) & 0xFF;
-                                mac_addr[1] = (menu[7].val >> 8) & 0xFF;
-                                mac_addr[2] = (menu[7].val >> 0) & 0xFF;
-                                mac_addr[3] = (menu[8].val >> 16) & 0xFF;
-                                mac_addr[4] = (menu[8].val >> 8) & 0xFF;
-                                mac_addr[5] = (menu[8].val >> 0) & 0xFF;
-                                ESP_LOGI("menu", "%2i. %s: " MACSTR, i + 1, menu[i].name, MAC2STR(mac_addr));
-                            }
-                            else if (strlen(menu[i].name) > 0)
-                                ESP_LOGI("menu", "%2i. %s: %i %s", i + 1, menu[i].name, menu[i].val, menu[i].izm);
+                            mac_addr[0] = (menu[7].val >> 16) & 0xFF;
+                            mac_addr[1] = (menu[7].val >> 8) & 0xFF;
+                            mac_addr[2] = (menu[7].val >> 0) & 0xFF;
+                            mac_addr[3] = (menu[8].val >> 16) & 0xFF;
+                            mac_addr[4] = (menu[8].val >> 8) & 0xFF;
+                            mac_addr[5] = (menu[8].val >> 0) & 0xFF;
+                            ESP_LOGI("menu", "%2i. %s: " MACSTR, i + 1, menu[i].name, MAC2STR(mac_addr));
                         }
-
-                        ESP_LOGI("menu", "%2i. История: %i", ++i, bootCount);
-                        ESP_LOGI("menu", "%2i. AT терминал NBIoT", ++i);
-                        ESP_LOGI("menu", "%2i. Start WiFi", ++i);
-                        ESP_LOGI("menu", "100. Сброс выходов");
-                        ESP_LOGI("menu", "101 - 108. Включить канал");
-                        ESP_LOGI("menu", "110. Включить LV_measure");
-                        ESP_LOGI("menu", "111. Включить LV_sw");
-                        ESP_LOGI("menu", "112. ! Включить Enable_PWM !");
-                        ESP_LOGI("menu", "113. Включить Power_ON");
-                        ESP_LOGI("menu", "120. ESP-NOW transmit");
-                        ESP_LOGI("menu", "200. Измерение ВВ без подключ. канала");
-                        ESP_LOGI("menu", "201 - 208. Измерение канала 1 - 8");
-                        ESP_LOGI("menu", "209. Измерение c POWER_ON и подключ. канала");
-                        ESP_LOGI("menu", "210. Измерение без ВВ и подключ. канала");
-                        ESP_LOGI("menu", "-------------------------------------------");
-                        enter_value = 0;
+                        else if (strlen(menu[i].name) > 0)
+                            ESP_LOGI("menu", "%2i. %s: %i %s", i + 1, menu[i].name, menu[i].val, menu[i].izm);
                     }
+
+                    ESP_LOGI("menu", "%2i. История: %i", ++i, bootCount);
+                    ESP_LOGI("menu", "%2i. AT терминал NBIoT", ++i);
+                    ESP_LOGI("menu", "%2i. Start WiFi", ++i);
+                    ESP_LOGI("menu", "100. Сброс выходов");
+                    ESP_LOGI("menu", "101 - 108. Включить канал");
+                    ESP_LOGI("menu", "110. Включить LV_measure");
+                    ESP_LOGI("menu", "111. Включить LV_sw");
+                    ESP_LOGI("menu", "112. ! Включить Enable_PWM !");
+                    ESP_LOGI("menu", "113. Включить Power_ON");
+                    ESP_LOGI("menu", "120. ESP-NOW transmit");
+                    ESP_LOGI("menu", "200. Измерение ВВ без подключ. канала");
+                    ESP_LOGI("menu", "201 - 208. Измерение канала 1 - 8");
+                    ESP_LOGI("menu", "209. Измерение c POWER_ON и подключ. канала");
+                    ESP_LOGI("menu", "210. Измерение без ВВ и подключ. канала");
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    enter_value = 0;
                 }
             }
-            else
-            {
-                data = data + rxBytes;
-                if (data >= serialbuffer + sizeof(serialbuffer))
-                    data = serialbuffer;
-
-                if (espnow_send)
-                {
-                    esp_now_deinit();
-                    espnow_send = false;
-                }
-
-                if (n > 100)
-                {
-                    // pcf8575_set(0);
-                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-                }
-            }
+            pos = 0;
         }
 
-        if (espnow_send)
-        {
-            esp_now_send(peerInfo.peer_addr, serialbuffer, ESP_NOW_MAX_DATA_LEN);
-        }
+        vTaskDelay(1);
     }
 }

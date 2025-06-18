@@ -19,7 +19,7 @@ static const int RX_BUF_SIZE = 1024;
 static const int TX_BUF_SIZE = 512;
 static const char *TAG = "NBIoT";
 
-char pdp_ip[20];
+esp_ip4_addr_t pdp_ip;
 char net_status_current[32];
 
 RTC_DATA_ATTR bool first_run_completed = false;
@@ -107,7 +107,7 @@ esp_err_t print_atcmd(const char *cmd, char *buffer)
     if (len < 4)
     {
         return ESP_FAIL;
-    };
+    }
 
     buffer[len] = '\0';
     ESP_LOGD(TAG, "Receive string:\"%s\"", (char *)buffer);
@@ -122,6 +122,7 @@ esp_err_t wait_string(char *buffer, const char *wait, TickType_t ticks_to_wait)
 
     int64_t start_time = esp_timer_get_time();
     char *pb = buffer;
+    int compare_len = 0;
     *pb = '\0';
     esp_err_t res = ESP_ERR_TIMEOUT;
     do
@@ -131,14 +132,15 @@ esp_err_t wait_string(char *buffer, const char *wait, TickType_t ticks_to_wait)
         if (len > 0)
         {
             pb += len;
+            compare_len += len;
             *pb = '\0';
 
-            if (strnstr((const char *)buffer, wait, 100) != NULL)
+            if (strnstr((const char *)buffer, wait, compare_len) != NULL)
             {
                 res = ESP_OK;
                 break;
             }
-            else if (strnstr((const char *)buffer, err, 100) != NULL)
+            else if (strnstr((const char *)buffer, err, compare_len) != NULL)
             {
                 res = ESP_ERR_INVALID_STATE;
                 break;
@@ -226,21 +228,14 @@ esp_err_t at_reply_get(const char *cmd, const char *wait, char *buffer, int *res
 /*
  Send Data to Remote Via Socket With Data Mode
 */
-esp_err_t at_csosend(int socket, char *data, char *buffer)
+esp_err_t at_csosend(int socket, char *data, char *buffer, int len_data)
 {
     esp_err_t res = ESP_FAIL;
-    char buf[14];
-    int len_data = strlen(data);
+    char buf[20];
 
-    snprintf(buf, sizeof(buf), "AT+CSOSEND=%d,", socket);
-    int txBytes = uart_write_bytes(UART_NUM_1, buf, strlen(buf));
+    int l = snprintf(buf, sizeof(buf), "AT+CSOSEND=%d,%d,", socket, len_data * 2);
+    int txBytes = uart_write_bytes(UART_NUM_1, buf, l);
     if (txBytes < 4)
-    {
-        return ESP_ERR_INVALID_SIZE;
-    }
-    snprintf(buf, sizeof(buf), "%d,", len_data * 2);
-    txBytes = uart_write_bytes(UART_NUM_1, buf, strlen(buf));
-    if (txBytes < 3)
     {
         return ESP_ERR_INVALID_SIZE;
     }
@@ -263,22 +258,15 @@ esp_err_t at_csosend(int socket, char *data, char *buffer)
     return res;
 }
 
-esp_err_t at_csosend_wait_SEND(int socket, char *data, char *buffer)
+esp_err_t at_csosend_wait_SEND(int socket, char *data, char *buffer, int len_data)
 {
     esp_err_t res = ESP_FAIL;
 
-    char buf[14];
-    int len_data = strlen(data);
+    char buf[20];
 
-    snprintf(buf, sizeof(buf), "AT+CSOSEND=%d,", socket);
-    int txBytes = uart_write_bytes(UART_NUM_1, buf, strlen(buf));
+    int l = snprintf(buf, sizeof(buf), "AT+CSOSEND=%d,%d,", socket, len_data * 2);
+    int txBytes = uart_write_bytes(UART_NUM_1, buf, l);
     if (txBytes < 4)
-    {
-        return ESP_ERR_INVALID_SIZE;
-    }
-    snprintf(buf, sizeof(buf), "%d,", len_data * 2);
-    txBytes = uart_write_bytes(UART_NUM_1, buf, strlen(buf));
-    if (txBytes < 3)
     {
         return ESP_ERR_INVALID_SIZE;
     }
@@ -410,8 +398,8 @@ void modem_task(void *arg)
         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
         .source_clk = UART_SCLK_DEFAULT,
     };
-    // We won't use a buffer for sending data.
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, RX_BUF_SIZE * 2, 0, 0, NULL, 0));
+
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, RX_BUF_SIZE, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
@@ -433,7 +421,7 @@ void modem_task(void *arg)
         (mac2 >> 0) & 0xFF,
     };
 
-    if (mac2 > 0 || mac2 > 0)
+    if (mac1 > 0 || mac2 > 0)
     {
         protocol = 0;
     }
@@ -663,76 +651,27 @@ void modem_task(void *arg)
             }
             else
             {
-                int dt[] = {0, 0, 0, 0, 0, 0, 0, 0};
-                const char *pdata = strstr((const char *)data, "CCLK:");
-
                 //+CCLK: 24/04/30,07:49:36+12
-                char *s = strchr(pdata, ' ');
-                if (s)
+                int dt[6] = {0, 0, 0, 0, 0, 0};
+                const char *pdata = strstr((const char *)data, "CCLK: ");
+                int parsed = sscanf((const char *)(pdata + 6), "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
+                if (parsed == 6)
                 {
-                    // year
-                    dt[0] = atoi(s + 1);
-                    if (dt[0] >= 0 && dt[0] < 100)
-                        dt[0] = dt[0] + 2000;
-                    s = strchr(s + 1, '/');
-                    if (s)
-                    {
-                        // month
-                        dt[1] = atoi(s + 1);
-                        s = strchr(s + 1, '/');
-                        if (s)
-                        {
-                            // day
-                            dt[2] = atoi(s + 1);
-                            s = strchr(s + 1, ',');
-                            if (s)
-                            {
-                                // hour
-                                dt[3] = atoi(s + 1);
-                                s = strchr(s + 1, ':');
-                                if (s)
-                                {
-                                    // minute
-                                    dt[4] = atoi(s + 1);
-                                    s = strchr(s + 1, ':');
-                                    if (s)
-                                    {
-                                        // second
-                                        dt[5] = atoi(s + 1);
+                    struct tm tm;
+                    tm.tm_year = (dt[0] > 1900) ? dt[0] - 1900 : dt[0] + 100;
+                    tm.tm_mon = dt[1] - 1;
+                    tm.tm_mday = dt[2];
+                    tm.tm_hour = dt[3];
+                    tm.tm_min = dt[4];
+                    tm.tm_sec = dt[5];
 
-                                        // + - timezone
-                                        dt[6] = 0;
-                                        char *tzs = strchr(s + 1, '-');
-                                        if (!tzs)
-                                        {
-                                            tzs = strchr(s + 1, '+');
-                                        }
+                    const int timezone = 3; // FORCE TIMEZONE
 
-                                        if (tzs)
-                                        {
-                                            dt[6] = atoi(tzs);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    time_t t = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
+                    struct timeval now = {.tv_sec = t};
+                    settimeofday(&now, NULL);
+                    ESP_LOGI(TAG, "Set date and time: %s", get_datetime(t));
                 }
-
-                struct tm tm;
-                tm.tm_year = dt[0] - 1900;
-                tm.tm_mon = dt[1] - 1;
-                tm.tm_mday = dt[2];
-                tm.tm_hour = dt[3];
-                tm.tm_min = dt[4];
-                tm.tm_sec = dt[5];
-
-                dt[6] = 3; // FORCE TIMEZONE
-
-                time_t t = mktime(&tm) + dt[6] * 3600; // UNIX time + timezone offset
-                struct timeval now = {.tv_sec = t};
-                settimeofday(&now, NULL);
-                ESP_LOGI(TAG, "Set date and time: %s", get_datetime(t));
             }
 
             // Show the Complete PDP Address
@@ -744,31 +683,23 @@ void modem_task(void *arg)
             }
             else
             {
-                const char *pdata = strstr((const char *)data, "IPCONFIG:");
-                const char *s = strchr(pdata, ' ');
-                if (s)
+                const char *s = strstr((const char *)data, "IPCONFIG: ");
+                int parsed = sscanf((const char *)(s + 10), "%hhu.%hhu.%hhu.%hhu", &((uint8_t *)(&pdp_ip.addr))[0], &((uint8_t *)(&pdp_ip.addr))[1], &((uint8_t *)(&pdp_ip.addr))[2], &((uint8_t *)(&pdp_ip.addr))[3]);
+                if (parsed == 4)
                 {
-                    char *s_end = strchr(s, '\r');
-                    if (s_end)
-                        *s_end = 0;
-
-                    strncpy(pdp_ip, s + 1, 18);
-                };
-
-                strncpy(pdp_ip, s + 1, 18);
-
-                // если нет нормального IP - рестарт модуля
-                if (atoi(pdp_ip) == 127)
-                {
-                    ESP_LOGE(TAG, "IP: %s", pdp_ip);
-                    print_atcmd("AT+CPOWD=1\r\n", data);
-                    first_run_completed = false;
-                    vTaskDelay(2000 / portTICK_PERIOD_MS);
-                    continue;
-                }
-                else
-                {
-                    ESP_LOGI(TAG, "IP: %s", pdp_ip);
+                    // если нет нормального IP - рестарт модуля
+                    if (esp_ip4_addr1(&pdp_ip) == 127)
+                    {
+                        ESP_LOGE(TAG, "IP: " IPSTR, IP2STR(&pdp_ip));
+                        print_atcmd("AT+CPOWD=1\r\n", data);
+                        first_run_completed = false;
+                        vTaskDelay(2000 / portTICK_PERIOD_MS);
+                        continue;
+                    }
+                    else
+                    {
+                        ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&pdp_ip));
+                    }
                 }
             };
 
@@ -847,23 +778,23 @@ void modem_task(void *arg)
                             result_t result;
                             while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
                             {
-                                int l = snprintf(send_data, sizeof(send_data), OUT_JSON_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
+                                int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
 
                                 if (common_data_transmit == false)
                                 {
-                                    l -= 1;
-                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_JSON_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113);
-                                    l -= 1;
-                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_JSON_ADD_COMMON, tsens_out, result.flags.value);
+                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113);
+                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out, result.flags.value);
                                 }
+
+                                l += snprintf(send_data + l, sizeof(send_data) - l, "}");
 
                                 ESP_LOGD(TAG, "Send... %s", send_data);
 
                                 if (protocol == 1) // TCP
-                                    ee = at_csosend_wait_SEND(socket, send_data, (char *)data);
+                                    ee = at_csosend_wait_SEND(socket, send_data, (char *)data, l);
 
                                 if (protocol == 2) // UDP
-                                    ee = at_csosend(socket, send_data, (char *)data);
+                                    ee = at_csosend(socket, send_data, (char *)data, l);
 
                                 if (ee == ESP_OK)
                                 {
@@ -953,33 +884,33 @@ void modem_task(void *arg)
             result_t result;
             while (pdTRUE == xQueueReceive(send_queue, &result, 10000 / portTICK_PERIOD_MS))
             {
-                int l = snprintf(send_data, sizeof(send_data), OUT_JSON_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
+                int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
 
                 if (common_data_transmit == false)
                 {
-                    l -= 1;
-                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_JSON_ADD_COMMON, tsens_out, result.flags.value);
+                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out, result.flags.value);
 
                     common_data_transmit = true;
                 }
+                l += snprintf(send_data + l, sizeof(send_data) - l, "}");
 
                 int try = 2;
-                esp_err_t result;
+                esp_err_t err;
                 do
                 {
-                    result = esp_now_send(mac_addr, (uint8_t *)send_data, l);
-                    if (result == ESP_OK || --try == 0)
+                    err = esp_now_send(mac_addr, (uint8_t *)send_data, l);
+                    if (err == ESP_OK || --try == 0)
                         break;
                     vTaskDelay(100 / portTICK_PERIOD_MS);
-                } while (result != ESP_OK);
+                } while (err != ESP_OK);
 
-                if (result == ESP_OK)
+                if (err == ESP_OK)
                 {
                     ESP_LOGI("ESPNOW", "Message sent successfully");
                 }
                 else
                 {
-                    ESP_LOGE("ESPNOW", "Error sending message: %s to " MACSTR, esp_err_to_name(result), MAC2STR(mac_addr));
+                    ESP_LOGE("ESPNOW", "Error sending message: %s to " MACSTR, esp_err_to_name(err), MAC2STR(mac_addr));
                 }
 
                 // wait 1s for reply from server

@@ -25,7 +25,7 @@
 
 i2c_master_dev_handle_t dev_handle_pcf;
 
-RTC_DATA_ATTR int bootCount = 0;
+RTC_DATA_ATTR unsigned int bootCount = 0;
 
 float tsens_out = 0;
 
@@ -197,10 +197,6 @@ void pcf8575_set(int channel_cmd)
     {
         i2c_err = 1;
         ESP_LOGE("pcf8575", "Error transmit");
-    }
-    else
-    {
-        // ESP_LOGD("pcf8575", "cmd: %3d set: 0x%04X", channel_cmd, port_val);
     }
 }
 
@@ -423,7 +419,7 @@ esp_err_t start_adc_calibrate()
     return ESP_FAIL;
 }
 
-void app_main()
+void app_main(void)
 {
     char buf[40];
 
@@ -573,7 +569,7 @@ void app_main()
 
     xTaskCreate(wifi_task, "wifi_task", 1024 * 3, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
 
-    xTaskCreate(console_task, "console_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
+    xTaskCreate(console_task, "console_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
@@ -583,8 +579,8 @@ void app_main()
 
     vTaskPrioritySet(NULL, configMAX_PRIORITIES - 7);
 
-    const int Trepeatlv = get_menu_val_by_id("Trepeatlv");
-    const int Trepeathv = get_menu_val_by_id("Trepeathv");
+    int Trepeatlv = get_menu_val_by_id("Trepeatlv");
+    int Trepeathv = get_menu_val_by_id("Trepeathv");
 
     if (start_adc_init) // АВТОКАЛИБРОВКА ADC
     {
@@ -688,6 +684,7 @@ void app_main()
     }
 
     // коррекция на время работы
+    Trepeatlv = get_menu_val_by_id("Trepeatlv"); //а вдруг уже настройки поменялись
     uint64_t time_in_us = StoUS(Trepeatlv * (BattLow + 1) * 60) - (esp_timer_get_time() % StoUS(Trepeatlv * 60));
     // uint64_t time_in_us = StoUS(Trepeatlv * (BattLow + 1) * 60);
 

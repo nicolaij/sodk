@@ -23,7 +23,7 @@
 #include <arpa/inet.h>
 
 extern uint8_t mac[6];
-extern char pdp_ip[20];
+extern esp_ip4_addr_t pdp_ip;
 extern char net_status_current[32];
 
 #define CLIENT_WIFI_SSID "ap1"
@@ -290,22 +290,16 @@ static esp_err_t download_get_handler(httpd_req_t *req)
 
 static esp_err_t menu_get_handler(httpd_req_t *req)
 {
-    reset_sleep_timeout();
-
     int l = 0;
-
-    // l += snprintf(&network_buf[l], TRANSFER_SIZE - l, OUT_JSON, get_menu_val_by_id("idn"), result.measure.bootcount, get_datetime(result.ttime), OUT_MEASURE_VARS(result.measure));
 
     const esp_app_desc_t *app_ver = esp_app_get_description();
 
     l += snprintf(&network_buf[l], TRANSFER_SIZE - l, "Firmware: %s (%s) MAC:" MACSTR, app_ver->version, app_ver->date, MAC2STR(mac));
-
     l += snprintf(&network_buf[l], TRANSFER_SIZE - l, ", STATUS: ");
-
     l += snprintf(&network_buf[l], TRANSFER_SIZE - l, ", NB-IoT: <b>%s</b> ", net_status_current);
 
-    if (strlen(pdp_ip) > 0)
-        l += snprintf(&network_buf[l], TRANSFER_SIZE - l, ", IP: %s", pdp_ip);
+    if (pdp_ip.addr > 0)
+        l += snprintf(&network_buf[l], TRANSFER_SIZE - l, ", IP: " IPSTR, IP2STR(&pdp_ip));
 
     httpd_resp_send_chunk(req, network_buf, l);
 
@@ -351,7 +345,6 @@ static esp_err_t menu_post_handler(httpd_req_t *req)
 
     char *s = network_buf;
     char name[16];
-    int v;
     int mac2 = 0;
     uint8_t mac_addr[6];
     while (s && s < (network_buf + req->content_len))
@@ -360,7 +353,7 @@ static esp_err_t menu_post_handler(httpd_req_t *req)
         *e = '\0';
         strncpy(name, s, sizeof(name));
 
-        v = 0;
+        int v = 0;
         if (strlen(name) == 2 && strncmp(name, "ip", 2) == 0)
         {
             int parsed = sscanf((const char *)e + 1, "%hhu.%hhu.%hhu.%hhu", &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3]);
@@ -606,6 +599,58 @@ esp_err_t update_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+esp_err_t get_history(httpd_req_t *req)
+{
+    int l = 0;
+    reset_sleep_timeout();
+
+    httpd_resp_set_type(req, "text/csv");
+    httpd_resp_set_hdr(req, "Connection", "close");
+
+    int pos = 0;
+    result_t *presult = NULL;
+    do
+    {
+        presult = get_history_data(pos++);
+
+        if (!presult)
+            break;
+
+        l += snprintf(network_buf + l, (TRANSFER_SIZE - l), OUT_CHANNEL ",\"Flags\":\"0x%04X\"\n", get_menu_val_by_id("idn"), presult->channel, bootCount, get_datetime(presult->ttime), OUT_DATA_CHANNEL((*presult)), presult->flags.value);
+
+        if ((TRANSFER_SIZE - l) < sizeof(OUT_CHANNEL) * 2)
+        {
+            if (httpd_resp_send_chunk(req, network_buf, l) != ESP_OK)
+            {
+                ESP_LOGE("WWW", "History sending failed!");
+                /* Abort sending file */
+                ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_sendstr_chunk(req, NULL));
+                /* Respond with 500 Internal Server Error */
+                ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file"));
+                return ESP_FAIL;
+            }
+            l = 0;
+        }
+    } while (pos < HISTORY_SIZE);
+
+    if (l > 0)
+    {
+        if (httpd_resp_send_chunk(req, network_buf, l) != ESP_OK)
+        {
+            ESP_LOGE("WWW", "History sending failed!");
+            /* Abort sending file */
+            ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_sendstr_chunk(req, NULL));
+            /* Respond with 500 Internal Server Error */
+            ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file"));
+            return ESP_FAIL;
+        }
+    }
+
+    /* Respond with an empty chunk to signal HTTP response completion */
+    ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_resp_send_chunk(req, NULL, 0));
+    return ESP_OK;
+};
+
 httpd_handle_t ws_hd;
 int ws_fd[5] = {0, 0, 0, 0, 0};
 
@@ -714,15 +759,13 @@ static const httpd_uri_t main_page = {
     .uri = "/",
     .method = HTTP_GET,
     .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = "text/html"}),
-};
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = "text/html"})};
 
 static const httpd_uri_t menu_page = {
     .uri = "/menu",
     .method = HTTP_GET,
     .handler = menu_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = "text/html"}),
-};
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = "text/html"})};
 
 static const httpd_uri_t menu_post = {
     .uri = "/",
@@ -734,20 +777,25 @@ static const httpd_uri_t file_download = {
     .uri = "/d",
     .method = HTTP_GET,
     .handler = download_ADCdata_handler,
-    .is_websocket = false,
-};
+    .is_websocket = false};
 
-httpd_uri_t update_get = {
+static const httpd_uri_t update_get = {
     .uri = "/update",
     .method = HTTP_GET,
     .handler = download_get_handler,
     .user_ctx = &((down_data_t){.filepath = "/spiffs/update.html", .content = "text/html"}),
     .is_websocket = false};
 
-httpd_uri_t update_post = {
+static const httpd_uri_t update_post = {
     .uri = "/update",
     .method = HTTP_POST,
     .handler = update_post_handler,
+    .user_ctx = NULL};
+
+static const httpd_uri_t history_get = {
+    .uri = "/history",
+    .method = HTTP_GET,
+    .handler = get_history,
     .user_ctx = NULL};
 
 static const httpd_uri_t favicon_ico = {
@@ -756,25 +804,12 @@ static const httpd_uri_t favicon_ico = {
     .handler = download_get_handler,
     .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon.ico", .content = "image/x-icon"}),
     .is_websocket = false};
-/*
-static const httpd_uri_t favicon_png16 = {
-    .uri = "/favicon-16x16.png",
-    .method = HTTP_GET,
-    .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon-16x16.png", .content = "image/png"}),
-    .is_websocket = false};
-static const httpd_uri_t favicon_png32 = {
-    .uri = "/favicon-32x32.png",
-    .method = HTTP_GET,
-    .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/favicon-32x32.png", .content = "image/png"}),
-    .is_websocket = false};
-*/
+
 static const httpd_uri_t d3_get = {
     .uri = "/d3",
     .method = HTTP_GET,
     .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/testD3.html", .content = "text/html"}),
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/D3.html", .content = "text/html"}),
     .is_websocket = false};
 
 static const httpd_uri_t d3_get_gz = {
@@ -819,8 +854,8 @@ static httpd_handle_t start_webserver(void)
         httpd_register_uri_handler(server, &d3_get);
         httpd_register_uri_handler(server, &d3_get_gz);
         httpd_register_uri_handler(server, &favicon_ico);
-        // httpd_register_uri_handler(server, &favicon_png16);
-        // httpd_register_uri_handler(server, &favicon_png32);
+
+        httpd_register_uri_handler(server, &history_get);
 
         httpd_register_uri_handler(server, &update_post);
         httpd_register_uri_handler(server, &update_get);

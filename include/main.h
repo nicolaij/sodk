@@ -20,6 +20,8 @@
 // размер кольцевого буфера (только степень 2)
 #define RINGBUFLEN (1 << 11)
 
+#define HISTORY_SIZE 100
+
 #define ADC_COUNT_READ 5
 #define ADC_FREQ (10000 * ADC_COUNT_READ)
 #define ADC_BUFFER (ADC_FREQ / 1000 * 4) // размер буфера данных для выборки 1 mc
@@ -157,14 +159,14 @@ extern TaskHandle_t xHandleNB;
 #define NOTYFY_WIFI_ESPNOW BIT2
 #define NOTYFY_WIFI_REBOOT BIT3
 
-#define OUT_JSON_ADD_NBCOMMON ",\"NBPower\":%.3f,\"RSSI\":%i}"
-#define OUT_JSON_ADD_COMMON ",\"Temp\":%.01f,\"Flags\":\"0x%04X\"}"
-#define OUT_JSON_CHANNEL "{\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"U0\":%d,\"Ubatt1\":%d,\"time\":%d}"
+#define OUT_ADD_NBCOMMON ",\"NBbatt\":%.3f,\"RSSI\":%i"
+#define OUT_ADD_COMMON ",\"Temp\":%.01f,\"Flags\":\"0x%04X\""
+#define OUT_CHANNEL "\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"U0\":%d,\"Ubatt1\":%d,\"time\":%d"
 #define OUT_DATA_CHANNEL(prefix) prefix.U, prefix.R, prefix.U0, prefix.Ubatt1, prefix.time
 
-extern int bootCount;
+extern unsigned int bootCount;
 extern int terminal_mode;
-extern unsigned int BattLow;
+extern uint8_t BattLow;
 extern float tsens_out;
 
 void adc_task(void *arg);
@@ -220,5 +222,6 @@ esp_err_t set_menu_val_by_id(const char *id, int value);
 
 char *get_datetime(time_t ttime);
 int get_menu_html(char *buf);
+result_t *get_history_data(int id);
 
 #endif
