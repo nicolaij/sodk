@@ -140,6 +140,8 @@ extern RingbufHandle_t wsbuf_handle;
 extern EventGroupHandle_t status_event_group;
 
 extern TaskHandle_t xHandleNB;
+extern TaskHandle_t xHandleADC;
+extern TaskHandle_t xHandleConsole;
 
 // Конец измерений и флаги
 #define END_MEASURE BIT0

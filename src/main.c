@@ -562,9 +562,9 @@ void app_main(void)
 
     xTaskCreate(wifi_task, "wifi_task", 1024 * 3, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
 
-    xTaskCreate(console_task, "console_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
+    xTaskCreate(console_task, "console_task", 1024 * 3, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
 
-    // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
+        // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
     xTaskCreate(modem_task, "modem_task", 1024 * 4, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
