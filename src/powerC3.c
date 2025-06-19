@@ -64,8 +64,6 @@ uint16_t buffer_tail = 0;
 static uint8_t buffer_ADC[ADC_BUFFER + sizeof(adc_digi_output_data_t) * 4];
 static uint8_t buffer_ADC_copy[ADC_BUFFER * 400];
 
-int d_input; // состояние внешнего входа (-1 - состояние отправлено через модем)
-
 #define ON_BLOCK 10
 
 typedef struct
@@ -75,12 +73,6 @@ typedef struct
     int max;
     int maxlv;
 } measure_t;
-
-#ifdef NODEBUG
-int terminal_mode = -1;
-#else
-int terminal_mode = 1;
-#endif
 
 const measure_t chan_r[] = {
     {.channel = ADC_CHANNEL_0, .max = 15999, .maxlv = 15999},  // Напряжение акк
@@ -414,7 +406,7 @@ void adc_task(void *arg)
         {
             ESP_LOGV("pcf8575", "read pcf8575");
 
-            d_input = pcf8575_read(IN1_BIT);
+            int d_input = pcf8575_read(IN1_BIT);
             if (d_input != d_in)
             {
                 char buf[10];
@@ -422,11 +414,11 @@ void adc_task(void *arg)
                 int l = snprintf((char *)buf, sizeof(buf), "IN: %d", d_input);
                 ESP_LOGI("pcf8575", "%s", buf);
                 xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
-                if (d_input)
+                if (d_input == 1)
                 {
                     measure_flags |= 0b1;
                 }
-                else
+                else if (d_input == 0)
                 {
                     measure_flags &= ~0b1;
                 }

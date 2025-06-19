@@ -165,7 +165,6 @@ extern TaskHandle_t xHandleNB;
 #define OUT_DATA_CHANNEL(prefix) prefix.U, prefix.R, prefix.U0, prefix.Ubatt1, prefix.time
 
 extern unsigned int bootCount;
-extern int terminal_mode;
 extern uint8_t BattLow;
 extern float tsens_out;
 
@@ -194,7 +193,7 @@ void cur_time(char *buf);
 
 void processBuffer(uint8_t *endptr, uint8_t *ptr_0db, uint8_t *ptr_off, uint8_t *ptr_on, int channel);
 
-void pcf8575_set(int channel_cmd);
+esp_err_t pcf8575_set(int channel_cmd);
 
 // bit 0..15 - return bit
 // bit -1 return all bits

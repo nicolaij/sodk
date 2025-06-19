@@ -52,7 +52,7 @@ bool start_adc_init = false;
 int pcf8575_read(int bit)
 {
     if (i2c_err)
-        return 0;
+        return -1;
 
     static uint16_t port_val = UINT16_MAX;
 
@@ -64,17 +64,18 @@ int pcf8575_read(int bit)
 
         if ((port_val & BIT(bit)) == 0)
             return 1;
+        else
+            return 0;
     }
-
-    return 0;
+    return -1;
 }
 
 //  POWER_BIT - и NB_PWR_BIT - инверсные
 //  POWER_BIT - всегда, кроме когда каналы выбраны
-void pcf8575_set(int channel_cmd)
+esp_err_t pcf8575_set(int channel_cmd)
 {
     if (i2c_err)
-        return;
+        return ESP_FAIL;
 
     static uint16_t current_mask = 0;
     uint16_t cmd_mask = 0;
@@ -193,11 +194,7 @@ void pcf8575_set(int channel_cmd)
 
     uint16_t port_val = ~(cmd_mask);
 
-    if (i2c_master_transmit(dev_handle_pcf, (uint8_t *)&port_val, 2, 100) != ESP_OK)
-    {
-        i2c_err = 1;
-        ESP_LOGE("pcf8575", "Error transmit");
-    }
+    return i2c_master_transmit(dev_handle_pcf, (uint8_t *)&port_val, 2, 100);
 }
 
 void start_measure(int channel, int flag)
@@ -421,8 +418,6 @@ esp_err_t start_adc_calibrate()
 
 void app_main(void)
 {
-    char buf[40];
-
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
     switch (wakeup_reason)
@@ -500,6 +495,7 @@ void app_main(void)
     ESP_ERROR_CHECK(temperature_sensor_disable(temp_sensor));
     ESP_ERROR_CHECK(temperature_sensor_uninstall(temp_sensor));
 
+    char buf[24];
     int l = snprintf((char *)buf, sizeof(buf), "Temperature:  %.01f°C", tsens_out);
     xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
     ESP_LOGI("temperature_sensor", "%s", buf);
@@ -546,17 +542,14 @@ void app_main(void)
         .scl_speed_hz = 100000,
     };
 
-    if (i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle_pcf) == ESP_OK)
+    if (i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle_pcf) != ESP_OK)
     {
-        i2c_err = 0;
-    }
-    else
-    {
-        ESP_LOGE("i2c", "i2c_driver_install error!");
+        i2c_err = 1;
     }
 
     // init pcf outs
-    pcf8575_set(0);
+    if (pcf8575_set(0) == ESP_OK)
+        i2c_err = 0;
 
     pcf8575_read(0);
 
@@ -569,7 +562,7 @@ void app_main(void)
 
     xTaskCreate(wifi_task, "wifi_task", 1024 * 3, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
 
-    xTaskCreate(console_task, "console_task", 1024 * 4, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
+    xTaskCreate(console_task, "console_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
@@ -602,9 +595,6 @@ void app_main(void)
         start_measure(0, 2); // LV only
     }
 
-    if (terminal_mode > -1)
-        ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
-
     /* Ждем окончания измерений */
     xEventGroupWaitBits(
         status_event_group, /* The event group being tested. */
@@ -612,6 +602,15 @@ void app_main(void)
         pdFALSE,            /* BIT_0 & BIT_1 should be cleared before returning. */
         pdFALSE,
         60000 / portTICK_PERIOD_MS);
+
+#ifndef NODEBUG
+    ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
+/*
+        char statsbuf[600];
+        vTaskGetRunTimeStats(statsbuf);
+        printf(statsbuf);
+*/
+#endif
 
     // время ожидания
     const int wait = get_menu_val_by_id("waitwifi");
@@ -633,15 +632,19 @@ void app_main(void)
         };
     }
 
-    if (terminal_mode > -1)
-    {
-        ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
-        ESP_LOGI("main_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
-        ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
-        ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
-        ESP_LOGI("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
-        ESP_LOGI("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
-    }
+#ifndef NODEBUG
+    ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
+    ESP_LOGI("main_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
+    ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
+    ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
+    ESP_LOGI("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
+    ESP_LOGI("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
+/*
+        char statsbuf[600];
+        vTaskGetRunTimeStats(statsbuf);
+        printf(statsbuf);
+*/
+#endif
 
     EventBits_t uxBits;
 
@@ -672,8 +675,9 @@ void app_main(void)
     xTaskNotify(xHandleWifi, NOTYFY_WIFI_STOP, eSetValueWithOverwrite);
     vTaskDelay(1);
 
-    if (terminal_mode > -1)
-        ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
+#ifndef NODEBUG
+    ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
+#endif
 
     // засыпаем...
     if (BattLow < 100)
@@ -684,7 +688,7 @@ void app_main(void)
     }
 
     // коррекция на время работы
-    Trepeatlv = get_menu_val_by_id("Trepeatlv"); //а вдруг уже настройки поменялись
+    Trepeatlv = get_menu_val_by_id("Trepeatlv"); // а вдруг уже настройки поменялись
     uint64_t time_in_us = StoUS(Trepeatlv * (BattLow + 1) * 60) - (esp_timer_get_time() % StoUS(Trepeatlv * 60));
     // uint64_t time_in_us = StoUS(Trepeatlv * (BattLow + 1) * 60);
 

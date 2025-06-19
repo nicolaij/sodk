@@ -15,8 +15,6 @@
 #include <arpa/inet.h>
 #include "esp_netif.h"
 
-uint8_t serialbuffer[256];
-
 static const char *TAG = "terminal";
 
 nvs_handle_t my_handle;
@@ -270,6 +268,8 @@ int get_menu_html(char *buf)
 
 void console_task(void *arg)
 {
+    uint8_t serialbuffer[256];
+
     int enter_value = 0;
 
     bool NB_terminal_mode = 0;
@@ -282,8 +282,6 @@ void console_task(void *arg)
     uint8_t mac_addr[6];
 
     esp_ip4_addr_t ip_addr;
-
-    // configure_stdin_stdout();
 
     char *data = (char *)serialbuffer;
     int pos = 0;
@@ -329,19 +327,6 @@ void console_task(void *arg)
             continue;
         }
 
-        /*
-                if (fgets(data + pos, sizeof(serialbuffer) - pos, stdin) != NULL)
-                {
-                    pos = pos + strlen(data + pos);
-
-                    if (fgets(data + pos, sizeof(serialbuffer) - pos, stdin) != NULL) // CRLF replaced \n\n
-                    {
-                        pos = pos + strlen(data + pos);
-                    }
-
-                    //ESP_LOG_BUFFER_HEXDUMP(TAG, data, pos + 1, ESP_LOG_INFO);
-                }
-        */
         xEventGroupSetBits(status_event_group, SERIAL_TERMINAL_ACTIVE);
 
         if (NB_terminal_mode)
@@ -365,8 +350,7 @@ void console_task(void *arg)
 
         if (c == '\n')
         {
-            ESP_LOG_BUFFER_HEXDUMP(TAG, data, pos + 1, ESP_LOG_INFO);
-
+            //ESP_LOG_BUFFER_HEXDUMP(TAG, data, pos + 1, ESP_LOG_INFO);
             //ESP_LOGD(TAG, "Read bytes: '%s'", data);
             n = atoi((const char *)data);
             if (enter_value == 5) // IP сервера
