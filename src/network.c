@@ -282,7 +282,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
 
     /* Close file after sending complete */
     fclose(fd);
-    // ESP_LOGI(TAG, "File sending complete");
+    // ESP_LOGI(TAGH, "File sending complete");
 
     httpd_resp_sendstr_chunk(req, NULL);
     return ESP_OK;
@@ -319,8 +319,8 @@ static esp_err_t menu_get_handler(httpd_req_t *req)
 static esp_err_t menu_post_handler(httpd_req_t *req)
 {
     int ret, remaining = req->content_len;
-
-    while (remaining > 0)
+    int try = 3;
+    while (remaining > 0 && try > 0)
     {
         /* Read the data for the request */
         if ((ret = httpd_req_recv(req, network_buf, MIN(remaining, sizeof(network_buf)))) <= 0)
@@ -328,6 +328,8 @@ static esp_err_t menu_post_handler(httpd_req_t *req)
             if (ret == HTTPD_SOCK_ERR_TIMEOUT)
             {
                 /* Retry receiving if timeout occurred */
+                vTaskDelay(100 / portTICK_PERIOD_MS);
+                try--;
                 continue;
             }
             return ESP_FAIL;
@@ -500,14 +502,16 @@ esp_err_t update_post_handler(httpd_req_t *req)
 
     /* Пишем в next_ota и прошивку и spiffs.bin*/
     const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
-
-    while (remaining > 0)
+    int try = 3;
+    while (remaining > 0 && try > 0)
     {
         int recv_len = httpd_req_recv(req, network_buf, MIN(remaining, sizeof(network_buf)));
 
         // Timeout Error: Just retry
         if (recv_len == HTTPD_SOCK_ERR_TIMEOUT)
         {
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            try--;
             continue;
 
             // Serious Error: Abort OTA

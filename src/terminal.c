@@ -217,45 +217,44 @@ int get_menu_html(char *buf)
     if (index == 0)
         pos = sprintf(buf, "<table>");
 
-    for (int i = index; i < sizeof(menu) / sizeof(menu_t); i++)
+    while (index < sizeof(menu) / sizeof(menu_t))
     {
-        if (i == 4) // IP
+        if (pos > CONFIG_LWIP_TCP_MSS - 256)
+        {
+            return pos;
+        }
+
+        if (index == 4) // IP
         {
             esp_ip4_addr_t ip_addr;
-            ip_addr.addr = (unsigned int)menu[i].val;
-            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" IPSTR "\"/></td></tr>\n", menu[i].id, menu[i].name, menu[i].id, menu[i].id, IP2STR(&ip_addr));
+            ip_addr.addr = (unsigned int)menu[index].val;
+            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" IPSTR "\"/></td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, IP2STR(&ip_addr));
         }
-        else if (i == 7) // MAC
+        else if (index == 7) // MAC
         {
             uint8_t mac_addr[6];
-            mac_addr[0] = (menu[i].val >> 16) & 0xFF;
-            mac_addr[1] = (menu[i].val >> 8) & 0xFF;
-            mac_addr[2] = (menu[i].val >> 0) & 0xFF;
-            mac_addr[3] = (menu[i + 1].val >> 16) & 0xFF;
-            mac_addr[4] = (menu[i + 1].val >> 8) & 0xFF;
-            mac_addr[5] = (menu[i + 1].val >> 0) & 0xFF;
-            ESP_LOGI("menu", "%2i. %s: " MACSTR, i + 1, menu[i].name, MAC2STR(mac_addr));
-            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" MACSTR "\"/></td></tr>\n", menu[i].id, menu[i].name, menu[i].id, menu[i].id, MAC2STR(mac_addr));
+            mac_addr[0] = (menu[index].val >> 16) & 0xFF;
+            mac_addr[1] = (menu[index].val >> 8) & 0xFF;
+            mac_addr[2] = (menu[index].val >> 0) & 0xFF;
+            mac_addr[3] = (menu[index + 1].val >> 16) & 0xFF;
+            mac_addr[4] = (menu[index + 1].val >> 8) & 0xFF;
+            mac_addr[5] = (menu[index + 1].val >> 0) & 0xFF;
+            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" MACSTR "\"/></td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, MAC2STR(mac_addr));
         }
-        else if (strlen(menu[i].name) > 0)
+        else if (strlen(menu[index].name) > 0)
         {
-            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"%i\"/>%s</td></tr>\n", menu[i].id, menu[i].name, menu[i].id, menu[i].id, menu[i].val, menu[i].izm);
+            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"%d\"/>%s</td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, menu[index].val, menu[index].izm);
         }
         else // hidden
         {
-            pos += sprintf(&buf[pos], "<input type=\"hidden\" id=\"%s\" name=\"%s\" value=\"%i\">", menu[i].id, menu[i].id, menu[i].val);
+            pos += sprintf(&buf[pos], "<input type=\"hidden\" id=\"%s\" name=\"%s\" value=\"%d\">", menu[index].id, menu[index].id, menu[index].val);
         }
 
-        if (pos > CONFIG_LWIP_TCP_MSS - 256)
-        {
-            index = i + 1;
-            return pos;
-        }
+        index++;
     }
 
     if (pos > 0)
     {
-        index = sizeof(menu) / sizeof(menu_t);
         pos += sprintf(&buf[pos], "</table><br>");
     }
     else
@@ -270,17 +269,14 @@ void console_task(void *arg)
 {
     uint8_t serialbuffer[256];
 
-    int enter_value = 0;
+    int selected_menu_id = 0;
 
     bool NB_terminal_mode = 0;
 
     bool espnow_send = false;
     esp_now_peer_info_t peerInfo = {.ifidx = WIFI_IF_AP, .peer_addr = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, .channel = 0, .lmk = "", .encrypt = false};
 
-    int n = 0;
-
     uint8_t mac_addr[6];
-
     esp_ip4_addr_t ip_addr;
 
     char *data = (char *)serialbuffer;
@@ -311,10 +307,7 @@ void console_task(void *arg)
                 espnow_send = false;
             }
 
-            if (n > 100)
-            {
-                ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
-            }
+            ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
         }
         else
         {
@@ -323,7 +316,7 @@ void console_task(void *arg)
                 esp_now_send(peerInfo.peer_addr, serialbuffer, ESP_NOW_MAX_DATA_LEN);
             }
 
-            vTaskDelay(10);
+            vTaskDelay(50 / portTICK_PERIOD_MS);
             continue;
         }
 
@@ -352,8 +345,8 @@ void console_task(void *arg)
         {
             // ESP_LOG_BUFFER_HEXDUMP(TAG, data, pos + 1, ESP_LOG_INFO);
             // ESP_LOGD(TAG, "Read bytes: '%s'", data);
-            n = atoi((const char *)data);
-            switch (enter_value)
+            int n = atoi((const char *)data);
+            switch (selected_menu_id)
             {
             case 0:
                 switch (n)
@@ -540,11 +533,6 @@ void console_task(void *arg)
                     }
                     break;
                 }
-
-                if (n > 0 && n <= sizeof(menu) / sizeof(menu_t))
-                    enter_value = n;
-                else
-                    enter_value = 0;
                 break;
             case 5: // IP сервера
                 if (sscanf((const char *)serialbuffer, "%hhu.%hhu.%hhu.%hhu", &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3]) == 4)
@@ -564,7 +552,6 @@ void console_task(void *arg)
                 {
                     ESP_LOGE(TAG, "Error IP address format");
                 }
-                enter_value = 0;
                 break;
             case 8: // MAC ESPNOW!
                 if (sscanf((const char *)serialbuffer, "%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx%*[: -]%hhx",
@@ -585,15 +572,13 @@ void console_task(void *arg)
                 {
                     ESP_LOGE(TAG, "Error MAC format");
                 }
-                enter_value = 0;
                 break;
-
             default:
-                if (enter_value > 0 && enter_value <= sizeof(menu) / sizeof(menu_t)) // enter_value - номер пункта меню, n - value
+                if (selected_menu_id > 0 && selected_menu_id <= sizeof(menu) / sizeof(menu_t)) // selected_menu_id - номер пункта меню, n - value
                 {
-                    if (n >= menu[enter_value - 1].min && n <= menu[enter_value - 1].max)
+                    if (n >= menu[selected_menu_id - 1].min && n <= menu[selected_menu_id - 1].max)
                     {
-                        menu[enter_value - 1].val = n;
+                        menu[selected_menu_id - 1].val = n;
                         esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
                         if (err != ESP_OK)
                         {
@@ -601,7 +586,7 @@ void console_task(void *arg)
                         }
                         else
                         {
-                            err = nvs_set_i32(my_handle, menu[enter_value - 1].id, menu[enter_value - 1].val);
+                            err = nvs_set_i32(my_handle, menu[selected_menu_id - 1].id, menu[selected_menu_id - 1].val);
                             if (err != ESP_OK)
                             {
                                 ESP_LOGE(TAG, "%s", esp_err_to_name(err));
@@ -609,7 +594,7 @@ void console_task(void *arg)
                             else
                             {
                                 ESP_LOGI("menu", "-------------------------------------------");
-                                ESP_LOGI("menu", "%2i. %s: %i %s.", enter_value, menu[enter_value - 1].name, menu[enter_value - 1].val, menu[enter_value - 1].izm);
+                                ESP_LOGI("menu", "%2i. %s: %i %s.", selected_menu_id, menu[selected_menu_id - 1].name, menu[selected_menu_id - 1].val, menu[selected_menu_id - 1].izm);
                                 ESP_LOGI("menu", "-------------------------------------------");
                             }
                         }
@@ -623,9 +608,14 @@ void console_task(void *arg)
                         nvs_close(my_handle);
                     }
                 }
-                enter_value = 0;
                 break;
             }
+
+            if (selected_menu_id == 0 && n > 0 && n <= sizeof(menu) / sizeof(menu_t))
+                selected_menu_id = n;
+            else
+                selected_menu_id = 0;
+
             pos = 0;
         } // if (c == '\n')
         vTaskDelay(1);

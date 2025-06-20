@@ -297,7 +297,7 @@ void btn_task(void *arg)
             reset_sleep_timeout();
         }
 
-        vTaskDelay(1);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
@@ -1046,8 +1046,8 @@ void adc_task(void *arg)
 
         xRingbufferSend(wsbuf_handle, buf, len_data + 1, 0);
 
-        ESP_LOGI("result", "%s", buf);
-        ESP_LOGD("result", "Avg ADC (%d) 0:%d, 1:%d, 2:%d, 3:%d, 4:%d", count_adc_full, sum_adc_full.Ubatt, sum_adc_full.R1, sum_adc_full.R2, sum_adc_full.U0, sum_adc_full.U);
+        ESP_LOGW("result", "%s", buf);
+        ESP_LOGI("Avg ADC", "(%d) 0:%d, 1:%d, 2:%d, 3:%d, 4:%d", count_adc_full, sum_adc_full.Ubatt, sum_adc_full.R1, sum_adc_full.R2, sum_adc_full.U0, sum_adc_full.U);
 
         for (int i = 0; i < sizeof(ta) / sizeof(ta[0]) - 1; i++)
         {

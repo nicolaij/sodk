@@ -2,9 +2,6 @@
 #define MAIN_H_
 
 #include "esp_idf_version.h"
-
-// #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG - не работает
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"

@@ -566,7 +566,7 @@ void app_main(void)
 
         // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
-    xTaskCreate(modem_task, "modem_task", 1024 * 4, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
+    xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
     xTaskCreate(adc_task, "adc_task", 1024 * 3, NULL, configMAX_PRIORITIES - 5, &xHandleADC);
 
@@ -603,14 +603,7 @@ void app_main(void)
         pdFALSE,
         60000 / portTICK_PERIOD_MS);
 
-#ifndef NODEBUG
-    ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
-/*
-        char statsbuf[600];
-        vTaskGetRunTimeStats(statsbuf);
-        printf(statsbuf);
-*/
-#endif
+    ESP_LOGD("info", "Free memory: %lu bytes", esp_get_free_heap_size());
 
     // время ожидания
     const int wait = get_menu_val_by_id("waitwifi");
@@ -632,19 +625,12 @@ void app_main(void)
         };
     }
 
-#ifndef NODEBUG
-    ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
-    ESP_LOGI("main_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
-    ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
-    ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
-    ESP_LOGI("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
-    ESP_LOGI("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
-/*
-        char statsbuf[600];
-        vTaskGetRunTimeStats(statsbuf);
-        printf(statsbuf);
-*/
-#endif
+    ESP_LOGD("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
+    ESP_LOGD("main_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
+    ESP_LOGD("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
+    ESP_LOGD("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
+    ESP_LOGD("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
+    ESP_LOGD("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
 
     EventBits_t uxBits;
 
@@ -675,9 +661,8 @@ void app_main(void)
     xTaskNotify(xHandleWifi, NOTYFY_WIFI_STOP, eSetValueWithOverwrite);
     vTaskDelay(1);
 
-#ifndef NODEBUG
-    ESP_LOGI("info", "Free memory: %lu bytes", esp_get_free_heap_size());
-#endif
+
+    ESP_LOGD("info", "Free memory: %lu bytes", esp_get_free_heap_size());
 
     // засыпаем...
     if (BattLow < 100)
