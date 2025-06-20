@@ -127,7 +127,7 @@ esp_err_t wait_string(char *buffer, const char *wait, TickType_t ticks_to_wait)
     esp_err_t res = ESP_ERR_TIMEOUT;
     do
     {
-        int len = uart_read_bytes(UART_NUM_1, pb, (RX_BUF_SIZE - 1), ticks_to_wait / 5);
+        int len = uart_read_bytes(UART_NUM_1, pb, (RX_BUF_SIZE - 1), 10);
         // ESP_LOGD(TAG, "len: %d", len);
         if (len > 0)
         {
@@ -379,7 +379,9 @@ void modem_task(void *arg)
 
     // zero-initialize the config structure.
     gpio_config_t io_conf = {};
+    // disable interrupt
     io_conf.intr_type = GPIO_INTR_DISABLE;
+    // set as output mode
     io_conf.mode = GPIO_MODE_OUTPUT_OD;
     io_conf.pin_bit_mask = BIT64(MODEM_POWER);
     io_conf.pull_down_en = 0;
@@ -484,8 +486,8 @@ void modem_task(void *arg)
 
                     if (d_nbiot_error_counter > 8)
                         break;
-                    else
-                        continue;
+
+                    continue;
                 }
             };
 
@@ -652,7 +654,8 @@ void modem_task(void *arg)
                 //+CCLK: 24/04/30,07:49:36+12
                 int dt[6] = {0, 0, 0, 0, 0, 0};
                 const char *pdata = strstr((const char *)data, "CCLK: ");
-                if (sscanf((const char *)(pdata + 6), "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]) == 6)
+                int parsed = sscanf((const char *)(pdata + 6), "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
+                if (parsed == 6)
                 {
                     struct tm tm;
                     tm.tm_year = (dt[0] > 1900) ? dt[0] - 1900 : dt[0] + 100;
@@ -662,10 +665,12 @@ void modem_task(void *arg)
                     tm.tm_min = dt[4];
                     tm.tm_sec = dt[5];
 
+                    const int timezone = 3; // FORCE TIMEZONE
+
                     time_t t = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
                     struct timeval now = {.tv_sec = t};
                     settimeofday(&now, NULL);
-                    ESP_LOGI(TAG, "Set date and time: %s", get_datetime(time(0)));
+                    ESP_LOGI(TAG, "Set date and time: %s", get_datetime(t));
                 }
             }
 
@@ -679,7 +684,8 @@ void modem_task(void *arg)
             else
             {
                 const char *s = strstr((const char *)data, "IPCONFIG: ");
-                if (sscanf((const char *)(s + 10), "%hhu.%hhu.%hhu.%hhu", &((uint8_t *)(&pdp_ip.addr))[0], &((uint8_t *)(&pdp_ip.addr))[1], &((uint8_t *)(&pdp_ip.addr))[2], &((uint8_t *)(&pdp_ip.addr))[3]) == 4)
+                int parsed = sscanf((const char *)(s + 10), "%hhu.%hhu.%hhu.%hhu", &((uint8_t *)(&pdp_ip.addr))[0], &((uint8_t *)(&pdp_ip.addr))[1], &((uint8_t *)(&pdp_ip.addr))[2], &((uint8_t *)(&pdp_ip.addr))[3]);
+                if (parsed == 4)
                 {
                     // если нет нормального IP - рестарт модуля
                     if (esp_ip4_addr1(&pdp_ip) == 127)
@@ -746,7 +752,7 @@ void modem_task(void *arg)
             }
 
             snprintf(send_data, sizeof(send_data), "AT+CSOC=1,%i,1\r\n", protocol);
-            ee = at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS); // Create socket
+            at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS); // Create socket
 
             if (ee != ESP_OK)
             {
