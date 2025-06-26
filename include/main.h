@@ -98,6 +98,11 @@ typedef struct
             bool d_changed_ch4 : 1; // признак изменения состояния канала 4
 
             bool d_batt_low : 1; // низкий уровень заряда батарей
+            bool reserved4 : 1;
+            bool reserved5 : 1;
+            bool reserved6 : 1;
+
+            bool d_nbiot_error : 1;         // ошибка модуля NBIoT
         };
     } flags;
     int R;

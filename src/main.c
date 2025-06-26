@@ -6,7 +6,6 @@
 #include <sys/time.h>
 
 #include <stdio.h>
-#include "esp_mac.h"
 
 #include "driver/gpio.h"
 #include "esp_sleep.h"
@@ -29,15 +28,13 @@ RTC_DATA_ATTR unsigned int bootCount = 0;
 
 float tsens_out = 0;
 
-uint8_t mac[6];
-
 TaskHandle_t xHandleNB = NULL;
 TaskHandle_t xHandleConsole = NULL;
 TaskHandle_t xHandleWifi = NULL;
 TaskHandle_t xHandleADC = NULL;
 TaskHandle_t xHandleBtn = NULL;
 
-int i2c_err = 1;
+int i2c_err = 0;
 
 QueueHandle_t uicmd_queue;
 QueueHandle_t send_queue;
@@ -75,7 +72,7 @@ int pcf8575_read(int bit)
 esp_err_t pcf8575_set(int channel_cmd)
 {
     if (i2c_err)
-        return ESP_FAIL;
+        return -1;
 
     static uint16_t current_mask = 0;
     uint16_t cmd_mask = 0;
@@ -266,7 +263,7 @@ esp_err_t start_adc_calibrate()
     gpio_pulldown_en(2);
     gpio_pulldown_en(3);
     gpio_pulldown_en(4);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
     gpio_pulldown_dis(0);
     gpio_pulldown_dis(1);
     gpio_pulldown_dis(2);
@@ -477,9 +474,6 @@ void app_main(void)
 
     ESP_LOGI("main", "Current date/time: %s", get_datetime(time(0)));
 
-    esp_efuse_mac_get_default(mac);
-    ESP_LOGI("main", "mac: %02x-%02x-%02x-%02x-%02x-%02x", mac[5], mac[4], mac[3], mac[2], mac[1], mac[0]);
-
     wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
 
     ESP_LOGD("main", "Initializing Temperature sensor");
@@ -541,15 +535,14 @@ void app_main(void)
         .device_address = PCF8575_I2C_ADDR_BASE,
         .scl_speed_hz = 100000,
     };
-
-    if (i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle_pcf) != ESP_OK)
-    {
-        i2c_err = 1;
-    }
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle_pcf));
 
     // init pcf outs
-    if (pcf8575_set(0) == ESP_OK)
-        i2c_err = 0;
+    if (pcf8575_set(0) != ESP_OK)
+    {
+        i2c_err = 1;
+        ESP_LOGE("i2c", "Error. pcf8575 disabled!");
+    }
 
     pcf8575_read(0);
 
@@ -564,7 +557,7 @@ void app_main(void)
 
     xTaskCreate(console_task, "console_task", 1024 * 3, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
 
-        // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
+    // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
     xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
@@ -660,7 +653,6 @@ void app_main(void)
 
     xTaskNotify(xHandleWifi, NOTYFY_WIFI_STOP, eSetValueWithOverwrite);
     vTaskDelay(1);
-
 
     ESP_LOGD("info", "Free memory: %lu bytes", esp_get_free_heap_size());
 

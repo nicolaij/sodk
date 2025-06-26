@@ -469,7 +469,7 @@ void modem_task(void *arg)
 
             ESP_LOGD(TAG, "Wait... %s", data);
 
-            if (strnstr((const char *)data, "CPIN: READY", 100) != NULL)
+            if (strnstr((const char *)data, "CPIN: READY", strlen(data)) != NULL)
             {
                 cpin = true;
                 ESP_LOGI(TAG, "CPIN: READY");
@@ -760,7 +760,7 @@ void modem_task(void *arg)
             }
             else
             {
-                const char *pdata = strnstr((const char *)data, "CSOC: ", 100);
+                const char *pdata = strnstr((const char *)data, "CSOC: ", strlen(data));
                 if (pdata)
                 {
                     socket = atoi(pdata + 6);
@@ -772,7 +772,7 @@ void modem_task(void *arg)
                         ESP_LOGI(TAG, "%i Socket %i connect...", 3 - try_counter, socket);
                         ee = at_reply_wait_OK(send_data, (char *)data, 60000 / portTICK_PERIOD_MS);
 
-                        if (ee == ESP_OK || ee == ESP_ERR_INVALID_STATE) // respond OK or ERROR
+                        if (ee == ESP_OK) // || ee == ESP_ERR_INVALID_STATE) // respond OK or ERROR
                         {
                             // результат измерений
                             result_t result;

@@ -86,12 +86,12 @@ adc_continuous_handle_t adc_handle = NULL;
 
 // Коэффициенты каналов
 // U, Ulv, I1, I2, U0, U0lv, Ubat
-int koeff[7][2] = {0};
+int koeff[7][3] = {0};
 
 // return mV
 int volt(int adc)
 {
-    int res = ((adc * koeff[0][0]) / 10 + koeff[0][1]);
+    int res = (adc * adc * koeff[0][2]) / 10000 + (adc * koeff[0][0]) / 10 + koeff[0][1];
     if (res < 0)
         return 0;
     else
@@ -103,7 +103,7 @@ int voltlv(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = ((adc * koeff[1][0]) / 1000 + koeff[1][1]);
+    int res = (adc * adc * koeff[1][2]) / 100000 + (adc * koeff[1][0]) / 1000 + koeff[1][1];
     if (res < 0)
         return 0;
     else
@@ -115,7 +115,7 @@ int voltBatt(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = ((adc * koeff[6][0]) / 1000 + koeff[6][1]);
+    int res = ((adc * adc * koeff[6][2]) / 100000 + (adc * koeff[6][0]) / 1000 + koeff[6][1]);
     if (res < 0)
         return 0;
     else
@@ -127,7 +127,7 @@ int volt0(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = ((adc * koeff[4][0]) / 10 + koeff[4][1]);
+    int res = ((adc * adc * koeff[4][2]) / 10000 + (adc * koeff[4][0]) / 10 + koeff[4][1]);
     if (res < 0)
         return 0;
     else
@@ -139,7 +139,7 @@ int volt0lv(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = ((adc * koeff[5][0]) / 1000 + koeff[5][1]);
+    int res = ((adc * adc * koeff[5][2]) / 100000 + (adc * koeff[5][0]) / 1000 + koeff[5][1]);
     if (res < 0)
         return 0;
     else
@@ -150,10 +150,17 @@ int current(int adc)
 {
     //    if (adc < 3)
     //        return 0;
-    int res = (adc * koeff[2][0]) / 10 + koeff[2][1];
-
+    int res = (adc * adc * koeff[2][2]) / 10000 + (adc * koeff[2][0]) / 10 + koeff[2][1];
     return res;
 };
+
+// return nA
+int current2chan(int adc)
+{
+    int res = (adc * adc * koeff[3][2]) / 100000 + (adc * koeff[3][0]) / 1000 + koeff[3][1];
+    return res;
+};
+
 
 int kOm(int adc_u, int adc_r)
 {
@@ -183,13 +190,6 @@ int kOmlv(int adc_u, int adc_r)
     if (r > chan_r[1].maxlv || r < 0)
         return chan_r[1].maxlv;
     return r;
-};
-
-// return nA
-int current2chan(int adc)
-{
-    int res = (adc * koeff[3][0]) / 1000 + koeff[3][1];
-    return res;
 };
 
 int kOm2chan(int adc_u, int adc_r)
@@ -354,18 +354,31 @@ void adc_task(void *arg)
 
     koeff[0][0] = get_menu_val_by_id("kU");
     koeff[0][1] = get_menu_val_by_id("offsU");
+    koeff[0][2] = get_menu_val_by_id("k2U");
+
     koeff[1][0] = get_menu_val_by_id("kUlv");
     koeff[1][1] = get_menu_val_by_id("offsUlv");
+    koeff[1][2] = get_menu_val_by_id("k2Ulv");
+
     koeff[2][0] = get_menu_val_by_id("kR1");
     koeff[2][1] = get_menu_val_by_id("offsR1");
+    koeff[2][2] = get_menu_val_by_id("k2R1");
+
     koeff[3][0] = get_menu_val_by_id("kR2");
     koeff[3][1] = get_menu_val_by_id("offsR2");
+    koeff[3][2] = get_menu_val_by_id("k2R2");
+
     koeff[4][0] = get_menu_val_by_id("kU0");
     koeff[4][1] = get_menu_val_by_id("offsU0");
+    koeff[4][2] = get_menu_val_by_id("k2U0");
+
     koeff[5][0] = get_menu_val_by_id("kU0lv");
     koeff[5][1] = get_menu_val_by_id("offsU0lv");
+    koeff[5][2] = get_menu_val_by_id("k2U0lv");
+
     koeff[6][0] = get_menu_val_by_id("kUbat");
     koeff[6][1] = get_menu_val_by_id("offsUbat");
+    koeff[6][2] = get_menu_val_by_id("k2Ubat");
 
     const int moving_avg_length = get_menu_val_by_id("avgcnt");
     const int compare_counter_val = get_menu_val_by_id("avgcomp");

@@ -33,33 +33,40 @@ menu_t menu[] = {
     /*9*/ {.id = "pulse", .name = "Макс. время импульса", .izm = "мс", .val = 5000, .min = -1, .max = 10000},
     /*10*/ {.id = "chanord", .name = "Порядок опроса каналов", .izm = "", .val = 1234, .min = 0, .max = 999999999},
     /*11*/ {.id = "Overvolt", .name = "Ограничение U", .izm = "В", .val = 600, .min = 0, .max = 1000},
-    /*12*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1432, .min = 1, .max = 1000000},
-    /*13*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*14*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3784, .min = 1, .max = 1000000},
-    /*15*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
-    /*16*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8086, .min = 1, .max = 1000000},             // ADC_ATTEN_DB_6
-    /*17*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = -15160, .min = -1000000, .max = 1000000}, // ADC_ATTEN_DB_6
-    /*18*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30560, .min = 1, .max = 100000},             // ADC_ATTEN_DB_6
-    /*19*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = -239, .min = -1000000, .max = 1000000},   // ADC_ATTEN_DB_6
-    /*20*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1418, .min = 1, .max = 1000000},
-    /*21*/ {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -100000, .max = 1000000},
-    /*22*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 124535, .min = 1, .max = 1000000},
-    /*23*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*24*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3784, .min = 1, .max = 1000000},
-    /*25*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
-    /*26*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "В", .val = 0, .min = 0, .max = 12000},
-    /*27*/ {.id = "UbatEnd", .name = "U bat отключения", .izm = "В", .val = 0, .min = 0, .max = 12000},
-    /*28*/ {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .izm = "", .val = 10, .min = 1, .max = 100},
-    /*29*/ {.id = "WiFichan", .name = "WiFi channel", .izm = "", .val = 11, .min = 1, .max = 20},
-    /*30*/ {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
-    /*31*/ {.id = "avgcnt", .name = "Кол-во усред. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
-    /*32*/ {.id = "percU0lv", .name = "\% U петли низ.", .izm = "\%", .val = 75, .min = 0, .max = 100}, /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
-    /*33*/ {.id = "percRlv", .name = "\% R низ.", .izm = "\%", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
-    /*34*/ {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*35*/ {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*36*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*37*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*38*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*12*/ {.id = "k2U", .name = "коэф. 2 U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*13*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1432, .min = 1, .max = 1000000},
+    /*14*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*15*/ {.id = "k2Ulv", .name = "коэф. 2 U низ.", .izm = "", .val = 0, .min = -100, .max = 100},
+    /*16*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3784, .min = 1, .max = 1000000},
+    /*17*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
+    /*18*/ {.id = "k2R1", .name = "коэф. 2 R (ch 1)", .izm = "", .val = 0, .min = -100, .max = 100},
+    /*19*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8086, .min = 1, .max = 1000000},
+    /*20*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = -15160, .min = -1000000, .max = 1000000},
+    /*21*/ {.id = "k2R2", .name = "коэф. 2 R (ch 2)", .izm = "", .val = 0, .min = -100, .max = 100},
+    /*22*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30560, .min = 1, .max = 100000},
+    /*23*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = -239, .min = -1000000, .max = 1000000},
+    /*24*/ {.id = "k2U0", .name = "коэф. 2 U петли", .izm = "", .val = 0, .min = -100, .max = 100},
+    /*25*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1418, .min = 1, .max = 1000000},
+    /*26*/ {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*27*/ {.id = "k2U0lv", .name = "коэф. 2 U петли низ.", .izm = "", .val = 0, .min = -100, .max = 100},
+    /*28*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 124535, .min = 1, .max = 1000000},
+    /*29*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*30*/ {.id = "k2Ubat", .name = "коэф. 2 U bat", .izm = "", .val = 0, .min = -100, .max = 100},
+    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3784, .min = 1, .max = 1000000},
+    /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
+    /*33*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "В", .val = 0, .min = 0, .max = 12000},
+    /*34*/ {.id = "UbatEnd", .name = "U bat отключения", .izm = "В", .val = 0, .min = 0, .max = 12000},
+    /*35*/ {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .izm = "", .val = 10, .min = 1, .max = 100},
+    /*36*/ {.id = "WiFichan", .name = "WiFi channel", .izm = "", .val = 11, .min = 1, .max = 20},
+    /*37*/ {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
+    /*38*/ {.id = "avgcnt", .name = "Кол-во усред. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
+    /*39*/ {.id = "percU0lv", .name = "\% U петли низ.", .izm = "\%", .val = 75, .min = 0, .max = 100}, /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
+    /*40*/ {.id = "percRlv", .name = "\% R низ.", .izm = "\%", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
+    /*41*/ {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*42*/ {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*43*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*44*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*45*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
 };
 
 esp_err_t init_nvs()
@@ -379,6 +386,7 @@ void console_task(void *arg)
                     ESP_LOGI("menu", "52. AT терминал NBIoT");
                     ESP_LOGI("menu", "53. Start WiFi");
                     ESP_LOGI("menu", "54. FreeRTOS INFO");
+                    ESP_LOGI("menu", "55. Reboot");
                     ESP_LOGI("menu", "100. Сброс выходов");
                     ESP_LOGI("menu", "101 - 108. Включить канал");
                     ESP_LOGI("menu", "110. Включить LV_measure");
@@ -433,6 +441,12 @@ void console_task(void *arg)
                                         vTaskGetRunTimeStats(statsbuf);
                                         printf(statsbuf);
                     */
+                    break;
+                case 55: // Reboot
+                    if (xHandleWifi)
+                        xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+                    vTaskDelay(500 / portTICK_PERIOD_MS);
+                    esp_restart();
                     break;
                 case 100:
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));

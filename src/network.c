@@ -22,7 +22,7 @@
 
 #include <arpa/inet.h>
 
-extern uint8_t mac[6];
+uint8_t mac[6];
 extern esp_ip4_addr_t pdp_ip;
 extern char net_status_current[32];
 
@@ -879,6 +879,9 @@ static httpd_handle_t start_webserver(void)
 void wifi_task(void *arg)
 {
     s_wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP));
+    ESP_LOGI("mac AP", MACSTR, MAC2STR(mac));
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
