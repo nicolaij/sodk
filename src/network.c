@@ -575,7 +575,8 @@ esp_err_t update_post_handler(httpd_req_t *req)
 
         httpd_resp_sendstr(req, "Firmware update complete, rebooting now!\n");
         ESP_LOGW(TAGH, "Firmware update complete, rebooting now!");
-        xTaskNotify(xTaskGetCurrentTaskHandle(), NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+        if (xHandleWifi)
+            xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
     }
     else if (file_id == 0x80000)
     {
@@ -597,7 +598,8 @@ esp_err_t update_post_handler(httpd_req_t *req)
 
         httpd_resp_sendstr(req, "SPIFFS update complete, rebooting now!\n");
         ESP_LOGW(TAGH, "SPIFFS update complete, rebooting now!");
-        xTaskNotify(xTaskGetCurrentTaskHandle(), NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+        if (xHandleWifi)
+            xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
     }
 
     return ESP_OK;

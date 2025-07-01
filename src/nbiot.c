@@ -24,8 +24,6 @@ char net_status_current[32];
 
 RTC_DATA_ATTR bool first_run_completed = false;
 
-extern TaskHandle_t xHandleWifi;
-
 extern int32_t timezone;
 
 unsigned int fromActiveTime(uint8_t val)

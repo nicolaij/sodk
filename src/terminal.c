@@ -18,7 +18,6 @@
 static const char *TAG = "terminal";
 
 nvs_handle_t my_handle;
-extern TaskHandle_t xHandleWifi;
 
 menu_t menu[] = {
     /*0*/ {.id = "idn", .name = "Номер датчика", .izm = "", .val = 1, .min = 1, .max = 1000000},
