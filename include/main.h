@@ -165,8 +165,8 @@ extern TaskHandle_t xHandleConsole;
 
 #define OUT_ADD_NBCOMMON ",\"NBbatt\":%.3f,\"RSSI\":%i"
 #define OUT_ADD_COMMON ",\"Temp\":%.01f,\"Flags\":\"0x%04X\""
-#define OUT_CHANNEL "\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%d,\"R\":%d,\"U0\":%d,\"Ubatt1\":%d,\"time\":%d"
-#define OUT_DATA_CHANNEL(prefix) prefix.U, prefix.R, prefix.U0, prefix.Ubatt1, prefix.time
+#define OUT_CHANNEL "\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"U0\":%.1f,\"Ubatt1\":%.3f,\"time\":%d"
+#define OUT_DATA_CHANNEL(prefix) prefix.U / 1000.0, prefix.R, prefix.U0 / 1000.0, prefix.Ubatt1 / 1000.0, prefix.time
 
 extern unsigned int bootCount;
 extern uint8_t BattLow;

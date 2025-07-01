@@ -287,27 +287,27 @@ esp_err_t start_adc_calibrate()
 
         if (adc_result.Ubatt > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error Ubat!");
+            ESP_LOGE("AUTOCALIBRATE 1", "Error Ubat!");
             return ESP_FAIL;
         }
         if (adc_result.R1 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error R1!");
+            ESP_LOGE("AUTOCALIBRATE 1", "Error R1!");
             return ESP_FAIL;
         }
         if (adc_result.R2 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error R2!");
+            ESP_LOGE("AUTOCALIBRATE 1", "Error R2!");
             return ESP_FAIL;
         }
         if (adc_result.U > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error U!");
+            ESP_LOGE("AUTOCALIBRATE 1", "Error U!");
             return ESP_FAIL;
         }
         if (adc_result.U0 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error U0!");
+            ESP_LOGE("AUTOCALIBRATE 1", "Error U0!");
             return ESP_FAIL;
         }
     }
@@ -334,27 +334,27 @@ esp_err_t start_adc_calibrate()
 
         if (adc_result.Ubatt < 2000)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error Ubat!");
+            ESP_LOGE("AUTOCALIBRATE 2", "Error Ubat!");
             return ESP_FAIL;
         }
         if (adc_result.R1 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error R1!");
+            ESP_LOGE("AUTOCALIBRATE 2", "Error R1!");
             return ESP_FAIL;
         }
         if (adc_result.R2 > 100)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error R2!");
+            ESP_LOGE("AUTOCALIBRATE 2", "Error R2!");
             return ESP_FAIL;
         }
         if (adc_result.U > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error U!");
+            ESP_LOGE("AUTOCALIBRATE 2", "Error U!");
             return ESP_FAIL;
         }
         if (adc_result.U0 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error U0!");
+            ESP_LOGE("AUTOCALIBRATE 2", "Error U0!");
             return ESP_FAIL;
         }
     }
@@ -362,6 +362,19 @@ esp_err_t start_adc_calibrate()
         return ESP_FAIL;
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    gpio_pulldown_en(0);
+    gpio_pulldown_en(1);
+    gpio_pulldown_en(2);
+    gpio_pulldown_en(3);
+    gpio_pulldown_en(4);
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    gpio_pulldown_dis(0);
+    gpio_pulldown_dis(1);
+    gpio_pulldown_dis(2);
+    gpio_pulldown_dis(3);
+    gpio_pulldown_dis(4);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
     // Запускаем опрос портов ADC без каналов и ВВ
     start_measure(-1, 4);
     /* Ждем окончания измерений */
@@ -376,27 +389,27 @@ esp_err_t start_adc_calibrate()
     {
         if (adc_result.Ubatt > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error Ubat!");
+            ESP_LOGE("AUTOCALIBRATE", "Error Ubat!");
             return ESP_FAIL;
         }
         if (adc_result.R1 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error R1!");
+            ESP_LOGE("AUTOCALIBRATE", "Error R1!");
             return ESP_FAIL;
         }
         if (adc_result.R2 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error R2!");
+            ESP_LOGE("AUTOCALIBRATE", "Error R2!");
             return ESP_FAIL;
         }
         if (adc_result.U > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error U!");
+            ESP_LOGE("AUTOCALIBRATE", "Error U!");
             return ESP_FAIL;
         }
         if (adc_result.U0 > 50)
         {
-            ESP_LOGI("AUTOCALIBRATE", "Error U0!");
+            ESP_LOGE("AUTOCALIBRATE", "Error U0!");
             return ESP_FAIL;
         }
     }

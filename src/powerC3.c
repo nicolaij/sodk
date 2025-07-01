@@ -161,7 +161,6 @@ int current2chan(int adc)
     return res;
 };
 
-
 int kOm(int adc_u, int adc_r)
 {
     int u = volt(adc_u);
@@ -467,6 +466,10 @@ void adc_task(void *arg)
         if (cmd_power.cmd > 3) // Калибровка ADC
         {
             pulse = 0;
+        }
+        else
+        {
+            pulse = get_menu_val_by_id("pulse");
         }
 
         uint8_t *ptr = buffer_ADC;
