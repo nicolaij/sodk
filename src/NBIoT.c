@@ -24,8 +24,6 @@ char net_status_current[32];
 
 RTC_DATA_ATTR bool first_run_completed = false;
 
-extern TaskHandle_t xHandleWifi;
-
 extern int32_t timezone;
 
 unsigned int fromActiveTime(uint8_t val)
@@ -783,7 +781,7 @@ void modem_task(void *arg)
                                 if (common_data_transmit == false)
                                 {
                                     l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113);
-                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out, result.flags.value);
+                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
                                 }
 
                                 l += snprintf(send_data + l, sizeof(send_data) - l, "}");
@@ -888,7 +886,7 @@ void modem_task(void *arg)
 
                 if (common_data_transmit == false)
                 {
-                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out, result.flags.value);
+                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
 
                     common_data_transmit = true;
                 }
