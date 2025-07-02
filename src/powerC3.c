@@ -1058,7 +1058,7 @@ void adc_task(void *arg)
         // int len_data = snprintf((char *)buf, sizeof(buf), "{\"channel\":\"%d\",\"num\":%d,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"Ub1\":%.3f,\"Ub0\":%.3f,\"U0\":%.1f,\"time\":%d,\"Temp\":%.01f,\"Flags\":\"0x%04X\"}", result.channel, bootCount + timeoutCounter, get_datetime(result.ttime), result.U / 1000.0, result.R, result.Ubatt1 / 1000.0, result.Ubatt0 / 1000.0, result.U0 / 1000.0, result.time, result.flags.value);
         int len_data = snprintf(buf, WS_BUF_SIZE, OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
 
-        len_data += snprintf(buf + len_data, WS_BUF_SIZE - len_data, OUT_ADD_COMMON, tsens_out, result.flags.value);
+        len_data += snprintf(buf + len_data, WS_BUF_SIZE - len_data, OUT_ADD_COMMON, tsens_out);
 
         xRingbufferSend(wsbuf_handle, buf, len_data + 1, 0);
 
