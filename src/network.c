@@ -663,15 +663,21 @@ int ws_fd[5] = {0, 0, 0, 0, 0};
 /*
  * async send function, which we put into the httpd work queue
  */
-static void ws_async_send(char *msg)
+typedef struct
+{
+    uint8_t *payload; /*!< Pre-allocated data buffer */
+    size_t len;       /*!< Length of data */
+} wsdata_t;
+
+static void ws_async_send(wsdata_t *msg)
 {
     httpd_ws_frame_t ws_pkt;
 
     if (ws_fd[0] == 0)
         return;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.payload = (uint8_t *)msg;
-    ws_pkt.len = strlen(msg);
+    ws_pkt.payload = msg->payload;
+    ws_pkt.len = msg->len;
     ws_pkt.type = HTTPD_WS_TYPE_TEXT;
 
     for (int i = 0; i < (sizeof(ws_fd) / sizeof(ws_fd[0])); i++)
@@ -990,16 +996,21 @@ void wifi_task(void *arg)
                 }
                 else if (ws_fd[0] > 0)
                 {
-                    // Receive an item from no-split ring buffer
-                    size_t item_size;
-                    char *item = (char *)xRingbufferReceive(wsbuf_handle, &item_size, pdMS_TO_TICKS(0));
+                    // Receive an item from allow-split ring buffer
+                    wsdata_t wsdata1, wsdata2;
+                    BaseType_t ret = xRingbufferReceiveSplit(wsbuf_handle, (void **)&wsdata1.payload, (void **)&wsdata2.payload, &wsdata1.len, &wsdata2.len, pdMS_TO_TICKS(0));
+
                     // Check received item
-                    if (item != NULL)
+                    if (ret == pdTRUE && wsdata1.payload != NULL)
                     {
-                        ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, item));
-                        // Return Item
-                        vRingbufferReturnItem(wsbuf_handle, (void *)item);
-                        reset_sleep_timeout();
+                        ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, &wsdata1));
+                        vRingbufferReturnItem(wsbuf_handle, (void *)wsdata1.payload);
+                        // Check if item was split
+                        if (wsdata2.payload != NULL)
+                        {
+                            ESP_ERROR_CHECK_WITHOUT_ABORT(httpd_queue_work(ws_hd, (httpd_work_fn_t)ws_async_send, &wsdata2));
+                            vRingbufferReturnItem(wsbuf_handle, (void *)wsdata2.payload);
+                        }
                     }
                 }
             }

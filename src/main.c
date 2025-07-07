@@ -487,7 +487,7 @@ void app_main(void)
 
     ESP_LOGI("main", "Current date/time: %s", get_datetime(time(0)));
 
-    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_NOSPLIT);
+    wsbuf_handle = xRingbufferCreate(10 * WS_BUF_SIZE, RINGBUF_TYPE_ALLOWSPLIT);
 
     ESP_LOGD("main", "Initializing Temperature sensor");
 
