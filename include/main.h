@@ -164,7 +164,7 @@ extern TaskHandle_t xHandleWifi;
 #define NOTYFY_WIFI_ESPNOW BIT2
 #define NOTYFY_WIFI_REBOOT BIT3
 
-#define OUT_ADD_NBCOMMON ",\"NBbatt\":%.3f,\"RSSI\":%i"
+#define OUT_ADD_NBCOMMON ",\"NBbatt\":%.3f,\"RSSI\":%i,\"TAC\":%u,\"CI\":%u"
 #define OUT_ADD_COMMON ",\"Temp\":%.01f"
 #define OUT_CHANNEL "\"id\":\"sodk%d.%d\",\"num\":%u,\"dt\":\"%s\",\"U\":%.1f,\"R\":%d,\"U0\":%.1f,\"Ubatt1\":%.3f,\"time\":%d,\"Flags\":\"0x%04X\""
 #define OUT_DATA_CHANNEL(prefix) prefix.U / 1000.0, prefix.R, prefix.U0 / 1000.0, prefix.Ubatt1 / 1000.0, prefix.time, prefix.flags.value

@@ -398,6 +398,8 @@ void adc_task(void *arg)
     const int offsetADC3 = get_menu_val_by_id("offstADC3");
     const int offsetADC4 = get_menu_val_by_id("offstADC4");
 
+    result.ttime = time(0);
+
     while (1)
     {
         BaseType_t err = xQueueReceive(uicmd_queue, &cmd_power, pdMS_TO_TICKS(Trepeatlv * 60 * 1000));
@@ -453,8 +455,6 @@ void adc_task(void *arg)
 
         if (result.channel < 5)
             hv_measure = 1;
-
-        result.ttime = time(0);
 
         if (cmd_power.channel > 0)
             pcf8575_set(cmd_power.channel);

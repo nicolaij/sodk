@@ -318,11 +318,12 @@ static esp_err_t menu_get_handler(httpd_req_t *req)
 
 static esp_err_t menu_post_handler(httpd_req_t *req)
 {
-    int ret, remaining = req->content_len;
+    int remaining = req->content_len;
     int try = 3;
     while (remaining > 0 && try > 0)
     {
         /* Read the data for the request */
+        int ret = 0;
         if ((ret = httpd_req_recv(req, network_buf, MIN(remaining, sizeof(network_buf)))) <= 0)
         {
             if (ret == HTTPD_SOCK_ERR_TIMEOUT)
@@ -348,40 +349,39 @@ static esp_err_t menu_post_handler(httpd_req_t *req)
     char *s = network_buf;
     char name[16];
     int mac2 = 0;
-    uint8_t mac_addr[6];
+    uint8_t addr[6];
     while (s && s < (network_buf + req->content_len))
     {
         char *e = strchr(s, '=');
         *e = '\0';
         strncpy(name, s, sizeof(name));
-
         int v = 0;
-        if (strlen(name) == 2 && strncmp(name, "ip", 2) == 0)
+        if (strncmp(name, "ip", 2) == 0)
         {
-            int parsed = sscanf((const char *)e + 1, "%hhu.%hhu.%hhu.%hhu", &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3]);
+            int parsed = sscanf((const char *)e + 1, "%hhu.%hhu.%hhu.%hhu", &addr[0], &addr[1], &addr[2], &addr[3]);
             if (parsed == 4)
             {
-                v = (mac_addr[0] << 0) | (mac_addr[1] << 8) | (mac_addr[2] << 16) | (mac_addr[3] << 24);
+                v = (addr[0] << 0) | (addr[1] << 8) | (addr[2] << 16) | (addr[3] << 24);
             }
         }
-        else if (strlen(name) == 4 && strncmp(name, "MAC1", 4) == 0)
+        else if (strncmp(name, "MAC1", 4) == 0)
         {
             //&MAC1=00%3A00%3A00%3A00%3A00%3A51&MAC2=81
             int parsed = sscanf((const char *)e + 1,
                                 "%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx",
-                                &mac_addr[0], &mac_addr[1], &mac_addr[2], &mac_addr[3], &mac_addr[4], &mac_addr[5]);
+                                &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
 
             if (parsed == 6)
             {
-                v = (mac_addr[0] << 16) | (mac_addr[1] << 8) | mac_addr[2];
-                mac2 = (mac_addr[3] << 16) | (mac_addr[4] << 8) | mac_addr[5];
+                v = (addr[0] << 16) | (addr[1] << 8) | addr[2];
+                mac2 = (addr[3] << 16) | (addr[4] << 8) | addr[5];
             }
             else
             {
                 mac2 = 0;
             }
         }
-        else if (strlen(name) == 4 && strncmp(name, "MAC2", 4) == 0)
+        else if (strncmp(name, "MAC2", 4) == 0)
         {
             v = mac2;
         }
@@ -530,14 +530,14 @@ esp_err_t update_post_handler(httpd_req_t *req)
             {
                 ESP_ERROR_CHECK(esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle));
             }
-            else if (remaining == 0x80000)
+            else if (remaining == 0x50000) //SPIFFS Image
             {
                 file_id = remaining;
-                ESP_ERROR_CHECK(esp_partition_erase_range(ota_partition, 0, 0x80000));
+                ESP_ERROR_CHECK(esp_partition_erase_range(ota_partition, 0, 0x50000));
             }
             else
             {
-                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File Error");
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "File type Error");
                 return ESP_FAIL;
             }
         }
@@ -548,14 +548,14 @@ esp_err_t update_post_handler(httpd_req_t *req)
             // Successful Upload: Flash firmware chunk
             if (esp_ota_write(ota_handle, (const void *)network_buf, recv_len) != ESP_OK)
             {
-                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash Error");
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash write Error");
                 return ESP_FAIL;
             }
             vTaskDelay(1);
         }
         else
             // spiffs.bin
-            if (file_id == 0x80000)
+            if (file_id == 0x50000)
             {
                 ESP_ERROR_CHECK(esp_partition_write(ota_partition, (req->content_len - remaining), (const void *)network_buf, recv_len));
                 vTaskDelay(1);
@@ -578,10 +578,10 @@ esp_err_t update_post_handler(httpd_req_t *req)
         if (xHandleWifi)
             xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
     }
-    else if (file_id == 0x80000)
+    else if (file_id == 0x50000)
     {
         const esp_partition_t *storage_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
-        ESP_ERROR_CHECK(esp_partition_erase_range(storage_partition, 0, 0x80000));
+        ESP_ERROR_CHECK(esp_partition_erase_range(storage_partition, 0, 0x50000));
 
         remaining = req->content_len;
         int recv_len = sizeof(network_buf);
@@ -735,7 +735,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
             struct timeval now = {.tv_sec = ts + timezone * 3600}; // UNIX time + timezone offset
             settimeofday(&now, NULL);
 
-            ESP_LOGD(TAGH, "WS set date and time: %s", get_datetime(time(0)));
+            ESP_LOGI(TAGH, "WS set date and time: %s", get_datetime(time(0)));
         }
         need_ws_send = true;
     }

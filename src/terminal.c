@@ -176,7 +176,6 @@ esp_err_t set_menu_val_by_id(const char *id, int value)
 {
     esp_err_t err = ESP_FAIL;
     int ll = strlen(id);
-
     for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
     {
         int l = strlen(menu[i].id);

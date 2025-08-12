@@ -590,7 +590,7 @@ void app_main(void)
         }
     }
 
-    if (bootCount % (Trepeathv / Trepeatlv) == 1 && BattLow < 100)
+    if ((bootCount % (Trepeathv / Trepeatlv) == 1 || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) && BattLow < 100)
     {
         if (xHandleNB)
             xTaskNotifyGive(xHandleNB); // включаем NBIoT модуль

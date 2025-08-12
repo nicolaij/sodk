@@ -374,6 +374,7 @@ void modem_task(void *arg)
 {
     char data[RX_BUF_SIZE];
     char send_data[TX_BUF_SIZE];
+    time_t realtime = 0;
 
     // zero-initialize the config structure.
     gpio_config_t io_conf = {};
@@ -567,9 +568,9 @@ void modem_task(void *arg)
             int try_network = 120;
             int tAT = 0;
             int tRT = 0;
+            int creg[10] = {-1, -1};
             while (try_network > 0)
             {
-                int creg[10] = {-1, -1};
                 ee = at_reply_get("AT+CEREG?\r\n", "CEREG: 5", (char *)data, creg, 10, 1000 / portTICK_PERIOD_MS);
                 if (ee != ESP_OK)
                 {
@@ -662,8 +663,6 @@ void modem_task(void *arg)
                     tm.tm_hour = dt[3];
                     tm.tm_min = dt[4];
                     tm.tm_sec = dt[5];
-
-                    const int timezone = 3; // FORCE TIMEZONE
 
                     time_t t = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
                     struct timeval now = {.tv_sec = t};
@@ -774,13 +773,22 @@ void modem_task(void *arg)
                         {
                             // результат измерений
                             result_t result;
+                            if (realtime < 1754900000LL)
+                                realtime = time(0);
+
                             while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
                             {
+                                //ESP_LOGD(TAG, "time: %lli", result.ttime);
+                                if (result.ttime < 1754900000LL) // 2025-08-11
+                                {
+                                    result.ttime = realtime;
+                                }
+
                                 int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
 
                                 if (common_data_transmit == false)
                                 {
-                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113);
+                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, creg[2], creg[3]);
                                     l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
                                 }
 
@@ -809,14 +817,14 @@ void modem_task(void *arg)
                                         if (wait_string(data, "\r\n", 1000 / portTICK_PERIOD_MS) == ESP_OK)
                                         {
                                             // ESP_LOGI(TAG, "Modem: %s", data);
-                                            const char *pdata = strstr((const char *)data, "+CSONMI: ");
-                                            if (pdata)
+                                            const char *rdata = strstr((const char *)data, "+CSONMI: ");
+                                            if (rdata)
                                             { //+CSONMI: 0,20,5468616E6B20796F7521
-                                                char *s = strchr(pdata, ',');
+                                                char *s = strchr(rdata, ',');
                                                 if (s)
                                                 {
                                                     // len
-                                                    int l = atoi(s + 1);
+                                                    l = atoi(s + 1);
                                                     s = strchr(s + 1, ',');
                                                     if (s++)
                                                     {
