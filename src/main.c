@@ -8,7 +8,6 @@
 #include <stdio.h>
 
 #include "driver/gpio.h"
-#include "esp_sleep.h"
 
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -250,6 +249,10 @@ void start_measure(int channel, int flag)
         }
         xQueueSend(uicmd_queue, &cmd, (TickType_t)0);
     }
+
+    if (flag < 2)
+        if (xHandleNB)
+            xTaskNotifyGive(xHandleNB); // включаем NBIoT модуль
 }
 
 esp_err_t start_adc_calibrate()
@@ -557,10 +560,7 @@ void app_main(void)
         ESP_LOGE("i2c", "Error. pcf8575 disabled!");
     }
 
-    pcf8575_read(0);
-
     uicmd_queue = xQueueCreate(8, sizeof(cmd_t));
-
     send_queue = xQueueCreate(10, sizeof(result_t));
     adc_queue = xQueueCreate(3, sizeof(calcdata_t));
 
@@ -574,7 +574,7 @@ void app_main(void)
 
     xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
-    xTaskCreate(adc_task, "adc_task", 1024 * 3, NULL, configMAX_PRIORITIES - 5, &xHandleADC);
+    xTaskCreate(adc_task, "adc_task", 1024 * 3, (void *)&wakeup_reason, configMAX_PRIORITIES - 5, &xHandleADC);
 
     vTaskPrioritySet(NULL, configMAX_PRIORITIES - 7);
 
@@ -592,8 +592,6 @@ void app_main(void)
 
     if ((bootCount % (Trepeathv / Trepeatlv) == 1 || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) && BattLow < 100)
     {
-        if (xHandleNB)
-            xTaskNotifyGive(xHandleNB); // включаем NBIoT модуль
         start_measure(0, 0);
     }
     else
@@ -672,8 +670,8 @@ void app_main(void)
     // засыпаем...
     if (BattLow < 100)
     {
-        pcf8575_read(0); // reset INT_PIN
-                         // if (gpio_get_level(PCF_INT_PIN) == 1)
+        // pcf8575_read(0); // reset INT_PIN
+        //  if (gpio_get_level(PCF_INT_PIN) == 1)
         ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
     }
 

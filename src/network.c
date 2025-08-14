@@ -750,7 +750,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
             ESP_LOGD(TAGH, "Start measure channel %i", ch);
         }
     }
-
     return ret;
 }
 

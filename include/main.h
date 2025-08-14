@@ -13,6 +13,7 @@
 #include "freertos/ringbuf.h"
 
 #include <sys/time.h>
+#include "esp_sleep.h"
 
 // размер кольцевого буфера (только степень 2)
 #define RINGBUFLEN (1 << 11)
@@ -87,22 +88,25 @@ typedef struct
         uint16_t value;
         struct
         {
-            bool d_in : 1; // состояние входа IN
-            bool reserved1 : 1;
+            bool d_in : 1;   // состояние входа IN
+            bool d_wake : 1; // пробуждение от концевика ковера
             bool reserved2 : 1;
             bool reserved3 : 1;
 
-            bool d_changed_ch1 : 1; // признак изменения состояния канала 1
-            bool d_changed_ch2 : 1; // признак изменения состояния канала 2
-            bool d_changed_ch3 : 1; // признак изменения состояния канала 3
-            bool d_changed_ch4 : 1; // признак изменения состояния канала 4
-
-            bool d_batt_low : 1; // низкий уровень заряда батарей
-            bool reserved4 : 1;
+            bool d_batt_low : 1;    // низкий уровень заряда батарей
+            bool d_nbiot_error : 1; // ошибка модуля NBIoT
             bool reserved5 : 1;
             bool reserved6 : 1;
 
-            bool d_nbiot_error : 1;         // ошибка модуля NBIoT
+            bool d_loop_ch1 : 1; // признак неисправности петли канала 1
+            bool d_loop_ch2 : 1; // признак неисправности петли канала 2
+            bool d_loop_ch3 : 1; // признак неисправности петли канала 3
+            bool d_loop_ch4 : 1; // признак неисправности петли канала 4
+
+            bool d_different : 1; // отличие измерений от предыдущих
+            bool reserved13 : 1;
+            bool reserved14 : 1;
+            bool reserved15 : 1;
         };
     } flags;
     int R;
@@ -173,7 +177,7 @@ extern unsigned int bootCount;
 extern uint8_t BattLow;
 extern float tsens_out;
 
-void adc_task(void *arg);
+void adc_task(void *wakeup_reason);
 void btn_task(void *arg);
 void wifi_task(void *arg);
 void modem_task(void *arg);

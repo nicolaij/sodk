@@ -29,18 +29,6 @@ RTC_DATA_ATTR uint16_t history_tail = 0;
 #define OVERLOADADC (int)(4095 - (0.03 * 4095.0))
 #define UNDERVOLTAGE 4000 // min 4В
 
-/*
-    БИТ
-    0 - пред. состояние входа in
-    1 - пред. состояние петли 1-го канала, при высоковольт. измерении
-    2 - пред. состояние петли 2-го канала, при высоковольт. измерении
-    3 - пред. состояние петли 3-го канала, при высоковольт. измерении
-    4 - пред. состояние петли 4-го канала, при высоковольт. измерении
-    5 - пред. состояние петли 1-го канала, при низквольт. измерении
-    6 - пред. состояние петли 2-го канала, при низквольт. измерении
-    7 - пред. состояние петли 3-го канала, при низквольт. измерении
-    8 - пред. состояние петли 4-го канала, при низквольт. измерении
-*/
 RTC_DATA_ATTR unsigned int measure_flags = 0;
 
 /*
@@ -255,8 +243,6 @@ static void IRAM_ATTR pcf_int_handler(void *arg)
 {
     static cmd_t cmd = {.cmd = 3, .channel = 0};
     xQueueSendFromISR(uicmd_queue, &cmd, (TickType_t)0);
-    // uint32_t gpio_num = (uint32_t)arg;
-    // xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
 void btn_task(void *arg)
@@ -302,16 +288,16 @@ void btn_task(void *arg)
 
 #define MEDIAN(a, p) (MAX(a[0].p, a[1].p) == MAX(a[1].p, a[2].p)) ? MAX(a[0].p, a[2].p) : MAX(a[1].p, MIN(a[0].p, a[2].p))
 
-void adc_task(void *arg)
+void adc_task(void *wakeup_reason)
 {
 
     cmd_t cmd_power = {};
-    result_t result = {};
-
-    unsigned int measure_current_flags = measure_flags;
+    result_t result = {.flags.value = 0};
 
     // признак высоковольтных измерений
     int hv_measure = 0;
+
+    int d_in = -1;
 
     // zero-initialize the config structure.
     gpio_config_t io_conf = {};
@@ -332,12 +318,13 @@ void adc_task(void *arg)
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     ESP_ERROR_CHECK(gpio_config(&io_conf));
 
+    // добавляем в очередь чтение PCF
+    pcf_int_handler(NULL);
+
     // install gpio isr service
     gpio_install_isr_service(0);
     // hook isr handler for specific gpio pin
     gpio_isr_handler_add(PCF_INT_PIN, pcf_int_handler, (void *)PCF_INT_PIN);
-
-    int d_in = -1;
 
     continuous_adc_init();
 
@@ -398,8 +385,6 @@ void adc_task(void *arg)
     const int offsetADC3 = get_menu_val_by_id("offstADC3");
     const int offsetADC4 = get_menu_val_by_id("offstADC4");
 
-    result.ttime = time(0);
-
     while (1)
     {
         BaseType_t err = xQueueReceive(uicmd_queue, &cmd_power, pdMS_TO_TICKS(Trepeatlv * 60 * 1000));
@@ -430,15 +415,18 @@ void adc_task(void *arg)
                 xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
                 if (d_input == 1)
                 {
-                    measure_flags |= 0b1;
+                    result.flags.d_in = 1;
                 }
                 else if (d_input == 0)
                 {
-                    measure_flags &= ~0b1;
+                    result.flags.d_in = 0;
                 }
             }
             continue;
         };
+
+        if ((time(0) - result.ttime) > 60)
+            result.ttime = time(0);
 
         // отключаем обработку прерываний от pcf
         // gpio_isr_handler_remove(PCF_INT_PIN);
@@ -927,30 +915,15 @@ void adc_task(void *arg)
                     sum_adc_full.U0 /= count_adc_full;
                     sum_adc_full.U /= count_adc_full;
 
-                    //  ESP_LOGD(TAG, "block: %d = adc 0:%d (%d), 1:%d (%d), 2:%d (%d)", block, sum_adc.R1 / n, r1, sum_adc.U / n, u, sum_adc.R2 / n, r2);
-                    //   ESP_LOGD(TAG, "on result: Ubatt0 summ: %d, count: %d", result.Ubatt0, Ubatt0counter);
-                    //   ESP_LOGD(TAG, "on result: Ubatt1 summ: %d, count: %d", result.Ubatt1, Ubatt1counter);
+                    // ESP_LOGD(TAG, "block: %d = adc 0:%d (%d), 1:%d (%d), 2:%d (%d)", block, sum_adc.R1 / n, r1, sum_adc.U / n, u, sum_adc.R2 / n, r2);
+                    // ESP_LOGD(TAG, "on result: Ubatt0 summ: %d, count: %d", result.Ubatt0, Ubatt0counter);
+                    // ESP_LOGD(TAG, "on result: Ubatt1 summ: %d, count: %d", result.Ubatt1, Ubatt1counter);
 
                     if (Ubatt0counter > 0)
                         result.Ubatt0 = result.Ubatt0 / Ubatt0counter;
 
                     if (Ubatt1counter > 0)
                         result.Ubatt1 = result.Ubatt1 / Ubatt1counter;
-
-                    // увеличивем интервал при низком напряжении
-                    if (result.Ubatt1 < UbatLow)
-                    {
-                        result.flags.d_batt_low = 1;
-                        BattLow += 1;
-
-                        ESP_LOGD(TAG, "Ubatt low: %d", result.Ubatt1);
-
-                        // отключаем если при lv измерении напряжение упало ниже минимума
-                        if (result.Ubatt1 < UbatEnd)
-                        {
-                            BattLow = 100;
-                        }
-                    }
                 }
             }
 
@@ -988,37 +961,40 @@ void adc_task(void *arg)
         {
             if (abs(measure_chan[result.channel] - result.R) * 100 / abs(result.R) > percRlv)
             {
-                if (xHandleNB)
-                    xTaskNotifyGive(xHandleNB); // включаем NBIoT модуль
-
                 ESP_LOGD(TAG, "Differences in measurements found.");
-
                 // запоминаем данные для сравнения
                 measure_chan[result.channel] = result.R;
+                result.flags.d_different = 1;
             }
         }
 
         // определяем процент напряжение на обратном проводе
+        int chan = (result.channel <= 4) ? result.channel : result.channel - 4;
         int pr = (result.U0 * 100) / result.U;
-        if (pr > percU0lv) // 75%
+        if (pr < percU0lv) // 75%
         {
-            measure_current_flags |= BIT(result.channel);
-        }
-        else
-        {
-            measure_current_flags &= ~BIT(result.channel);
+            result.flags.value |= BIT(chan + 7);
         }
 
-        result.flags.d_in = measure_flags & 1;
+        // пробуждение от концевика двери
+        if (*(int *)wakeup_reason == ESP_SLEEP_WAKEUP_GPIO)
+            result.flags.d_wake = 1;
 
-        if (result.channel % 4 == 1)
-            result.flags.d_changed_ch1 |= ((measure_current_flags & BIT(result.channel)) > 0);
-        if (result.channel % 4 == 2)
-            result.flags.d_changed_ch2 |= ((measure_current_flags & BIT(result.channel)) > 0);
-        if (result.channel % 4 == 3)
-            result.flags.d_changed_ch3 |= ((measure_current_flags & BIT(result.channel)) > 0);
-        if (result.channel % 4 == 0)
-            result.flags.d_changed_ch4 |= ((measure_current_flags & BIT(result.channel)) > 0);
+        if (result.Ubatt1 < UbatLow)
+        {
+            result.flags.d_batt_low = 1;
+
+            // увеличивем интервал пробуждения при низком напряжении
+            BattLow += 1;
+
+            ESP_LOGD(TAG, "Ubatt low: %d", result.Ubatt1);
+
+            // отключаем если при lv измерении напряжение упало ниже минимума
+            if (result.Ubatt1 < UbatEnd)
+            {
+                BattLow = 100;
+            }
+        }
 
         xQueueSend(send_queue, &result, (TickType_t)0);
         xQueueSend(adc_queue, &sum_adc_full, (TickType_t)0);
@@ -1033,16 +1009,17 @@ void adc_task(void *arg)
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-            if (hv_measure == 0 && measure_current_flags != measure_flags)
+            if ((hv_measure == 0) && ((result.flags.value & 0x1F01) != (measure_flags & 0x0F01)))
             {
                 start_measure(0, 1);
             }
-        };
+        }
 
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
             // завершаем
-            measure_flags = measure_current_flags;
+            measure_flags = result.flags.value;
+
             // ВЫРУБАЕМ каналы
             pcf8575_set(POWER_CMDOFF);
 
@@ -1051,7 +1028,7 @@ void adc_task(void *arg)
             // Подключаем прерывания от pcf
             ESP_ERROR_CHECK(gpio_intr_enable(PCF_INT_PIN));
             xEventGroupSetBits(status_event_group, END_MEASURE);
-        };
+        }
 
         // РЕЗУЛЬТАТ
         static char buf[WS_BUF_SIZE];
