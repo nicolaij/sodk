@@ -969,6 +969,7 @@ void adc_task(void *wakeup_reason)
         }
 
         // определяем процент напряжение на обратном проводе
+        //int chan = (result.channel <= 4) ? result.channel : result.channel - 4;
         int chan = (result.channel <= 4) ? result.channel : result.channel - 4;
         int pr = (result.U0 * 100) / result.U;
         if (pr < percU0lv) // 75%

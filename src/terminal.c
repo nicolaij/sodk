@@ -20,7 +20,7 @@ static const char *TAG = "terminal";
 nvs_handle_t my_handle;
 
 menu_t menu[] = {
-    /*0*/ {.id = "idn", .name = "Номер датчика", .izm = "", .val = 1, .min = 1, .max = 1000000},
+    /*0*/ {.id = "idn", .name = "Номер прибора", .izm = "", .val = 1, .min = 1, .max = 1000000},
     /*1*/ {.id = "waitwifi", .name = "Ожидание WiFi", .izm = "мин", .val = 3, .min = 1, .max = 1000000},
     /*2*/ {.id = "Trepeatlv", .name = "Интервал измер. низ.", .izm = "мин", .val = 60, .min = 1, .max = 1000000},
     /*3*/ {.id = "Trepeathv", .name = "Интервал измер. выс.", .izm = "мин", .val = 720, .min = 1, .max = 1000000},
@@ -33,26 +33,26 @@ menu_t menu[] = {
     /*10*/ {.id = "chanord", .name = "Порядок опроса каналов", .izm = "", .val = 1234, .min = 0, .max = 999999999},
     /*11*/ {.id = "Overvolt", .name = "Ограничение U", .izm = "В", .val = 600, .min = 0, .max = 1000},
     /*12*/ {.id = "k2U", .name = "коэф. 2 U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*13*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1432, .min = 1, .max = 1000000},
-    /*14*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*13*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1491, .min = 1, .max = 1000000},
+    /*14*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 2026, .min = -1000000, .max = 1000000},
     /*15*/ {.id = "k2Ulv", .name = "коэф. 2 U низ.", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*16*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3784, .min = 1, .max = 1000000},
-    /*17*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
+    /*16*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3890, .min = 1, .max = 1000000},
+    /*17*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 103, .min = -1000000, .max = 1000000},
     /*18*/ {.id = "k2R1", .name = "коэф. 2 R (ch 1)", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*19*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8086, .min = 1, .max = 1000000},
-    /*20*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = -15160, .min = -1000000, .max = 1000000},
+    /*19*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8346, .min = 1, .max = 1000000},
+    /*20*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = 4648, .min = -1000000, .max = 1000000},
     /*21*/ {.id = "k2R2", .name = "коэф. 2 R (ch 2)", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*22*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30560, .min = 1, .max = 100000},
-    /*23*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = -239, .min = -1000000, .max = 1000000},
+    /*22*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 31324, .min = 1, .max = 100000},
+    /*23*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = -141, .min = -1000000, .max = 1000000},
     /*24*/ {.id = "k2U0", .name = "коэф. 2 U петли", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*25*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1418, .min = 1, .max = 1000000},
-    /*26*/ {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*25*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1492, .min = 1, .max = 1000000},
+    /*26*/ {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 1351, .min = -1000000, .max = 1000000},
     /*27*/ {.id = "k2U0lv", .name = "коэф. 2 U петли низ.", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*28*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 124535, .min = 1, .max = 1000000},
-    /*29*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*28*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 155640, .min = 1, .max = 1000000},
+    /*29*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 732, .min = -1000000, .max = 1000000},
     /*30*/ {.id = "k2Ubat", .name = "коэф. 2 U bat", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3784, .min = 1, .max = 1000000},
-    /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 122, .min = -1000000, .max = 1000000},
+    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3908, .min = 1, .max = 1000000},
+    /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 263, .min = -1000000, .max = 1000000},
     /*33*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "В", .val = 0, .min = 0, .max = 12000},
     /*34*/ {.id = "UbatEnd", .name = "U bat отключения", .izm = "В", .val = 0, .min = 0, .max = 12000},
     /*35*/ {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .izm = "", .val = 10, .min = 1, .max = 100},
@@ -394,8 +394,8 @@ void console_task(void *arg)
                     ESP_LOGI("menu", "120. ESP-NOW transmit");
                     ESP_LOGI("menu", "200. Измерение ВВ без подключ. канала");
                     ESP_LOGI("menu", "201 - 208. Измерение канала 1 - 8");
-                    ESP_LOGI("menu", "209. Измерение c POWER_ON и подключ. канала");
-                    ESP_LOGI("menu", "210. Измерение без ВВ и подключ. канала");
+                    ESP_LOGI("menu", "209. Измерение c POWER_ON и без подключ. канала");
+                    ESP_LOGI("menu", "210. Измерение без ВВ и без подключ. канала");
                     ESP_LOGI("menu", "-------------------------------------------");
                     break;
                 case 5: // IP сервера

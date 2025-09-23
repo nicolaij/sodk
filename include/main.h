@@ -195,6 +195,7 @@ int write_nvs_lora(const char *key, int value);
 int write_nvs_nbiot();
 
 esp_err_t read_nvs_menu(void);
+esp_err_t init_nvs();
 
 void reset_sleep_timeout(void);
 

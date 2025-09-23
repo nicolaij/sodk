@@ -4,3 +4,5 @@ platformio-device-monitor*
 *.csv
 logs
 !partitions.csv
+test/*.*
+

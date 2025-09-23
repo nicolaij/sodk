@@ -9,9 +9,6 @@
 
 #include "driver/gpio.h"
 
-#include "nvs.h"
-#include "nvs_flash.h"
-
 #include "esp_timer.h"
 
 #define PCF8575_I2C_ADDR_BASE 0x20
@@ -266,7 +263,7 @@ esp_err_t start_adc_calibrate()
     gpio_pulldown_en(2);
     gpio_pulldown_en(3);
     gpio_pulldown_en(4);
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    vTaskDelay(30000 / portTICK_PERIOD_MS);
     gpio_pulldown_dis(0);
     gpio_pulldown_dis(1);
     gpio_pulldown_dis(2);
@@ -370,7 +367,7 @@ esp_err_t start_adc_calibrate()
     gpio_pulldown_en(2);
     gpio_pulldown_en(3);
     gpio_pulldown_en(4);
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    vTaskDelay(30000 / portTICK_PERIOD_MS);
     gpio_pulldown_dis(0);
     gpio_pulldown_dis(1);
     gpio_pulldown_dis(2);
@@ -511,21 +508,7 @@ void app_main(void)
     ESP_LOGI("temperature_sensor", "%s", buf);
 
     // Initialize NVS
-    esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        // NVS partition was truncated and needs to be erased
-        // Retry nvs_flash_init
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        err = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(err);
-
-    // Example of nvs_get_stats() to get the number of used entries and free entries:
-    nvs_stats_t nvs_stats;
-    nvs_get_stats(NULL, &nvs_stats);
-    ESP_LOGI("NVS", "Count: UsedEntries = (%d), FreeEntries = (%d), AllEntries = (%d)", nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.total_entries);
-
+    esp_err_t err = init_nvs();
     err = read_nvs_menu();
 
     if (err != ESP_OK)

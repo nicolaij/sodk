@@ -337,15 +337,15 @@ esp_err_t apply_command(const char *cmd, size_t len)
 }
 
 // Callback при отправке
-void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status)
+static void espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status)
 {
     ESP_LOGI(TAG, "Packet to " MACSTR ", status: %s",
-             MAC2STR(mac_addr),
+             MAC2STR(tx_info->des_addr),
              status == ESP_NOW_SEND_SUCCESS ? "Success" : "Failed");
 }
 
 // Callback при получении
-void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len)
+static void espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len)
 {
     ESP_LOGI(TAG, "Received from " MACSTR ", len: %d", MAC2STR(recv_info->src_addr), len);
     apply_command((const char *)data, len);
@@ -778,7 +778,7 @@ void modem_task(void *arg)
 
                             while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
                             {
-                                //ESP_LOGD(TAG, "time: %lli", result.ttime);
+                                // ESP_LOGD(TAG, "time: %lli", result.ttime);
                                 if (result.ttime < 1754900000LL) // 2025-08-11
                                 {
                                     result.ttime = realtime;

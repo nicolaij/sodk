@@ -1,1 +1,2 @@
-python c:\Users\Nic\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 -b 460800 write_flash --flash_mode qio --flash_freq 40m --flash_size 4MB 0x0 ..\.pio\build\c3-SIM7020-release\bootloader.bin 0x8000 ..\.pio\build\c3-SIM7020-release\partitions.bin 0x10000 ..\.pio\build\c3-SIM7020-release\firmware.bin 0x3a0000 ..\.pio\build\c3-SIM7020-release\spiffs.bin
+python %USERPROFILE%\.platformio\packages\tool-esptoolpy\esptool.py --chip esp32c3 -b 460800 write_flash --flash_mode qio --flash_freq 40m --flash_size 4MB 0x0 ..\.pio\build\c3-SIM7020-release\bootloader.bin 0x8000 ..\.pio\build\c3-SIM7020-release\partitions.bin 0x10000 ..\.pio\build\c3-SIM7020-release\firmware.bin 0x3a0000 ..\.pio\build\c3-SIM7020-release\spiffs.bin
+
