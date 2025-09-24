@@ -969,7 +969,7 @@ void adc_task(void *wakeup_reason)
         }
 
         // определяем процент напряжение на обратном проводе
-        //int chan = (result.channel <= 4) ? result.channel : result.channel - 4;
+        // int chan = (result.channel <= 4) ? result.channel : result.channel - 4;
         int chan = (result.channel <= 4) ? result.channel : result.channel - 4;
         int pr = (result.U0 * 100) / result.U;
         if (pr < percU0lv) // 75%
@@ -983,8 +983,6 @@ void adc_task(void *wakeup_reason)
 
         if (result.Ubatt1 < UbatLow)
         {
-            result.flags.d_batt_low = 1;
-
             // увеличивем интервал пробуждения при низком напряжении
             BattLow += 1;
 
@@ -996,6 +994,9 @@ void adc_task(void *wakeup_reason)
                 BattLow = 100;
             }
         }
+
+        if (BattLow > 0)
+            result.flags.d_batt_low = 1;
 
         xQueueSend(send_queue, &result, (TickType_t)0);
         xQueueSend(adc_queue, &sum_adc_full, (TickType_t)0);
