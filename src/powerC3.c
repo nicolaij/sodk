@@ -791,7 +791,7 @@ void adc_task(void *wakeup_reason)
                 // окончание измерений
                 if (block_power_off == 0)
                 {
-                    if (compare_counter == 0)
+                    if (compare_counter == 0) //успешное сравнение
                     {
                         compare_ok = true;
                         // ESP_DRAM_LOGD("compare", "OK: %d", block);
@@ -819,7 +819,7 @@ void adc_task(void *wakeup_reason)
                             }
 
                             // переключаем диапазон вниз
-                            if (step_time_switch[result.channel] <= STEP_TIME_COUNT * -1)
+                            if (step_time_switch[result.channel] < STEP_TIME_COUNT * -1)
                             {
                                 if (step_time[result.channel] > 1)
                                     step_time[result.channel]--;
@@ -838,7 +838,7 @@ void adc_task(void *wakeup_reason)
                             step_time_switch[result.channel]++;
 
                             // переключаем диапазон вверх
-                            if (step_time_switch[result.channel] >= STEP_TIME_COUNT)
+                            if (step_time_switch[result.channel] > STEP_TIME_COUNT)
                             {
                                 if (step_time[result.channel] < sizeof(step_time_const) / sizeof(step_time_const[0]) - 1)
                                     step_time[result.channel]++;
