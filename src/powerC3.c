@@ -425,7 +425,7 @@ void adc_task(void *wakeup_reason)
             continue;
         };
 
-        if ((time(0) - result.ttime) > 60)
+        if ((time(0) - result.ttime) > 60 * 3)
             result.ttime = time(0);
 
         // отключаем обработку прерываний от pcf

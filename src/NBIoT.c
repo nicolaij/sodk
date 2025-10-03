@@ -863,7 +863,7 @@ void modem_task(void *arg)
                 }
             };
 
-            while (protocol == 1 && socket >= 0) // TCP
+            while (socket >= 0)
             {
                 snprintf(send_data, sizeof(send_data), "AT+CSOCL=%i\r\n", socket--);
                 at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS); // CLOSE socket

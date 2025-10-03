@@ -416,11 +416,14 @@ esp_err_t start_adc_calibrate()
     else
         return ESP_FAIL;
 
-    if ((ESP_OK == set_menu_val_by_id("offstADC0", adc_corr.Ubatt)) &&
+
+    if (
+        //(ESP_OK == set_menu_val_by_id("offstADC0", adc_corr.Ubatt)) &&
         (ESP_OK == set_menu_val_by_id("offstADC1", adc_corr.R1)) &&
-        (ESP_OK == set_menu_val_by_id("offstADC2", adc_corr.R2)) &&
-        (ESP_OK == set_menu_val_by_id("offstADC3", adc_corr.U0)) &&
-        (ESP_OK == set_menu_val_by_id("offstADC4", adc_corr.U)))
+        (ESP_OK == set_menu_val_by_id("offstADC2", adc_corr.R2)) //&&
+        //(ESP_OK == set_menu_val_by_id("offstADC3", adc_corr.U0)) &&
+        //(ESP_OK == set_menu_val_by_id("offstADC4", adc_corr.U))
+        )
         return ESP_OK;
 
     return ESP_FAIL;
