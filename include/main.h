@@ -68,7 +68,7 @@
 typedef struct
 {
     short int channel; // канал измерения 1-4, 5-8, -1 - без выбора канала
-    short int cmd;     // причина измерения 1 - высоковольные, 2 - низковольные, 3- прерывание от PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON
+    short int cmd;     // причина измерения 1 - высоковольные, 2 - низковольные, 3- прерывание от PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON; 10 - HV калибровка
 } cmd_t;
 
 typedef struct
@@ -211,7 +211,7 @@ int pcf8575_read(int bit);
 
 /*
 channel - номер канала, если 0 - то по списку menu[]; -1 - без выбора канала
-flag - 0: lv,hv; 1:hv only, 2:lv only; 3 - read PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON
+flag - 0: lv,hv; 1:hv only, 2:lv only; 3 - read PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON; 10 - ВВ калибровка 2 сек; 20 - LV калибровка 
 */
 void start_measure(int channel, int flag);
 
@@ -232,5 +232,18 @@ esp_err_t set_menu_val_by_id(const char *id, int value);
 char *get_datetime(time_t ttime);
 int get_menu_html(char *buf);
 result_t *get_history_data(int id);
+
+int voltBatt(int adc);
+int voltlv(int adc);
+int volt0lv(int adc);
+int kOmlv(int adc_u, int adc_r);
+int volt(int adc);
+int volt0(int adc);
+int kOm(int adc_u, int adc_r);
+int kOmlv(int adc_u, int adc_r);
+int kOm2chan(int adc_u, int adc_r);
+int kOm2chanlv(int adc_u, int adc_r);
+
+void update_allK();
 
 #endif

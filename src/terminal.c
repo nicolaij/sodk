@@ -14,6 +14,7 @@
 
 #include <arpa/inet.h>
 #include "esp_netif.h"
+#include "esp_wifi.h"
 
 static const char *TAG = "terminal";
 
@@ -51,7 +52,7 @@ menu_t menu[] = {
     /*28*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 133333, .min = 1, .max = 1000000},
     /*29*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*30*/ {.id = "k2Ubat", .name = "коэф. 2 U bat", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3800, .min = 1, .max = 1000000},
+    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3000, .min = 1, .max = 1000000},
     /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*33*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
     /*34*/ {.id = "UbatEnd", .name = "U bat отключения", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
@@ -276,6 +277,9 @@ void console_task(void *arg)
 
     int selected_menu_id = 0;
 
+    int calibratedata_u = 0;
+    calcdata_t adc_result[8];
+
     bool NB_terminal_mode = 0;
 
     bool espnow_send = false;
@@ -396,6 +400,11 @@ void console_task(void *arg)
                     ESP_LOGI("menu", "201 - 208. Измерение канала 1 - 8");
                     ESP_LOGI("menu", "209. Измерение c POWER_ON и без подключ. канала");
                     ESP_LOGI("menu", "210. Измерение без ВВ и без подключ. канала");
+                    ESP_LOGI("menu", "301. Включить напряжение акб на 1 к");
+                    ESP_LOGI("menu", "302. Калибр. напряж. с тестовой платой -,10280,1006,99.62");
+                    ESP_LOGI("menu", "303. Включить Высокое напряжение на 1 к");
+                    ESP_LOGI("menu", "304. ВВ калибр. напряж. с тестовой платой -,10280,1006,99.62");
+                    ESP_LOGI("menu", "305. Токовая калибровка тестовой платы -,10280,1006,99.62");
                     ESP_LOGI("menu", "-------------------------------------------");
                     break;
                 case 5: // IP сервера
@@ -536,12 +545,183 @@ void console_task(void *arg)
                 case 210: // Измерение без ВВ и подключ. канала
                     start_measure(-1, 4);
                     break;
+                case 301: // Включить напряжение на 1 к
+                    pcf8575_set(5);
+                    pcf8575_set(LV_CMDON);
+                    vTaskDelay(4000 / portTICK_PERIOD_MS);
+                    pcf8575_set(LV_CMDOFF);
+                    pcf8575_set(0);
+                    break;
+                case 302: // Измерение тестовой платы от батареи
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    ESP_LOGI("menu", "Введите напряжение в мВ: ");
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    break;
+                case 303: // Включить Высокое напряжение на 1 к
+                    pcf8575_set(1);
+                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                    vTaskDelay(4000 / portTICK_PERIOD_MS);
+                    ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+                    pcf8575_set(0);
+                    break;
+                case 304: // Напряжение ВВ
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    ESP_LOGI("menu", "Введите ВЫСОКОЕ напряжение в мВ: ");
+                    ESP_LOGI("menu", "-------------------------------------------");
+                    break;
+                case 305: // Калибровка тока по всем резисторам
+                    esp_wifi_stop();
+                    esp_wifi_deinit();
+                    xQueueReset(adc_queue);
+                    pcf8575_set(0);
+
+                    if (true)
+                    {
+                        start_measure(5, 20);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 4, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 5 err");
+                            break;
+                        }
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        start_measure(6, 20);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 5, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 6 err");
+                            break;
+                        }
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        start_measure(7, 20);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 6, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 7 err");
+                            break;
+                        }
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        start_measure(8, 20);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 7, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 8 err");
+                            break;
+                        }
+                        pcf8575_set(0);
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        start_measure(1, 10);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 1 err");
+                            break;
+                        }
+
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        start_measure(2, 10);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 1, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 2 err");
+                            break;
+                        }
+
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        start_measure(3, 10);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 2, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 3 err");
+                            break;
+                        }
+
+                        vTaskDelay(100 / portTICK_PERIOD_MS);
+                        start_measure(4, 10);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 3, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 4 err");
+                            break;
+                        }
+                    }
+                    
+                    int oldk = get_menu_val_by_id("kR2"); //по току
+                    int r = kOm2chanlv(adc_result[6].U, adc_result[6].R2);
+                    int newk = oldk *  r / 1006;
+                    ESP_LOGD(TAG, "R lv 7: %d kR2: %d - %d", r, oldk, newk);
+                    //set_menu_val_by_id("kR2", newk);
+                    
+                    update_allK();
+
+                    break;
+
                 default:
                     if (n > 0 && n <= sizeof(menu) / sizeof(menu_t))
                     {
                         ESP_LOGI("menu", "-------------------------------------------");
                         ESP_LOGI("menu", "%2i. %s: %i %s. Введите новое значение: ", n, menu[n - 1].name, menu[n - 1].val, menu[n - 1].izm);
                         ESP_LOGI("menu", "-------------------------------------------");
+                    }
+                    else
+                    {
+                        ESP_LOGE("menu", "Err: %i", n);
                     }
                     break;
                 }
@@ -585,6 +765,201 @@ void console_task(void *arg)
                     ESP_LOGE(TAG, "Error MAC format");
                 }
                 break;
+            case 302: // Текущее напряжение батареи
+                esp_wifi_stop();
+                esp_wifi_deinit();
+                xQueueReset(adc_queue);
+
+                if (sscanf((const char *)serialbuffer, "%i", &calibratedata_u) == 1)
+                {
+                    if (calibratedata_u < 10000 || calibratedata_u > 13000)
+                    {
+                        ESP_LOGE(TAG, "Error U: %d mV (10000-13000)", calibratedata_u);
+                        calibratedata_u = 0;
+                        break;
+                    }
+                    else
+                    {
+                        start_measure(-1, 5);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE == xQueueReceive(adc_queue, &adc_result[0], 2000 / portTICK_PERIOD_MS))
+                        {
+                            int oldk = get_menu_val_by_id("kUbat");
+                            int newk = (calibratedata_u + 430) * oldk / voltBatt(adc_result[0].Ubatt);
+                            esp_err_t err = set_menu_val_by_id("kUbat", newk);
+                            if (err != ESP_OK)
+                            {
+                                ESP_LOGE(TAG, "set_menu_val_by_id = %s", esp_err_to_name(err));
+                                break;
+                            }
+                        }
+                    }
+
+                    start_measure(5, 20);
+                    /* Ждем окончания измерений */
+                    xEventGroupWaitBits(
+                        status_event_group, /* The event group being tested. */
+                        END_MEASURE,        /* The bits within the event group to wait for. */
+                        pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                        pdFALSE,
+                        60000 / portTICK_PERIOD_MS);
+
+                    if (pdTRUE != xQueueReceive(adc_queue, adc_result + 4, 2000 / portTICK_PERIOD_MS))
+                    {
+                        ESP_LOGE("calibrate", "chan 5 err");
+                        break;
+                    }
+                    start_measure(6, 20);
+                    /* Ждем окончания измерений */
+                    xEventGroupWaitBits(
+                        status_event_group, /* The event group being tested. */
+                        END_MEASURE,        /* The bits within the event group to wait for. */
+                        pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                        pdFALSE,
+                        60000 / portTICK_PERIOD_MS);
+
+                    if (pdTRUE != xQueueReceive(adc_queue, adc_result + 5, 2000 / portTICK_PERIOD_MS))
+                    {
+                        ESP_LOGE("calibrate", "chan 6 err");
+                        break;
+                    }
+                    start_measure(7, 20);
+                    /* Ждем окончания измерений */
+                    xEventGroupWaitBits(
+                        status_event_group, /* The event group being tested. */
+                        END_MEASURE,        /* The bits within the event group to wait for. */
+                        pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                        pdFALSE,
+                        60000 / portTICK_PERIOD_MS);
+
+                    if (pdTRUE != xQueueReceive(adc_queue, adc_result + 6, 2000 / portTICK_PERIOD_MS))
+                    {
+                        ESP_LOGE("calibrate", "chan 7 err");
+                        break;
+                    }
+                    start_measure(8, 20);
+                    /* Ждем окончания измерений */
+                    xEventGroupWaitBits(
+                        status_event_group, /* The event group being tested. */
+                        END_MEASURE,        /* The bits within the event group to wait for. */
+                        pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                        pdFALSE,
+                        60000 / portTICK_PERIOD_MS);
+
+                    if (pdTRUE != xQueueReceive(adc_queue, adc_result + 7, 2000 / portTICK_PERIOD_MS))
+                    {
+                        ESP_LOGE("calibrate", "chan 8 err");
+                        break;
+                    }
+
+                    int U = voltlv((adc_result[7].U + adc_result[6].U + adc_result[5].U + adc_result[4].U) / 4);
+                    int oldk = get_menu_val_by_id("kUlv");
+                    int newk = oldk * calibratedata_u / U;
+                    set_menu_val_by_id("kUlv", newk);
+
+                    int U0 = volt0lv((adc_result[7].U0 + adc_result[6].U0 + adc_result[5].U0 + adc_result[4].U0) / 4);
+                    oldk = get_menu_val_by_id("kU0lv");
+                    newk = oldk * calibratedata_u / U0;
+                    set_menu_val_by_id("kU0lv", newk);
+                }
+                else
+                {
+                    calibratedata_u = 0;
+                    ESP_LOGE(TAG, "Error Ubatt: %d mV (10000-13000)", calibratedata_u);
+                }
+
+                update_allK();
+
+                break;
+            case 304: // Напряжение ВВ
+                esp_wifi_stop();
+                esp_wifi_deinit();
+                xQueueReset(adc_queue);
+
+                if (sscanf((const char *)serialbuffer, "%i", &calibratedata_u) == 1)
+                {
+                    if (calibratedata_u < 450000 || calibratedata_u > 550000)
+                    {
+                        ESP_LOGE(TAG, "Error U: %d mV (400000-550000)", calibratedata_u);
+                        calibratedata_u = 0;
+                        break;
+                    }
+                    else
+                    {
+                        start_measure(1, 10);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 1 err");
+                            break;
+                        }
+
+                        start_measure(2, 10);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 1, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 2 err");
+                            break;
+                        }
+
+                        start_measure(3, 10);
+                        /* Ждем окончания измерений */
+                        xEventGroupWaitBits(
+                            status_event_group, /* The event group being tested. */
+                            END_MEASURE,        /* The bits within the event group to wait for. */
+                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            pdFALSE,
+                            60000 / portTICK_PERIOD_MS);
+
+                        if (pdTRUE != xQueueReceive(adc_queue, adc_result + 2, 2000 / portTICK_PERIOD_MS))
+                        {
+                            ESP_LOGE("calibrate", "chan 3 err");
+                            break;
+                        }
+
+                        int U = volt((adc_result[0].U + adc_result[1].U + adc_result[2].U) / 3);
+                        ESP_LOGD(TAG, "U avg: %d mV (%d)", U, (adc_result[0].U + adc_result[1].U + adc_result[2].U) / 3);
+                        int oldk = get_menu_val_by_id("kU");
+                        int newk = oldk * calibratedata_u / U;
+                        ESP_LOGV(TAG, "K U avg: %d - %d", oldk, newk);
+                        set_menu_val_by_id("kU", newk);
+
+                        int U0 = volt0((adc_result[0].U0 + adc_result[1].U0 + adc_result[2].U0) / 3);
+                        ESP_LOGD(TAG, "U0 avg: %d mV (%d)", U0, (adc_result[0].U0 + adc_result[1].U0 + adc_result[2].U0) / 3);
+                        oldk = get_menu_val_by_id("kU0");
+                        newk = oldk * calibratedata_u / U0;
+                        ESP_LOGV(TAG, "K U0 avg: %d - %d", oldk, newk);
+                        set_menu_val_by_id("kU0", newk);
+                    }
+                }
+                else
+                {
+                    calibratedata_u = 0;
+                    ESP_LOGE(TAG, "Error Ubatt: %d mV (450000-550000)", calibratedata_u);
+                }
+                break;
+
             default:
                 if (selected_menu_id > 0 && selected_menu_id <= sizeof(menu) / sizeof(menu_t)) // selected_menu_id - номер пункта меню, n - value
                 {
@@ -623,7 +998,7 @@ void console_task(void *arg)
                 break;
             }
 
-            if (selected_menu_id == 0 && n > 0 && n <= sizeof(menu) / sizeof(menu_t))
+            if ((selected_menu_id == 0 && n > 0) && (n <= sizeof(menu) / sizeof(menu_t) || (n >= 300 && n < 310)))
                 selected_menu_id = n;
             else
                 selected_menu_id = 0;

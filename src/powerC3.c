@@ -74,7 +74,7 @@ adc_continuous_handle_t adc_handle = NULL;
 
 // Коэффициенты каналов
 // U, Ulv, I1, I2, U0, U0lv, Ubat
-int koeff[7][3] = {0};
+static int koeff[7][3] = {0};
 
 // return mV
 int volt(int adc)
@@ -288,9 +288,40 @@ void btn_task(void *arg)
 
 #define MEDIAN(a, p) (MAX(a[0].p, a[1].p) == MAX(a[1].p, a[2].p)) ? MAX(a[0].p, a[2].p) : MAX(a[1].p, MIN(a[0].p, a[2].p))
 
+void update_allK()
+{
+    //    обновляем коэффиц. калибровки
+    koeff[0][0] = get_menu_val_by_id("kU");
+    koeff[0][1] = get_menu_val_by_id("offsU");
+    koeff[0][2] = get_menu_val_by_id("k2U");
+
+    koeff[1][0] = get_menu_val_by_id("kUlv");
+    koeff[1][1] = get_menu_val_by_id("offsUlv");
+    koeff[1][2] = get_menu_val_by_id("k2Ulv");
+
+    koeff[2][0] = get_menu_val_by_id("kR1");
+    koeff[2][1] = get_menu_val_by_id("offsR1");
+    koeff[2][2] = get_menu_val_by_id("k2R1");
+
+    koeff[3][0] = get_menu_val_by_id("kR2");
+    koeff[3][1] = get_menu_val_by_id("offsR2");
+    koeff[3][2] = get_menu_val_by_id("k2R2");
+
+    koeff[4][0] = get_menu_val_by_id("kU0");
+    koeff[4][1] = get_menu_val_by_id("offsU0");
+    koeff[4][2] = get_menu_val_by_id("k2U0");
+
+    koeff[5][0] = get_menu_val_by_id("kU0lv");
+    koeff[5][1] = get_menu_val_by_id("offsU0lv");
+    koeff[5][2] = get_menu_val_by_id("k2U0lv");
+
+    koeff[6][0] = get_menu_val_by_id("kUbat");
+    koeff[6][1] = get_menu_val_by_id("offsUbat");
+    koeff[6][2] = get_menu_val_by_id("k2Ubat");
+}
+
 void adc_task(void *wakeup_reason)
 {
-
     cmd_t cmd_power = {};
     result_t result = {.flags.value = 0};
 
@@ -338,34 +369,6 @@ void adc_task(void *wakeup_reason)
     const int Trepeathv = get_menu_val_by_id("Trepeathv");
     const int overvolt_value = get_menu_val_by_id("Overvolt");
 
-    koeff[0][0] = get_menu_val_by_id("kU");
-    koeff[0][1] = get_menu_val_by_id("offsU");
-    koeff[0][2] = get_menu_val_by_id("k2U");
-
-    koeff[1][0] = get_menu_val_by_id("kUlv");
-    koeff[1][1] = get_menu_val_by_id("offsUlv");
-    koeff[1][2] = get_menu_val_by_id("k2Ulv");
-
-    koeff[2][0] = get_menu_val_by_id("kR1");
-    koeff[2][1] = get_menu_val_by_id("offsR1");
-    koeff[2][2] = get_menu_val_by_id("k2R1");
-
-    koeff[3][0] = get_menu_val_by_id("kR2");
-    koeff[3][1] = get_menu_val_by_id("offsR2");
-    koeff[3][2] = get_menu_val_by_id("k2R2");
-
-    koeff[4][0] = get_menu_val_by_id("kU0");
-    koeff[4][1] = get_menu_val_by_id("offsU0");
-    koeff[4][2] = get_menu_val_by_id("k2U0");
-
-    koeff[5][0] = get_menu_val_by_id("kU0lv");
-    koeff[5][1] = get_menu_val_by_id("offsU0lv");
-    koeff[5][2] = get_menu_val_by_id("k2U0lv");
-
-    koeff[6][0] = get_menu_val_by_id("kUbat");
-    koeff[6][1] = get_menu_val_by_id("offsUbat");
-    koeff[6][2] = get_menu_val_by_id("k2Ubat");
-
     const int moving_avg_length = get_menu_val_by_id("avgcnt");
     const int compare_counter_val = get_menu_val_by_id("avgcomp");
     // const int exp_filter_k = get_menu_val_by_id("Kfilter");
@@ -384,6 +387,8 @@ void adc_task(void *wakeup_reason)
     const int offsetADC2 = get_menu_val_by_id("offstADC2");
     const int offsetADC3 = get_menu_val_by_id("offstADC3");
     const int offsetADC4 = get_menu_val_by_id("offstADC4");
+
+    update_allK();
 
     while (1)
     {
@@ -533,6 +538,17 @@ void adc_task(void *wakeup_reason)
                         pcf8575_set(LV_CMDON);
                     }
                 }
+                else
+                {
+                    if (cmd_power.cmd == 10) // ВВ калибровка
+                    {
+                        ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 0));
+                    }
+                    else if (cmd_power.cmd == 20) // НВ калибровка
+                    {
+                        pcf8575_set(LV_CMDON);
+                    }
+                }
             }
 
             calcdata_t sum_adc = {.R1 = 0, .U = 0, .R2 = 0, .Ubatt = 0, .U0 = 0};
@@ -653,7 +669,7 @@ void adc_task(void *wakeup_reason)
             // Расчет по средним блокам 1 мс
             int v = 0;
             bufferR[buffer_head].Ubatt = voltBatt(sum_adc.Ubatt / n - offsetADC0);
-            if (cmd_power.cmd == 1)
+            if (cmd_power.cmd == 1 || cmd_power.cmd == 10)
             {
                 bufferR[buffer_head].R1 = kOm(sum_adc.U / n - offsetADC4, sum_adc.R1 / n - offsetADC1);
                 bufferR[buffer_head].R2 = kOm2chan(sum_adc.U / n - offsetADC4, sum_adc.R2 / n - offsetADC2);
@@ -705,7 +721,7 @@ void adc_task(void *wakeup_reason)
             }
 
             // считаем среднее для калибровки
-            if (block > (ON_BLOCK + 10) && (block_result == 0 || block <= block_result))
+            if (block > (ON_BLOCK + 100) && (block_result == 0 || block <= block_result))
             {
                 count_adc_full += n; // сумма на всем интервале измерения для калибровки
                 sum_adc_full.R1 += sum_adc.R1;
@@ -791,7 +807,7 @@ void adc_task(void *wakeup_reason)
                 // окончание измерений
                 if (block_power_off == 0)
                 {
-                    if (compare_counter == 0) //успешное сравнение
+                    if (compare_counter == 0) // успешное сравнение
                     {
                         compare_ok = true;
                         // ESP_DRAM_LOGD("compare", "OK: %d", block);

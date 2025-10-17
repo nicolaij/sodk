@@ -201,7 +201,7 @@ void start_measure(int channel, int flag)
     {
         const int channels = get_menu_val_by_id("chanord");
 
-        if (flag != 1)
+        if (flag != 1 && flag != 10)
         {
             int pos = 100000000;
             while (pos > 0) // First LV
@@ -416,14 +416,13 @@ esp_err_t start_adc_calibrate()
     else
         return ESP_FAIL;
 
-
     if (
         //(ESP_OK == set_menu_val_by_id("offstADC0", adc_corr.Ubatt)) &&
-        (ESP_OK == set_menu_val_by_id("offstADC1", adc_corr.R1)) &&
+        (ESP_OK == set_menu_val_by_id("offstADC1", adc_corr.R1 * 85 / 100)) &&
         (ESP_OK == set_menu_val_by_id("offstADC2", adc_corr.R2)) //&&
         //(ESP_OK == set_menu_val_by_id("offstADC3", adc_corr.U0)) &&
         //(ESP_OK == set_menu_val_by_id("offstADC4", adc_corr.U))
-        )
+    )
         return ESP_OK;
 
     return ESP_FAIL;
@@ -562,13 +561,13 @@ void app_main(void)
 
     xTaskCreate(adc_task, "adc_task", 1024 * 3, (void *)&wakeup_reason, configMAX_PRIORITIES - 5, &xHandleADC);
 
-    vTaskPrioritySet(NULL, configMAX_PRIORITIES - 7);
-
     int Trepeatlv = get_menu_val_by_id("Trepeatlv");
     int Trepeathv = get_menu_val_by_id("Trepeathv");
 
     if (start_adc_init) // АВТОКАЛИБРОВКА ADC
     {
+        vTaskPrioritySet(NULL, configMAX_PRIORITIES - 7);
+
         if (ESP_OK == start_adc_calibrate())
         {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
