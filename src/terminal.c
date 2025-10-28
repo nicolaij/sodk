@@ -37,13 +37,13 @@ menu_t menu[] = {
     /*13*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1450, .min = 1, .max = 1000000},
     /*14*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*15*/ {.id = "k2Ulv", .name = "коэф. 2 U низ.", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*16*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3850, .min = 1, .max = 1000000},
+    /*16*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3900, .min = 1, .max = 1000000},
     /*17*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*18*/ {.id = "k2R1", .name = "коэф. 2 R (ch 1)", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*19*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8567, .min = 1, .max = 1000000},
+    /*19*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8200, .min = 1, .max = 1000000},
     /*20*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*21*/ {.id = "k2R2", .name = "коэф. 2 R (ch 2)", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*22*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 32041, .min = 1, .max = 100000},
+    /*22*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30000, .min = 1, .max = 100000},
     /*23*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*24*/ {.id = "k2U0", .name = "коэф. 2 U петли", .izm = "", .val = 0, .min = -100, .max = 100},
     /*25*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1450, .min = 1, .max = 1000000},
@@ -52,7 +52,7 @@ menu_t menu[] = {
     /*28*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 133333, .min = 1, .max = 1000000},
     /*29*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*30*/ {.id = "k2Ubat", .name = "коэф. 2 U bat", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3000, .min = 1, .max = 1000000},
+    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3900, .min = 1, .max = 1000000},
     /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*33*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
     /*34*/ {.id = "UbatEnd", .name = "U bat отключения", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
@@ -67,6 +67,10 @@ menu_t menu[] = {
     /*43*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
     /*44*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
     /*45*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
+    {.id = "calR1", .name = "Калибровка R1 кан. 1", .izm = "кОм", .val = 101000, .min = 0, .max = 300000},
+    {.id = "calR2", .name = "Калибровка R2 кан. 2", .izm = "кОм", .val = 5160, .min = 0, .max = 300000},
+    {.id = "calR3", .name = "Калибровка R3 кан. 3", .izm = "кОм", .val = 200, .min = 0, .max = 300000},
+    {.id = "calR4", .name = "Калибровка R4 кан. 4", .izm = "Ом", .val = 4003, .min = 0, .max = 300000},
 };
 
 esp_err_t init_nvs()
@@ -401,10 +405,10 @@ void console_task(void *arg)
                     ESP_LOGI("menu", "209. Измерение c POWER_ON и без подключ. канала");
                     ESP_LOGI("menu", "210. Измерение без ВВ и без подключ. канала");
                     ESP_LOGI("menu", "301. Включить напряжение акб на 1 к");
-                    ESP_LOGI("menu", "302. Калибр. напряж. с тестовой платой -,10280,1006,99.62");
+                    ESP_LOGI("menu", "302. Калибр. напряж. с тестовой платой");
                     ESP_LOGI("menu", "303. Включить Высокое напряжение на 1 к");
-                    ESP_LOGI("menu", "304. ВВ калибр. напряж. с тестовой платой -,10280,1006,99.62");
-                    ESP_LOGI("menu", "305. Токовая калибровка тестовой платы -,10280,1006,99.62");
+                    ESP_LOGI("menu", "304. ВВ калибр. напряж. с тестовой платой");
+                    ESP_LOGI("menu", "305. Токовая калибровка тестовой платы - 100000,5000,200,4");
                     ESP_LOGI("menu", "-------------------------------------------");
                     break;
                 case 5: // IP сервера
@@ -685,13 +689,14 @@ void console_task(void *arg)
                             break;
                         }
 
+                        /*
                         vTaskDelay(100 / portTICK_PERIOD_MS);
                         start_measure(4, 10);
-                        /* Ждем окончания измерений */
+                        // Ждем окончания измерений
                         xEventGroupWaitBits(
-                            status_event_group, /* The event group being tested. */
-                            END_MEASURE,        /* The bits within the event group to wait for. */
-                            pdTRUE,             /* BIT_0 & BIT_1 should be cleared before returning. */
+                            status_event_group,
+                            END_MEASURE,
+                            pdTRUE,
                             pdFALSE,
                             60000 / portTICK_PERIOD_MS);
 
@@ -700,14 +705,37 @@ void console_task(void *arg)
                             ESP_LOGE("calibrate", "chan 4 err");
                             break;
                         }
+                        */
                     }
-                    
-                    int oldk = get_menu_val_by_id("kR2"); //по току
-                    int r = kOm2chanlv(adc_result[6].U, adc_result[6].R2);
-                    int newk = oldk *  r / 1006;
-                    ESP_LOGD(TAG, "R lv 7: %d kR2: %d - %d", r, oldk, newk);
-                    //set_menu_val_by_id("kR2", newk);
-                    
+
+                    vTaskDelay(100 / portTICK_PERIOD_MS);
+
+                    const int offsetADC0 = get_menu_val_by_id("offstADC0"); // Напр. АКБ
+                    const int offsetADC1 = get_menu_val_by_id("offstADC1"); // Ток прям. измер
+                    const int offsetADC2 = get_menu_val_by_id("offstADC2"); // Ток усил. измер
+                    const int offsetADC3 = get_menu_val_by_id("offstADC3"); // Напр. обр. проводн.
+                    const int offsetADC4 = get_menu_val_by_id("offstADC4"); // Напряжение изм.
+
+                    int oldk = get_menu_val_by_id("kR2"); // по току
+                    int newkhv1 = (unsigned int)oldk * (unsigned int)kOm2chan(adc_result[0].U - offsetADC4, adc_result[0].R2 - offsetADC2) / (unsigned int)get_menu_val_by_id("calR1");
+                    ESP_LOGD(TAG, "K 1 hv: %d - %d", oldk, newkhv1);
+                    int newkhv2 = oldk * kOm2chan(adc_result[1].U - offsetADC4, adc_result[1].R2 - offsetADC2) / get_menu_val_by_id("calR2");
+                    ESP_LOGD(TAG, "K 2 hv: %d - %d", oldk, newkhv2);
+                    int newk = oldk * kOm2chanlv(adc_result[6].U - offsetADC4, adc_result[6].R2 - offsetADC2) / get_menu_val_by_id("calR3");
+                    ESP_LOGD(TAG, "K 3 lv: %d - %d", oldk, newk);
+
+                    set_menu_val_by_id("kR2", (newk + newkhv1 + newkhv2) / 3);
+
+                    oldk = get_menu_val_by_id("kR1"); // по току
+                    newkhv1 = oldk * kOm(adc_result[1].U - offsetADC4, adc_result[1].R1 - offsetADC1) / get_menu_val_by_id("calR2");
+                    ESP_LOGD(TAG, "K 1 hv: %d - %d", oldk, newkhv1);
+                    newkhv2 = oldk * kOm(adc_result[2].U - offsetADC4, adc_result[2].R1 - offsetADC1) / get_menu_val_by_id("calR3");
+                    ESP_LOGD(TAG, "K 2 hv: %d - %d", oldk, newkhv2);
+                    newk = oldk * kOmlv(adc_result[7].U - offsetADC4, adc_result[7].R1 - offsetADC1) * 1000 / get_menu_val_by_id("calR4");
+                    ESP_LOGD(TAG, "K 3 lv: %d - %d", oldk, newk);
+
+                    set_menu_val_by_id("kR1", (newk + newkhv1 + newkhv2) / 3);
+
                     update_allK();
 
                     break;
@@ -859,12 +887,12 @@ void console_task(void *arg)
                         break;
                     }
 
-                    int U = voltlv((adc_result[7].U + adc_result[6].U + adc_result[5].U + adc_result[4].U) / 4);
+                    int U = voltlv((adc_result[7].U + adc_result[6].U + adc_result[5].U) / 3);
                     int oldk = get_menu_val_by_id("kUlv");
                     int newk = oldk * calibratedata_u / U;
                     set_menu_val_by_id("kUlv", newk);
 
-                    int U0 = volt0lv((adc_result[7].U0 + adc_result[6].U0 + adc_result[5].U0 + adc_result[4].U0) / 4);
+                    int U0 = volt0lv((adc_result[7].U0 + adc_result[6].U0 + adc_result[5].U0) / 3);
                     oldk = get_menu_val_by_id("kU0lv");
                     newk = oldk * calibratedata_u / U0;
                     set_menu_val_by_id("kU0lv", newk);
@@ -874,6 +902,7 @@ void console_task(void *arg)
                     calibratedata_u = 0;
                     ESP_LOGE(TAG, "Error Ubatt: %d mV (10000-13000)", calibratedata_u);
                 }
+                pcf8575_set(0);
 
                 update_allK();
 
@@ -958,6 +987,7 @@ void console_task(void *arg)
                     calibratedata_u = 0;
                     ESP_LOGE(TAG, "Error Ubatt: %d mV (450000-550000)", calibratedata_u);
                 }
+                pcf8575_set(0);
                 break;
 
             default:
@@ -998,7 +1028,7 @@ void console_task(void *arg)
                 break;
             }
 
-            if ((selected_menu_id == 0 && n > 0) && (n <= sizeof(menu) / sizeof(menu_t) || (n >= 300 && n < 310)))
+            if ((selected_menu_id == 0 && n > 0) && (n <= 50 || n == 302 || n == 304))
                 selected_menu_id = n;
             else
                 selected_menu_id = 0;
