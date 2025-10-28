@@ -382,11 +382,11 @@ void adc_task(void *wakeup_reason)
     // Ограничение времени импульса (0 - не вкл. ВВ источник)
     int pulse = get_menu_val_by_id("pulse");
 
-    const int offsetADC0 = get_menu_val_by_id("offstADC0");
-    const int offsetADC1 = get_menu_val_by_id("offstADC1");
-    const int offsetADC2 = get_menu_val_by_id("offstADC2");
-    const int offsetADC3 = get_menu_val_by_id("offstADC3");
-    const int offsetADC4 = get_menu_val_by_id("offstADC4");
+    const int offsetADC0 = get_menu_val_by_id("offstADC0"); //Напр. АКБ
+    const int offsetADC1 = get_menu_val_by_id("offstADC1"); //Ток прям. измер
+    const int offsetADC2 = get_menu_val_by_id("offstADC2"); //Ток усил. измер
+    const int offsetADC3 = get_menu_val_by_id("offstADC3"); //Напр. обр. проводн.
+    const int offsetADC4 = get_menu_val_by_id("offstADC4"); //Напряжение изм.
 
     update_allK();
 
@@ -1014,7 +1014,9 @@ void adc_task(void *wakeup_reason)
         if (BattLow > 0)
             result.flags.d_batt_low = 1;
 
-        xQueueSend(send_queue, &result, (TickType_t)0);
+        if (cmd_power.cmd <= 3) //не передаем данные тестов
+            xQueueSend(send_queue, &result, (TickType_t)0);
+
         xQueueSend(adc_queue, &sum_adc_full, (TickType_t)0);
 
         // История

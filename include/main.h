@@ -243,6 +243,8 @@ int kOm(int adc_u, int adc_r);
 int kOmlv(int adc_u, int adc_r);
 int kOm2chan(int adc_u, int adc_r);
 int kOm2chanlv(int adc_u, int adc_r);
+int current(int adc);
+int current2chan(int adc);
 
 void update_allK();
 
