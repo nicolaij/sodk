@@ -843,7 +843,7 @@ void modem_task(void *arg)
                                             }
                                         }
 
-                                    } while ((esp_timer_get_time() - start_time) < StoUS(10));
+                                    } while ((esp_timer_get_time() - start_time) < StoUS(5));
                                     common_data_transmit = true;
                                 }
                             }
