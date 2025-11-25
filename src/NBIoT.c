@@ -810,7 +810,7 @@ void modem_task(void *arg)
 
                                 if (common_data_transmit == false)
                                 {
-                                    // wait 10s for reply from server
+                                    // wait 5s for reply from server
                                     int64_t start_time = esp_timer_get_time();
                                     do
                                     {
@@ -842,7 +842,6 @@ void modem_task(void *arg)
                                                 }
                                             }
                                         }
-
                                     } while ((esp_timer_get_time() - start_time) < StoUS(5));
                                     common_data_transmit = true;
                                 }

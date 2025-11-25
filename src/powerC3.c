@@ -356,6 +356,17 @@ void adc_task(void *wakeup_reason)
     gpio_install_isr_service(0);
     // hook isr handler for specific gpio pin
     gpio_isr_handler_add(PCF_INT_PIN, pcf_int_handler, (void *)PCF_INT_PIN);
+    
+    esp_reset_reason_t reason = esp_reset_reason();
+    ESP_LOGD(TAG, "Reset reason: %d", reason);
+    if (reason == ESP_RST_BROWNOUT)
+    {
+        result.flags.d_rst_brownout = true;
+    }
+    else if (reason == ESP_RST_DEEPSLEEP)
+    {
+        result.flags.d_rst_deepsleep = true;
+    }
 
     continuous_adc_init();
 
@@ -1029,7 +1040,7 @@ void adc_task(void *wakeup_reason)
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-            if ((hv_measure == 0) && ((result.flags.value & 0x1F01) != (measure_flags & 0x0F01)))
+            if ((hv_measure == 0) && (result.flags.value != (measure_flags & 0x8F01)))
             {
                 start_measure(0, 1);
             }

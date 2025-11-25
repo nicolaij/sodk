@@ -342,7 +342,7 @@ esp_err_t start_adc_calibrate()
             ESP_LOGE("AUTOCALIBRATE 2", "Error R1!");
             return ESP_FAIL;
         }
-        if (adc_result.R2 > 150)
+        if (adc_result.R2 > 200)
         {
             ESP_LOGE("AUTOCALIBRATE 2", "Error R2!");
             return ESP_FAIL;

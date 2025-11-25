@@ -70,7 +70,7 @@ menu_t menu[] = {
     {.id = "calR1", .name = "Калибровка R1 кан. 1", .izm = "кОм", .val = 101000, .min = 0, .max = 300000},
     {.id = "calR2", .name = "Калибровка R2 кан. 2", .izm = "кОм", .val = 5160, .min = 0, .max = 300000},
     {.id = "calR3", .name = "Калибровка R3 кан. 3", .izm = "кОм", .val = 200, .min = 0, .max = 300000},
-    {.id = "calR4", .name = "Калибровка R4 кан. 4", .izm = "Ом", .val = 4003, .min = 0, .max = 300000},
+    {.id = "calR4", .name = "Калибровка R4 кан. 4", .izm = "Ом", .val = 4030, .min = 0, .max = 300000},
 };
 
 esp_err_t init_nvs()
@@ -988,6 +988,7 @@ void console_task(void *arg)
                     ESP_LOGE(TAG, "Error Ubatt: %d mV (450000-550000)", calibratedata_u);
                 }
                 pcf8575_set(0);
+                update_allK();
                 break;
 
             default:

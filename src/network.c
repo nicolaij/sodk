@@ -622,7 +622,7 @@ esp_err_t get_history(httpd_req_t *req)
         if (!presult)
             break;
 
-        l += snprintf(network_buf + l, (TRANSFER_SIZE - l), OUT_CHANNEL ",\"Flags\":\"0x%04X\"\n", get_menu_val_by_id("idn"), presult->channel, bootCount, get_datetime(presult->ttime), OUT_DATA_CHANNEL((*presult)), presult->flags.value);
+        l += snprintf(network_buf + l, (TRANSFER_SIZE - l), OUT_CHANNEL "\n", get_menu_val_by_id("idn"), presult->channel, bootCount, get_datetime(presult->ttime), OUT_DATA_CHANNEL((*presult)));
 
         if ((TRANSFER_SIZE - l) < sizeof(OUT_CHANNEL) * 2)
         {

@@ -90,7 +90,7 @@ typedef struct
         {
             bool d_in : 1;   // состояние входа IN
             bool d_wake : 1; // пробуждение от концевика ковера
-            bool reserved2 : 1;
+            bool reserved4 : 1;
             bool reserved3 : 1;
 
             bool d_batt_low : 1;    // низкий уровень заряда батарей
@@ -105,8 +105,8 @@ typedef struct
 
             bool d_different : 1; // отличие измерений от предыдущих
             bool reserved13 : 1;
-            bool reserved14 : 1;
-            bool reserved15 : 1;
+            bool d_rst_brownout : 1; //сброс по причине нехватки напряжения
+            bool d_rst_deepsleep : 1; //проснулись из deep sleep
         };
     } flags;
     int R;
