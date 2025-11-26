@@ -659,6 +659,8 @@ void modem_task(void *arg)
                 // TAU 25h 1*25, ACC 0 sec
                 at_reply_wait_OK("AT+CPSMS=1,,,\"00111001\",\"00000000\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
 
+                ee = at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+
                 first_run_completed = true;
             }
 
@@ -760,7 +762,7 @@ void modem_task(void *arg)
             if (tcpport > 0)
             {
                 protocol = 1;
-                ee = at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                // ee = at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
             }
 
             if (udpport > 0)
@@ -839,10 +841,18 @@ void modem_task(void *arg)
                                             ESP_LOGI(TAG, "Send OK");
                                             strcpy(net_status_current, "Send OK");
 
+                                            // обрабатываем если нет сети
                                             char *c = strstr(data, "+CEREG: 2");
                                             if (c == NULL)
                                             {
                                                 break;
+                                            }
+
+                                            // Ждем сообщения о наличии сети
+                                            ee = wait_string(data, "+CEREG: 1", 5000 / portTICK_PERIOD_MS);
+                                            if (ee == ESP_OK)
+                                            {
+                                                ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)data);
                                             }
                                         }
                                     };
