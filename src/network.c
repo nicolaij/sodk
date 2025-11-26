@@ -530,7 +530,7 @@ esp_err_t update_post_handler(httpd_req_t *req)
             {
                 ESP_ERROR_CHECK(esp_ota_begin(ota_partition, OTA_SIZE_UNKNOWN, &ota_handle));
             }
-            else if (remaining == 0x50000) //SPIFFS Image
+            else if (remaining == 0x50000) // SPIFFS Image
             {
                 file_id = remaining;
                 ESP_ERROR_CHECK(esp_partition_erase_range(ota_partition, 0, 0x50000));
@@ -852,31 +852,28 @@ static httpd_handle_t start_webserver(void)
 
     // Start the httpd server
     ESP_LOGI(TAGH, "Starting server on port: '%d'", config.server_port);
+
+    for (int i = 0; i < (sizeof(ws_fd) / sizeof(ws_fd[0])); i++)
+    {
+        ws_fd[i] = 0;
+    }
+
     if (httpd_start(&server, &config) == ESP_OK)
     {
         // Set URI handlers
         ESP_LOGI(TAGH, "Registering URI handlers");
-        httpd_register_uri_handler(server, &main_page);
-        httpd_register_uri_handler(server, &menu_page);
-        httpd_register_uri_handler(server, &menu_post);
-
-        httpd_register_uri_handler(server, &ws);
-        httpd_register_uri_handler(server, &file_download);
-        httpd_register_uri_handler(server, &d3_get);
-        httpd_register_uri_handler(server, &d3_get_gz);
-        httpd_register_uri_handler(server, &favicon_ico);
-
-        httpd_register_uri_handler(server, &history_get);
-
-        httpd_register_uri_handler(server, &update_post);
-        httpd_register_uri_handler(server, &update_get);
-
-        for (int i = 0; i < (sizeof(ws_fd) / sizeof(ws_fd[0])); i++)
-        {
-            ws_fd[i] = 0;
-        }
-
-        return server;
+        if (httpd_register_uri_handler(server, &main_page) == ESP_OK &&
+            httpd_register_uri_handler(server, &menu_page) == ESP_OK &&
+            httpd_register_uri_handler(server, &menu_post) == ESP_OK &&
+            httpd_register_uri_handler(server, &ws) == ESP_OK &&
+            httpd_register_uri_handler(server, &file_download) == ESP_OK &&
+            httpd_register_uri_handler(server, &d3_get) == ESP_OK &&
+            httpd_register_uri_handler(server, &d3_get_gz) == ESP_OK &&
+            httpd_register_uri_handler(server, &favicon_ico) == ESP_OK &&
+            httpd_register_uri_handler(server, &history_get) == ESP_OK &&
+            httpd_register_uri_handler(server, &update_post) == ESP_OK &&
+            httpd_register_uri_handler(server, &update_get) == ESP_OK)
+            return server;
     }
 
     ESP_LOGE(TAGH, "Error starting server!");

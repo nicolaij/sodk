@@ -24,6 +24,8 @@ char net_status_current[32];
 
 RTC_DATA_ATTR bool first_run_completed = false;
 
+RTC_DATA_ATTR time_t last_sync_time = 0;
+
 extern int32_t timezone;
 
 unsigned int fromActiveTime(uint8_t val)
@@ -175,6 +177,34 @@ esp_err_t at_reply_wait_OK(const char *cmd, char *buffer, TickType_t ticks_to_wa
 {
     return at_reply_wait(cmd, "OK\r\n", buffer, ticks_to_wait);
 }
+
+esp_err_t at_result_get(const char *wait, const char *buffer, int *resultdata, int resultcount)
+{
+    char *s = strstr(buffer, wait);
+    if (s)
+    {
+        for (int i = 0; i < resultcount; i++)
+        {
+            if (i == 0)
+                s = strchr(s + 1, ' ');
+            else
+                s = strchr(s + 1, ',');
+
+            if (s == NULL)
+                return ESP_ERR_NOT_FOUND;
+
+            ESP_LOGV(TAG, "Found string:\"%s\"", s);
+
+            if (*(s + 1) == '"') // HEX STRING (ex CREG?)
+                resultdata[i] = strtol(s + 2, NULL, 16);
+            else
+                resultdata[i] = atoi(s + 1);
+        }
+        return ESP_OK;
+    }
+
+    return ESP_ERR_NOT_FOUND;
+}
 /*
 cmd "AT+CMUX?"
 wait "+CMUX:"
@@ -190,37 +220,11 @@ esp_err_t at_reply_get(const char *cmd, const char *wait, char *buffer, int *res
         return ESP_ERR_INVALID_SIZE;
     }
 
-    esp_err_t res = wait_string(buffer, "OK\r\n", ticks_to_wait);
+    wait_string(buffer, "OK\r\n", ticks_to_wait);
 
     ESP_LOGD(TAG, "Receive string:\"%s\"", (char *)buffer);
 
-    char *s = strstr((const char *)buffer, wait);
-    if (s == NULL)
-    {
-        return ESP_ERR_NOT_FOUND;
-    }
-    else
-    {
-        for (int i = 0; i < resultcount; i++)
-        {
-            if (i == 0)
-                s = strchr(s + 1, ' ');
-            else
-                s = strchr(s + 1, ',');
-
-            if (s == NULL)
-                return ESP_OK;
-
-            ESP_LOGV(TAG, "Found string:\"%s\"", s);
-
-            if (*(s + 1) == '"') // HEX STRING (ex CREG?)
-                resultdata[i] = strtol(s + 2, NULL, 16);
-            else
-                resultdata[i] = atoi(s + 1);
-        }
-    }
-
-    return res;
+    return at_result_get(wait, (const char *)buffer, resultdata, resultcount);
 }
 
 /*
@@ -441,6 +445,12 @@ void modem_task(void *arg)
         {
             esp_err_t ee = 0;
 
+            bool network_registration = false;
+
+            int tAT = 0;
+            int tRT = 0;
+            int creg[10] = {-1, -1};
+
             switch (d_nbiot_error_counter++ % 4)
             {
             case 1:
@@ -468,6 +478,11 @@ void modem_task(void *arg)
 
             ESP_LOGD(TAG, "Wait... %s", data);
 
+            if (at_result_get("+CEREG: 1,", (const char *)data, creg + 1, 9) == ESP_OK)
+            {
+                network_registration = true;
+            }
+
             if (strnstr((const char *)data, "CPIN: READY", 100) != NULL)
             {
                 cpin = true;
@@ -488,14 +503,14 @@ void modem_task(void *arg)
 
                     continue;
                 }
+
+                at_reply_wait_OK("ATE1;+IPR=115200\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
             };
 
             if ((xEventGroupGetBits(status_event_group) & END_WORK_NBIOT))
                 break;
 
             strcpy(net_status_current, "ready");
-
-            at_reply_wait_OK("ATE1;+IPR=115200\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
 
             // если запускаем терминал - стоп работа с модулем
             if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
@@ -566,44 +581,49 @@ void modem_task(void *arg)
 
             // Network Registration Status
             int try_network = 120;
-            int tAT = 0;
-            int tRT = 0;
-            int creg[10] = {-1, -1};
-            while (try_network > 0)
+            if (network_registration == false)
             {
-                ee = at_reply_get("AT+CEREG?\r\n", "CEREG: 5", (char *)data, creg, 10, 1000 / portTICK_PERIOD_MS);
-                if (ee != ESP_OK)
+                while (try_network > 0)
                 {
-                    ESP_LOGW(TAG, "AT+CREG?");
-                    vTaskDelay(1000 / portTICK_PERIOD_MS);
-                }
-                else
-                {
-                    if (creg[0] != 5) // Исправится следующий раз
+                    ee = at_reply_get("AT+CEREG?\r\n", "CEREG: 5", (char *)data, creg, 10, 1000 / portTICK_PERIOD_MS);
+                    if (ee != ESP_OK)
                     {
-                        first_run_completed = false;
+                        ESP_LOGW(TAG, "AT+CREG?");
+                        vTaskDelay(1000 / portTICK_PERIOD_MS);
+                    }
+                    else
+                    {
+                        if (creg[0] != 5) // Исправится следующий раз
+                        {
+                            first_run_completed = false;
+                        }
+
+                        if (creg[1] == 1) // 1 Registered, home network.
+                        {
+                            network_registration = true;
+                            break;
+                        }
+                        vTaskDelay(1000 / portTICK_PERIOD_MS);
                     }
 
-                    if (creg[1] == 1) // 1 Registered, home network.
+                    try_network--;
+
+                    // если запускаем терминал - стоп работа с модулем
+                    if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
                     {
-                        char bf[10];
-                        snprintf(bf, 9, "%8X", creg[8]);
-                        tAT = fromActiveTime(strtol(bf, NULL, 2));
-                        snprintf(bf, 9, "%8X", creg[9]);
-                        tRT = fromPeriodicTAU(strtol(bf, NULL, 2));
-                        ESP_LOGI(TAG, "Registered. Home network. TAC=%u, CI=%u Active-Time=%02d:%02d:%02d Periodic-TAU=%02d:%02d:%02d", creg[2], creg[3], (tAT / (60 * 60)), (tAT / 60) % 60, (tAT % 60), (tRT / (60 * 60)), (tRT / 60) % 60, (tRT % 60));
                         break;
                     }
-                    vTaskDelay(1000 / portTICK_PERIOD_MS);
                 }
+            }
 
-                try_network--;
-
-                // если запускаем терминал - стоп работа с модулем
-                if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
-                {
-                    break;
-                }
+            if (network_registration)
+            {
+                char bf[10];
+                snprintf(bf, 9, "%8X", creg[8]);
+                tAT = fromActiveTime(strtol(bf, NULL, 2));
+                snprintf(bf, 9, "%8X", creg[9]);
+                tRT = fromPeriodicTAU(strtol(bf, NULL, 2));
+                ESP_LOGI(TAG, "Registered. Home network. TAC=%u, CI=%u Active-Time=%02d:%02d:%02d Periodic-TAU=%02d:%02d:%02d", creg[2], creg[3], (tAT / (60 * 60)), (tAT / 60) % 60, (tAT % 60), (tRT / (60 * 60)), (tRT / 60) % 60, (tRT % 60));
             }
 
             // Signal Quality Report
@@ -642,32 +662,36 @@ void modem_task(void *arg)
                 first_run_completed = true;
             }
 
-            ee = at_reply_wait_OK("AT+CCLK?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
-            if (ee != ESP_OK)
+            // sync time 1 / 24 hours
+            if (last_sync_time == 0 || time(0) - last_sync_time > (24 * 60 * 60))
             {
-                ESP_LOGW(TAG, "AT+CCLK?");
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
-            }
-            else
-            {
-                //+CCLK: 24/04/30,07:49:36+12
-                int dt[6] = {0, 0, 0, 0, 0, 0};
-                const char *pdata = strstr((const char *)data, "CCLK: ");
-                int parsed = sscanf((const char *)(pdata + 6), "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
-                if (parsed == 6)
+                ee = at_reply_wait_OK("AT+CCLK?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                if (ee != ESP_OK)
                 {
-                    struct tm tm;
-                    tm.tm_year = (dt[0] > 1900) ? dt[0] - 1900 : dt[0] + 100;
-                    tm.tm_mon = dt[1] - 1;
-                    tm.tm_mday = dt[2];
-                    tm.tm_hour = dt[3];
-                    tm.tm_min = dt[4];
-                    tm.tm_sec = dt[5];
+                    ESP_LOGW(TAG, "AT+CCLK?");
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
+                }
+                else
+                {
+                    //+CCLK: 24/04/30,07:49:36+12
+                    int dt[6] = {0, 0, 0, 0, 0, 0};
+                    const char *pdata = strstr((const char *)data, "CCLK: ");
+                    int parsed = sscanf((const char *)(pdata + 6), "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
+                    if (parsed == 6)
+                    {
+                        struct tm tm;
+                        tm.tm_year = (dt[0] > 1900) ? dt[0] - 1900 : dt[0] + 100;
+                        tm.tm_mon = dt[1] - 1;
+                        tm.tm_mday = dt[2];
+                        tm.tm_hour = dt[3];
+                        tm.tm_min = dt[4];
+                        tm.tm_sec = dt[5];
 
-                    time_t t = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
-                    struct timeval now = {.tv_sec = t};
-                    settimeofday(&now, NULL);
-                    ESP_LOGI(TAG, "Set date and time: %s", get_datetime(t));
+                        last_sync_time = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
+                        struct timeval now = {.tv_sec = last_sync_time};
+                        settimeofday(&now, NULL);
+                        ESP_LOGI(TAG, "Set date and time: %s", get_datetime(last_sync_time));
+                    }
                 }
             }
 
@@ -738,12 +762,14 @@ void modem_task(void *arg)
                 protocol = 1;
                 ee = at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
             }
-            else if (udpport > 0)
+
+            if (udpport > 0)
             {
                 port = udpport;
                 protocol = 2;
             }
-            else
+
+            if (tcpport == 0 && udpport == 0)
             {
                 break;
             }
@@ -776,76 +802,82 @@ void modem_task(void *arg)
                             if (realtime < 1754900000LL)
                                 realtime = time(0);
 
-                            while (pdTRUE == xQueueReceive(send_queue, &result, 5000 / portTICK_PERIOD_MS))
+                            int64_t start_time = esp_timer_get_time();
+                            do
                             {
-                                // ESP_LOGD(TAG, "time: %lli", result.ttime);
-                                if (result.ttime < 1754900000LL) // 2025-08-11
+                                while (pdTRUE == xQueueReceive(send_queue, &result, 0))
                                 {
-                                    result.ttime = realtime;
-                                }
-
-                                int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
-
-                                if (common_data_transmit == false)
-                                {
-                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, creg[2], creg[3]);
-                                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
-                                }
-
-                                l += snprintf(send_data + l, sizeof(send_data) - l, "}");
-
-                                ESP_LOGD(TAG, "Send... %s", send_data);
-
-                                if (protocol == 1) // TCP
-                                    ee = at_csosend_wait_SEND(socket, send_data, (char *)data, l);
-
-                                if (protocol == 2) // UDP
-                                    ee = at_csosend(socket, send_data, (char *)data, l);
-
-                                if (ee == ESP_OK)
-                                {
-                                    ESP_LOGI(TAG, "Send OK");
-                                    strcpy(net_status_current, "Send OK");
-                                }
-
-                                if (common_data_transmit == false)
-                                {
-                                    // wait 5s for reply from server
-                                    int64_t start_time = esp_timer_get_time();
-                                    do
+                                    // ESP_LOGD(TAG, "time: %lli", result.ttime);
+                                    if (result.ttime < 1754900000LL) // 2025-08-11
                                     {
-                                        if (wait_string(data, "\r\n", 1000 / portTICK_PERIOD_MS) == ESP_OK)
-                                        {
-                                            // ESP_LOGI(TAG, "Modem: %s", data);
-                                            const char *rdata = strstr((const char *)data, "+CSONMI: ");
-                                            if (rdata)
-                                            { //+CSONMI: 0,20,5468616E6B20796F7521
-                                                char *s = strchr(rdata, ',');
-                                                if (s)
-                                                {
-                                                    // len
-                                                    l = atoi(s + 1);
-                                                    s = strchr(s + 1, ',');
-                                                    if (s++)
-                                                    {
-                                                        // message
-                                                        for (int i = 0; i < l; i = i + 2)
-                                                        {
-                                                            char c[3] = {*(s++), *(s++), 0};
-                                                            send_data[i / 2] = (char)strtol(c, NULL, 16);
-                                                        }
-                                                        send_data[l / 2] = '\0';
+                                        result.ttime = realtime;
+                                    }
 
-                                                        ee = apply_command((const char *)send_data, l / 2);
-                                                        break;
-                                                    }
-                                                }
+                                    int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
+
+                                    if (common_data_transmit == false)
+                                    {
+                                        l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, creg[2], creg[3]);
+                                        l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
+                                    }
+
+                                    l += snprintf(send_data + l, sizeof(send_data) - l, "}");
+
+                                    ESP_LOGD(TAG, "Send... %s", send_data);
+
+                                    for (int try = 0; try < 3; try++)
+                                    {
+                                        if (protocol == 1) // TCP
+                                            ee = at_csosend_wait_SEND(socket, send_data, (char *)data, l);
+                                        if (protocol == 2) // UDP
+                                            ee = at_csosend(socket, send_data, (char *)data, l);
+
+                                        if (ee == ESP_OK)
+                                        {
+                                            common_data_transmit = true;
+
+                                            ESP_LOGI(TAG, "Send OK");
+                                            strcpy(net_status_current, "Send OK");
+
+                                            char *c = strstr(data, "+CEREG: 2");
+                                            if (c == NULL)
+                                            {
+                                                break;
                                             }
                                         }
-                                    } while ((esp_timer_get_time() - start_time) < StoUS(5));
-                                    common_data_transmit = true;
+                                    };
+                                    start_time = esp_timer_get_time(); // reset timer
                                 }
-                            }
+
+                                if (wait_string(data, "\r\n", 1000 / portTICK_PERIOD_MS) == ESP_OK)
+                                {
+                                    int l;
+                                    ESP_LOGI(TAG, "Modem: %s", data);
+                                    const char *rdata = strstr((const char *)data, "+CSONMI: ");
+                                    if (rdata)
+                                    { //+CSONMI: 0,20,5468616E6B20796F7521
+                                        char *s = strchr(rdata, ',');
+                                        if (s)
+                                        {
+                                            // len
+                                            l = atoi(s + 1);
+                                            s = strchr(s + 1, ',');
+                                            if (s++)
+                                            {
+                                                // message
+                                                for (int i = 0; i < l; i = i + 2)
+                                                {
+                                                    char c[3] = {*(s++), *(s++), 0};
+                                                    send_data[i / 2] = (char)strtol(c, NULL, 16);
+                                                }
+                                                send_data[l / 2] = '\0';
+
+                                                ee = apply_command((const char *)send_data, l / 2);
+                                            }
+                                        }
+                                    }
+                                }
+                            } while ((esp_timer_get_time() - start_time) < StoUS(6));
                             break;
                         }
                         else
