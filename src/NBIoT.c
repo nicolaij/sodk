@@ -340,6 +340,35 @@ esp_err_t apply_command(const char *cmd, size_t len)
     return ESP_OK;
 }
 
+esp_err_t check_received_message(const char *data, char *result_data)
+{
+    const char *rdata = strstr((const char *)data, "+CSONMI: ");
+    if (rdata)
+    { //+CSONMI: 0,20,5468616E6B20796F7521
+        char *s = strchr(rdata, ',');
+        if (s)
+        {
+            // len
+            int l = atoi(s + 1);
+            s = strchr(s + 1, ',');
+            if (s++)
+            {
+                // message
+                for (int i = 0; i < l; i = i + 2)
+                {
+                    char c[3] = {*(s++), *(s++), 0};
+                    result_data[i / 2] = (char)strtol(c, NULL, 16);
+                }
+                result_data[l / 2] = '\0';
+
+                apply_command((const char *)result_data, l / 2);
+            }
+        }
+        return ESP_OK;
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
 // Callback при отправке
 static void espnow_send_cb(const esp_now_send_info_t *tx_info, esp_now_send_status_t status)
 {
@@ -428,6 +457,8 @@ void modem_task(void *arg)
     {
         protocol = 0;
     }
+
+    const int pulse = get_menu_val_by_id("pulse");
 
     xEventGroupSetBits(status_event_group, END_RADIO);
 
@@ -825,10 +856,10 @@ void modem_task(void *arg)
 
                                     l += snprintf(send_data + l, sizeof(send_data) - l, "}");
 
-                                    ESP_LOGD(TAG, "Send... %s", send_data);
-
-                                    for (int try = 0; try < 3; try++)
+                                    do
                                     {
+                                        ESP_LOGD(TAG, "Send... %s", send_data);
+
                                         if (protocol == 1) // TCP
                                             ee = at_csosend_wait_SEND(socket, send_data, (char *)data, l);
                                         if (protocol == 2) // UDP
@@ -843,51 +874,35 @@ void modem_task(void *arg)
 
                                             // обрабатываем если нет сети
                                             char *c = strstr(data, "+CEREG: 2");
-                                            if (c == NULL)
+                                            if (c != NULL)
                                             {
-                                                break;
+                                                // Ждем сообщения о наличии сети
+                                                ee = wait_string(data, "+CEREG: 1", 5000 / portTICK_PERIOD_MS);
+                                                if (ee == ESP_OK)
+                                                {
+                                                    ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)data);
+                                                }
+                                                continue;
                                             }
 
-                                            // Ждем сообщения о наличии сети
-                                            ee = wait_string(data, "+CEREG: 1", 5000 / portTICK_PERIOD_MS);
-                                            if (ee == ESP_OK)
-                                            {
-                                                ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)data);
-                                            }
+                                            check_received_message(data, send_data);
+                                            break;
                                         }
-                                    };
+                                        else
+                                        {
+                                            vTaskDelay(5000 / portTICK_PERIOD_MS);
+                                        }
+                                    } while (ee == ESP_OK);
+
                                     start_time = esp_timer_get_time(); // reset timer
                                 }
 
-                                if (wait_string(data, "\r\n", 1000 / portTICK_PERIOD_MS) == ESP_OK)
+                                if (wait_string(data, "\r", 1000 / portTICK_PERIOD_MS) == ESP_OK)
                                 {
-                                    int l;
                                     ESP_LOGI(TAG, "Modem: %s", data);
-                                    const char *rdata = strstr((const char *)data, "+CSONMI: ");
-                                    if (rdata)
-                                    { //+CSONMI: 0,20,5468616E6B20796F7521
-                                        char *s = strchr(rdata, ',');
-                                        if (s)
-                                        {
-                                            // len
-                                            l = atoi(s + 1);
-                                            s = strchr(s + 1, ',');
-                                            if (s++)
-                                            {
-                                                // message
-                                                for (int i = 0; i < l; i = i + 2)
-                                                {
-                                                    char c[3] = {*(s++), *(s++), 0};
-                                                    send_data[i / 2] = (char)strtol(c, NULL, 16);
-                                                }
-                                                send_data[l / 2] = '\0';
-
-                                                ee = apply_command((const char *)send_data, l / 2);
-                                            }
-                                        }
-                                    }
+                                    check_received_message(data, send_data);
                                 }
-                            } while ((esp_timer_get_time() - start_time) < StoUS(6));
+                            } while ((esp_timer_get_time() - start_time) < (pulse * 1000LL));
                             break;
                         }
                         else
@@ -912,7 +927,7 @@ void modem_task(void *arg)
             break;
         }; // end while
 
-        if (protocol == 0 && get_menu_val_by_id("pulse") != -1) // ESPNOW
+        if (protocol == 0 && pulse != -1) // ESPNOW
         {
             xEventGroupWaitBits(
                 status_event_group, /* The event group being tested. */
