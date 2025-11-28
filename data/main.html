@@ -28,8 +28,8 @@
       >&nbsp;<button onclick="measure(7)">Измерить 7</button>&nbsp;<button onclick="measure(8)">Измерить 8</button>
     </p>
     <p><textarea id="text" style="width: 98%; height: 400px"></textarea></p>
-    <a href="?restart=true">Restart</a>
     <div id="filecontent"></div>
+    <a href="?restart=true">Restart</a>&nbsp;&nbsp;&nbsp;<a href="/update">Firmware update</a>
 
     <script>
       var socket = new WebSocket("ws://" + location.host + "/ws");

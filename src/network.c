@@ -226,6 +226,26 @@ int wifi_init_sta(void)
 static esp_err_t download_get_handler(httpd_req_t *req)
 {
     reset_sleep_timeout();
+    char param[10] = {0};
+
+    if (httpd_req_get_url_query_str(req, network_buf, sizeof(network_buf)) == ESP_OK)
+    {
+        ESP_LOGD(TAGH, "Found URL query => %s", network_buf);
+        /* Get value of expected key from query string */
+        if (httpd_query_key_value(network_buf, "restart", param, sizeof(param)) == ESP_OK)
+        {
+            if (strstr(param, "true"))
+            {
+                ESP_LOGW(TAGH, "Rebooting now!");
+                if (xHandleWifi)
+                    xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+
+                httpd_resp_set_status(req, "303 See Other");
+                httpd_resp_set_hdr(req, "Location", "/");
+                return httpd_resp_sendstr(req, "Send reboot command");
+            }
+        }
+    }
 
     char *filepath = ((down_data_t *)(req->user_ctx))->filepath;
     FILE *fd = NULL;
@@ -573,6 +593,8 @@ esp_err_t update_post_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
 
+        httpd_resp_set_status(req, "303 See Other");
+        httpd_resp_set_hdr(req, "Location", "/");
         httpd_resp_sendstr(req, "Firmware update complete, rebooting now!\n");
         ESP_LOGW(TAGH, "Firmware update complete, rebooting now!");
         if (xHandleWifi)
@@ -596,10 +618,13 @@ esp_err_t update_post_handler(httpd_req_t *req)
             remaining -= recv_len;
         }
 
+        httpd_resp_set_status(req, "303 See Other");
+        httpd_resp_set_hdr(req, "Location", "/");
         httpd_resp_sendstr(req, "SPIFFS update complete, rebooting now!\n");
         ESP_LOGW(TAGH, "SPIFFS update complete, rebooting now!");
         if (xHandleWifi)
             xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+
     }
 
     return ESP_OK;
@@ -986,6 +1011,7 @@ void wifi_task(void *arg)
                 }
                 else if ((ulNotifiedValue & NOTYFY_WIFI_REBOOT) != 0)
                 {
+                    vTaskDelay(pdMS_TO_TICKS(1000));
                     esp_wifi_stop();
                     esp_wifi_deinit();
                     esp_restart();
