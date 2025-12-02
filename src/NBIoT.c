@@ -535,7 +535,8 @@ void modem_task(void *arg)
                     continue;
                 }
 
-                at_reply_wait_OK("ATE1;+IPR=115200\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                if (first_run_completed == false)
+                    at_reply_wait_OK("ATE1;+IPR=115200\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
             };
 
             if ((xEventGroupGetBits(status_event_group) & END_WORK_NBIOT))
@@ -881,6 +882,8 @@ void modem_task(void *arg)
                                                 if (ee == ESP_OK)
                                                 {
                                                     ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)data);
+
+                                                    vTaskDelay(1000 / portTICK_PERIOD_MS); // много пропущенных пакетов после выхода из PSM, так лучше
                                                 }
                                                 continue;
                                             }

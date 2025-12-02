@@ -571,16 +571,13 @@ esp_err_t update_post_handler(httpd_req_t *req)
                 httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Flash write Error");
                 return ESP_FAIL;
             }
-            vTaskDelay(1);
         }
-        else
-            // spiffs.bin
-            if (file_id == 0x50000)
-            {
-                ESP_ERROR_CHECK(esp_partition_write(ota_partition, (req->content_len - remaining), (const void *)network_buf, recv_len));
-                vTaskDelay(1);
-            }
+        else if (file_id == 0x50000) // spiffs.bin
+        {
+            ESP_ERROR_CHECK(esp_partition_write(ota_partition, (req->content_len - remaining), (const void *)network_buf, recv_len));
+        }
 
+        vTaskDelay(1);
         remaining -= recv_len;
     }
 
@@ -624,7 +621,6 @@ esp_err_t update_post_handler(httpd_req_t *req)
         ESP_LOGW(TAGH, "SPIFFS update complete, rebooting now!");
         if (xHandleWifi)
             xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
-
     }
 
     return ESP_OK;
@@ -795,19 +791,19 @@ static const httpd_uri_t main_page = {
     .uri = "/",
     .method = HTTP_GET,
     .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = "text/html"})};
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = HTTPD_TYPE_TEXT})};
 
 static const httpd_uri_t menu_page = {
     .uri = "/menu",
     .method = HTTP_GET,
     .handler = menu_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = "text/html"})};
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = HTTPD_TYPE_TEXT})};
 
 static const httpd_uri_t menu_post = {
     .uri = "/",
     .method = HTTP_POST,
     .handler = menu_post_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = "text/html"})};
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/main.html", .content = HTTPD_TYPE_TEXT})};
 
 static const httpd_uri_t file_download = {
     .uri = "/d",
@@ -819,7 +815,7 @@ static const httpd_uri_t update_get = {
     .uri = "/update",
     .method = HTTP_GET,
     .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/update.html", .content = "text/html"}),
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/update.html", .content = HTTPD_TYPE_TEXT}),
     .is_websocket = false};
 
 static const httpd_uri_t update_post = {
@@ -845,7 +841,7 @@ static const httpd_uri_t d3_get = {
     .uri = "/d3",
     .method = HTTP_GET,
     .handler = download_get_handler,
-    .user_ctx = &((down_data_t){.filepath = "/spiffs/D3.html", .content = "text/html"}),
+    .user_ctx = &((down_data_t){.filepath = "/spiffs/D3.html", .content = HTTPD_TYPE_TEXT}),
     .is_websocket = false};
 
 static const httpd_uri_t d3_get_gz = {
