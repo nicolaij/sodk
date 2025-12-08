@@ -883,7 +883,7 @@ void modem_task(void *arg)
                                                 {
                                                     ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)data);
 
-                                                    vTaskDelay(1000 / portTICK_PERIOD_MS); // много пропущенных пакетов после выхода из PSM, так лучше
+                                                    vTaskDelay(1500 / portTICK_PERIOD_MS); // много пропущенных пакетов после выхода из PSM, так лучше
                                                 }
                                                 continue;
                                             }
