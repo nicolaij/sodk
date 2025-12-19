@@ -67,10 +67,19 @@ menu_t menu[] = {
     /*43*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
     /*44*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
     /*45*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
-    {.id = "calR1", .name = "Калибровка R1 кан. 1", .izm = "кОм", .val = 101000, .min = 0, .max = 300000},
-    {.id = "calR2", .name = "Калибровка R2 кан. 2", .izm = "кОм", .val = 5160, .min = 0, .max = 300000},
-    {.id = "calR3", .name = "Калибровка R3 кан. 3", .izm = "кОм", .val = 200, .min = 0, .max = 300000},
-    {.id = "calR4", .name = "Калибровка R4 кан. 4", .izm = "Ом", .val = 4030, .min = 0, .max = 300000},
+    /*46*/ {.id = "calR1", .name = "Калибровка R1 кан. 1", .izm = "кОм", .val = 101000, .min = 0, .max = 300000},
+    /*47*/ {.id = "calR2", .name = "Калибровка R2 кан. 2", .izm = "кОм", .val = 5160, .min = 0, .max = 300000},
+    /*48*/ {.id = "calR3", .name = "Калибровка R3 кан. 3", .izm = "кОм", .val = 200, .min = 0, .max = 300000},
+    /*49*/ {.id = "calR4", .name = "Калибровка R4 кан. 4", .izm = "Ом", .val = 4030, .min = 0, .max = 300000},
+    /*50*/ {.id = "cntTsw", .name = "Кол-во несовпад. врем. изм.", .izm = "", .val = 5, .min = 1, .max = 1000},
+    /*51*/ {.id = "startT1", .name = "Начальное время измер. кан. 1", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*52*/ {.id = "startT2", .name = "Начальное время измер. кан. 2", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*53*/ {.id = "startT3", .name = "Начальное время измер. кан. 3", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*54*/ {.id = "startT4", .name = "Начальное время измер. кан. 4", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*55*/ {.id = "startT5", .name = "Начальное время измер. кан. 5", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*56*/ {.id = "startT6", .name = "Начальное время измер. кан. 6", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*57*/ {.id = "startT7", .name = "Начальное время измер. кан. 7", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*58*/ {.id = "startT8", .name = "Начальное время измер. кан. 8", .izm = "поз", .val = 0, .min = 0, .max = 10},
 };
 
 esp_err_t init_nvs()
@@ -177,25 +186,32 @@ int get_menu_val_by_id(const char *id)
     return 0;
 }
 
+int get_menu_val(int pos)
+{
+    return menu[pos].val;
+}
+
+extern RTC_DATA_ATTR int8_t step_time[9];
+extern RTC_DATA_ATTR int8_t step_time_switch[9];
+
 esp_err_t set_menu_val_by_id(const char *id, int value)
 {
     esp_err_t err = ESP_FAIL;
-    int ll = strlen(id);
-    for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
-    {
-        int l = strlen(menu[i].id);
-        if (ll == l && strncmp(id, menu[i].id, l) == 0)
-        {
-            if (menu[i].val != value)
-            {
-                err = nvs_open("storage", NVS_READWRITE, &my_handle);
+    int pos = get_menu_pos_by_id(id);
 
-                ESP_LOGD("NVS", "Write  \"%s\" : \"%i\"", menu[i].id, value);
-                err = nvs_set_i32(my_handle, id, value);
-                menu[i].val = value;
-                nvs_close(my_handle);
-            }
-            break;
+    if (pos >= 0 && menu[pos].val != value)
+    {
+        err = nvs_open("storage", NVS_READWRITE, &my_handle);
+
+        ESP_LOGD("NVS", "Write  \"%s\" : \"%i\"", menu[pos].id, value);
+        err = nvs_set_i32(my_handle, id, value);
+        menu[pos].val = value;
+        nvs_close(my_handle);
+
+        if (pos > 50 && pos <= 58)
+        {
+            step_time[pos - 50] = 0;
+            step_time_switch[pos - 50] = 0;
         }
     }
 
@@ -388,11 +404,11 @@ void console_task(void *arg)
                             ESP_LOGI("menu", "%2i. %s: %i %s", i + 1, menu[i].name, menu[i].val, menu[i].izm);
                     }
 
-                    ESP_LOGI("menu", "51. История: %u", bootCount);
-                    ESP_LOGI("menu", "52. AT терминал NBIoT");
-                    ESP_LOGI("menu", "53. Start WiFi");
-                    ESP_LOGI("menu", "54. FreeRTOS INFO");
-                    ESP_LOGI("menu", "55. Reboot");
+                    ESP_LOGI("menu", "91. История: %u", bootCount);
+                    ESP_LOGI("menu", "92. AT терминал NBIoT");
+                    ESP_LOGI("menu", "93. Start WiFi");
+                    ESP_LOGI("menu", "94. FreeRTOS INFO");
+                    ESP_LOGI("menu", "95. Reboot");
                     ESP_LOGI("menu", "100. Сброс выходов");
                     ESP_LOGI("menu", "101 - 108. Включить канал");
                     ESP_LOGI("menu", "110. Включить LV_measure");
@@ -429,19 +445,19 @@ void console_task(void *arg)
                     ESP_LOGI("menu", "%2i. %s: " MACSTR ". Введите новое значение: ", n, menu[n - 1].name, MAC2STR(mac_addr));
                     ESP_LOGI("menu", "-------------------------------------------");
                     break;
-                case 51: // выводим историю
+                case 91: // выводим историю
                     break;
-                case 52: // AT терминал NBIoT
+                case 92: // AT терминал NBIoT
                     NB_terminal_mode = 1;
                     xEventGroupSetBits(status_event_group, NB_TERMINAL);
                     if (xHandleNB)
                         xTaskNotifyGive(xHandleNB); // если уже уснули
                     break;
-                case 53: // WiFi
+                case 93: // WiFi
                     if (xHandleWifi)
                         xTaskNotifyGive(xHandleWifi); // включаем WiFi
                     break;
-                case 54: // FreeRTOS INFO
+                case 94: // FreeRTOS INFO
                     ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
                     ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
                     ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
@@ -453,7 +469,7 @@ void console_task(void *arg)
                                         printf(statsbuf);
                     */
                     break;
-                case 55: // Reboot
+                case 95: // Reboot
                     if (xHandleWifi)
                         xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
                     vTaskDelay(500 / portTICK_PERIOD_MS);
@@ -1029,7 +1045,7 @@ void console_task(void *arg)
                 break;
             }
 
-            if ((selected_menu_id == 0 && n > 0) && (n <= 50 || n == 302 || n == 304))
+            if ((selected_menu_id == 0 && n > 0) && (n <= 90 || n == 302 || n == 304))
                 selected_menu_id = n;
             else
                 selected_menu_id = 0;

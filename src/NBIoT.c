@@ -309,7 +309,7 @@ esp_err_t apply_command(const char *cmd, size_t len)
         {
             if (get_menu_pos_by_id(item->string) >= 0)
             {
-                ESP_LOGI(TAG, "Setup %s: %d\n", item->string, item->valueint);
+                ESP_LOGI(TAG, "Setup %s: %d", item->string, item->valueint);
                 if (get_menu_val_by_id(item->string) != item->valueint)
                 {
                     set_menu_val_by_id(item->string, item->valueint);

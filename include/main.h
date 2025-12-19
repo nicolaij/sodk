@@ -225,6 +225,7 @@ int getResult_Data(char *line, int data_pos);
 */
 int getADC_Data(char *line, int data_pos, const int mode);
 
+int get_menu_val(int pos);
 int get_menu_pos_by_id(const char *id);
 int get_menu_val_by_id(const char *id);
 esp_err_t set_menu_val_by_id(const char *id, int value);

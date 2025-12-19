@@ -39,10 +39,9 @@ RTC_DATA_ATTR int measure_chan[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 /*
     Переменные для переключения времени измерений
 */
-RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-const int step_time_const[] = {0, 63, 125, 250, 500, 1000, 2000, 4000, 8000};
-#define STEP_TIME_COUNT 5
+RTC_DATA_ATTR int8_t step_time[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+RTC_DATA_ATTR int8_t step_time_switch[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+const int step_time_const[] = {0, 63, 125, 250, 500, 1000, 2000, 4000, 6000, 8000, 10000};
 
 // кольцевой буфер для визуализации
 static calcdata_t bufferR[RINGBUFLEN];
@@ -356,7 +355,7 @@ void adc_task(void *wakeup_reason)
     gpio_install_isr_service(0);
     // hook isr handler for specific gpio pin
     gpio_isr_handler_add(PCF_INT_PIN, pcf_int_handler, (void *)PCF_INT_PIN);
-    
+
     esp_reset_reason_t reason = esp_reset_reason();
     ESP_LOGD(TAG, "Reset reason: %d", reason);
     if (reason == ESP_RST_BROWNOUT)
@@ -393,11 +392,14 @@ void adc_task(void *wakeup_reason)
     // Ограничение времени импульса (0 - не вкл. ВВ источник)
     int pulse = get_menu_val_by_id("pulse");
 
-    const int offsetADC0 = get_menu_val_by_id("offstADC0"); //Напр. АКБ
-    const int offsetADC1 = get_menu_val_by_id("offstADC1"); //Ток прям. измер
-    const int offsetADC2 = get_menu_val_by_id("offstADC2"); //Ток усил. измер
-    const int offsetADC3 = get_menu_val_by_id("offstADC3"); //Напр. обр. проводн.
-    const int offsetADC4 = get_menu_val_by_id("offstADC4"); //Напряжение изм.
+    const int offsetADC0 = get_menu_val_by_id("offstADC0"); // Напр. АКБ
+    const int offsetADC1 = get_menu_val_by_id("offstADC1"); // Ток прям. измер
+    const int offsetADC2 = get_menu_val_by_id("offstADC2"); // Ток усил. измер
+    const int offsetADC3 = get_menu_val_by_id("offstADC3"); // Напр. обр. проводн.
+    const int offsetADC4 = get_menu_val_by_id("offstADC4"); // Напряжение изм.
+
+    const int step_time_count = get_menu_val_by_id("cntTsw"); // Кол-во несовпад. для переключения времени измерения
+    const int step_time_pos = get_menu_pos_by_id("cntTsw");   // позиция меню для вычисления начального времени
 
     update_allK();
 
@@ -478,6 +480,10 @@ void adc_task(void *wakeup_reason)
 
         uint8_t *ptr = buffer_ADC;
         uint8_t *ptr_adc_begin = buffer_ADC;
+
+        // инициализация времени измерения
+        if (step_time[result.channel] == 0)
+            step_time[result.channel] = get_menu_val(step_time_pos + result.channel);
 
         int block = 0;
         int block_power_off = 0;
@@ -846,7 +852,7 @@ void adc_task(void *wakeup_reason)
                             }
 
                             // переключаем диапазон вниз
-                            if (step_time_switch[result.channel] < STEP_TIME_COUNT * -1)
+                            if (step_time_switch[result.channel] < step_time_count * -1)
                             {
                                 if (step_time[result.channel] > 1)
                                     step_time[result.channel]--;
@@ -865,7 +871,7 @@ void adc_task(void *wakeup_reason)
                             step_time_switch[result.channel]++;
 
                             // переключаем диапазон вверх
-                            if (step_time_switch[result.channel] > STEP_TIME_COUNT)
+                            if (step_time_switch[result.channel] > step_time_count)
                             {
                                 if (step_time[result.channel] < sizeof(step_time_const) / sizeof(step_time_const[0]) - 1)
                                     step_time[result.channel]++;
@@ -1025,7 +1031,7 @@ void adc_task(void *wakeup_reason)
         if (BattLow > 0)
             result.flags.d_batt_low = 1;
 
-        if (cmd_power.cmd <= 3) //не передаем данные тестов
+        if (cmd_power.cmd <= 3) // не передаем данные тестов
             xQueueSend(send_queue, &result, (TickType_t)0);
 
         xQueueSend(adc_queue, &sum_adc_full, (TickType_t)0);
