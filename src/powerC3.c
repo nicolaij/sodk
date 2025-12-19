@@ -42,7 +42,7 @@ RTC_DATA_ATTR int measure_chan[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 RTC_DATA_ATTR int8_t step_time[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 RTC_DATA_ATTR int8_t step_time_switch[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const int step_time_const[] = {0, 63, 125, 250, 500, 1000, 2000, 4000, 8000};
-#define STEP_TIME_COUNT 3
+#define STEP_TIME_COUNT 5
 
 // кольцевой буфер для визуализации
 static calcdata_t bufferR[RINGBUFLEN];

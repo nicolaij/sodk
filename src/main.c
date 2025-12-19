@@ -334,7 +334,7 @@ esp_err_t start_adc_calibrate()
 
         if (adc_result.Ubatt < 2000)
         {
-            ESP_LOGE("AUTOCALIBRATE 2", "Error Ubat!");
+            ESP_LOGE("AUTOCALIBRATE 2", "Error Ubat! <2000");
             return ESP_FAIL;
         }
         if (adc_result.R1 > 50)
@@ -389,7 +389,7 @@ esp_err_t start_adc_calibrate()
     {
         if (adc_result.Ubatt > 50)
         {
-            ESP_LOGE("AUTOCALIBRATE", "Error Ubat!");
+            ESP_LOGE("AUTOCALIBRATE", "Error Ubat! >50");
             return ESP_FAIL;
         }
         if (adc_result.R1 > 50)

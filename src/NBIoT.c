@@ -691,13 +691,13 @@ void modem_task(void *arg)
                 // TAU 25h 1*25, ACC 0 sec
                 at_reply_wait_OK("AT+CPSMS=1,,,\"00111001\",\"00000000\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
 
-                ee = at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
 
                 first_run_completed = true;
             }
 
             // sync time 1 / 24 hours
-            if (last_sync_time == 0 || time(0) - last_sync_time > (24 * 60 * 60))
+            if (last_sync_time == 0 || (time(0) - last_sync_time) > (24 * 60 * 60))
             {
                 ee = at_reply_wait_OK("AT+CCLK?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
                 if (ee != ESP_OK)
@@ -878,7 +878,7 @@ void modem_task(void *arg)
                                             if (c != NULL)
                                             {
                                                 // Ждем сообщения о наличии сети
-                                                ee = wait_string(data, "+CEREG: 1", 5000 / portTICK_PERIOD_MS);
+                                                ee = wait_string(data, "+CEREG: 1", 3000 / portTICK_PERIOD_MS);
                                                 if (ee == ESP_OK)
                                                 {
                                                     ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)data);
