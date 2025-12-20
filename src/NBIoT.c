@@ -15,7 +15,7 @@
 #include "esp_now.h"
 #include "esp_wifi.h"
 
-static const int RX_BUF_SIZE = 1024;
+static const int RX_BUF_SIZE = 1024 + 256;
 static const int TX_BUF_SIZE = 512;
 static const char *TAG = "NBIoT";
 
@@ -127,13 +127,19 @@ esp_err_t wait_string(char *buffer, const char *wait, TickType_t ticks_to_wait)
     esp_err_t res = ESP_ERR_TIMEOUT;
     do
     {
-        int len = uart_read_bytes(UART_NUM_1, pb, (RX_BUF_SIZE - 1), 10);
-        // ESP_LOGD(TAG, "len: %d", len);
+        int len = uart_read_bytes(UART_NUM_1, pb, (RX_BUF_SIZE - compare_len - 1), 1);
+        // ESP_LOGD(TAG, "RX len: %d", len);
         if (len > 0)
         {
             pb += len;
             compare_len += len;
             *pb = '\0';
+
+            if (strlen(wait) == 0)
+            {
+                res = ESP_OK;
+                break;
+            }
 
             if (strnstr((const char *)buffer, wait, compare_len) != NULL)
             {
@@ -145,6 +151,8 @@ esp_err_t wait_string(char *buffer, const char *wait, TickType_t ticks_to_wait)
                 res = ESP_ERR_INVALID_STATE;
                 break;
             }
+
+            start_time = esp_timer_get_time();
         }
         else if (len == -1)
         {
@@ -178,6 +186,7 @@ esp_err_t at_reply_wait_OK(const char *cmd, char *buffer, TickType_t ticks_to_wa
     return at_reply_wait(cmd, "OK\r\n", buffer, ticks_to_wait);
 }
 
+// ищем пробел, затем параметры через запятую
 esp_err_t at_result_get(const char *wait, const char *buffer, int *resultdata, int resultcount)
 {
     char *s = strstr(buffer, wait);
@@ -315,19 +324,16 @@ esp_err_t apply_command(const char *cmd, size_t len)
                     set_menu_val_by_id(item->string, item->valueint);
                 }
             }
-            else
+            else if (strncmp(item->string, "timestamp", 9) == 0)
             {
-                if (strncmp(item->string, "timestamp", 9) == 0)
+                long long ts = atoll((const char *)item->valuestring);
+                if (ts > 1715923962LL) // 17 May 2024 05:32:42
                 {
-                    long long ts = atoll((const char *)item->valuestring);
-                    if (ts > 1715923962LL) // 17 May 2024 05:32:42
-                    {
-                        struct timeval now = {.tv_sec = ts + timezone * 3600}; // UNIX time + timezone offset
-                        settimeofday(&now, NULL);
-                        ESP_LOGI(TAG, "Set date and time: %s", get_datetime(time(0)));
-                    }
+                    struct timeval now = {.tv_sec = ts + timezone * 3600}; // UNIX time + timezone offset
+                    settimeofday(&now, NULL);
+                    ESP_LOGI(TAG, "Set date and time: %s", get_datetime(time(0)));
                 }
-            }
+            };
         }
     }
     else
@@ -340,31 +346,39 @@ esp_err_t apply_command(const char *cmd, size_t len)
     return ESP_OK;
 }
 
-esp_err_t check_received_message(const char *data, char *result_data)
+// data - hex символы, len - запрашиваемая длина результата (ESP_OK если совпало)
+esp_err_t decode_fromHEX(const char *data, int len, char *result_data)
 {
+    char *s = data;
+    int i = 0;
+    while (i < len && *s >= '0')
+    {
+        char c[3] = {*(s++), *(s++), 0};
+        result_data[i] = (char)strtol(c, NULL, 16);
+        i++;
+    }
+    result_data[i] = '\0';
+
+    return (i == len) ? ESP_OK : ESP_FAIL;
+}
+
+esp_err_t check_received_message(char *data, char *result_data)
+{
+    //+CSONMI: 0,20,5468616E6B20796F7521
     const char *rdata = strstr((const char *)data, "+CSONMI: ");
     if (rdata)
-    { //+CSONMI: 0,20,5468616E6B20796F7521
+    {
         char *s = strchr(rdata, ',');
-        if (s)
-        {
-            // len
-            int l = atoi(s + 1);
-            s = strchr(s + 1, ',');
-            if (s++)
-            {
-                // message
-                for (int i = 0; i < l; i = i + 2)
-                {
-                    char c[3] = {*(s++), *(s++), 0};
-                    result_data[i / 2] = (char)strtol(c, NULL, 16);
-                }
-                result_data[l / 2] = '\0';
 
-                apply_command((const char *)result_data, l / 2);
-            }
+        // len
+        int len = atoi(s + 1);
+        s = strchr(s + 1, ',');
+
+        if (decode_fromHEX(s + 1, len / 2, result_data) == ESP_OK)
+        {
+            apply_command((const char *)result_data, len / 2);
+            return ESP_OK;
         }
-        return ESP_OK;
     }
     return ESP_ERR_NOT_FOUND;
 }
@@ -431,7 +445,7 @@ void modem_task(void *arg)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, RX_BUF_SIZE, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, 512, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
@@ -544,12 +558,6 @@ void modem_task(void *arg)
 
             strcpy(net_status_current, "ready");
 
-            // если запускаем терминал - стоп работа с модулем
-            if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
-            {
-                break;
-            }
-
             // Battery Charge
             int cbc[2] = {-1, -1};
 
@@ -643,6 +651,8 @@ void modem_task(void *arg)
                     // если запускаем терминал - стоп работа с модулем
                     if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
                     {
+                        // Disable the use of PSM and discard all parameters for PSM or, if available reset to the manufacturer specific default values.
+                        print_atcmd("AT+CPSMS=2\r\n", data);
                         break;
                     }
                 }
@@ -675,6 +685,8 @@ void modem_task(void *arg)
             // если запускаем терминал - стоп работа с модулем
             if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
             {
+                // Disable the use of PSM and discard all parameters for PSM or, if available reset to the manufacturer specific default values.
+                print_atcmd("AT+CPSMS=2\r\n", data);
                 break;
             }
 
@@ -878,7 +890,7 @@ void modem_task(void *arg)
                                             if (c != NULL)
                                             {
                                                 // Ждем сообщения о наличии сети
-                                                ee = wait_string(data, "+CEREG: 1", 3000 / portTICK_PERIOD_MS);
+                                                ee = wait_string(data, "+CEREG: 1", 2000 / portTICK_PERIOD_MS);
                                                 if (ee == ESP_OK)
                                                 {
                                                     ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)data);
@@ -926,6 +938,124 @@ void modem_task(void *arg)
             {
                 snprintf(send_data, sizeof(send_data), "AT+CSOCL=%i\r\n", socket--);
                 at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS); // CLOSE socket
+            }
+
+            // качаем firmware
+            if (0)
+            {
+                int httpclient_id = 0;
+                at_reply_wait_OK("AT+CHTTPCREATE=\"http://172.30.239.20:88/\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                const char *pdata = strstr((const char *)data, "+CHTTPCREATE: ");
+                if (pdata)
+                {
+                    httpclient_id = atoi(pdata + 14);
+
+                    snprintf(send_data, sizeof(send_data), "AT+CHTTPCON=%i\r\n", httpclient_id);
+                    ESP_LOGI(TAG, "HTTP Socket %i connect...", httpclient_id);
+                    ee = at_reply_wait_OK(send_data, (char *)data, 30000 / portTICK_PERIOD_MS);
+                    if (ee == ESP_OK)
+                    {
+                        // snprintf(send_data, sizeof(send_data), "AT+CHTTPSEND=%i,0,\"/sodk/fw/firmware_sodk_v.1.30.bin\"\r\n", httpclient_id);
+                        snprintf(send_data, sizeof(send_data), "AT+CHTTPSEND=%i,0,\"/sodk/any_opcua_tcpudp.py\"\r\n", httpclient_id);
+                        at_reply_wait_OK(send_data, (char *)data, 500 / portTICK_PERIOD_MS);
+                        // at_reply_wait(send_data, "+CHTTPNMIH:", (char *)data, 1000 / portTICK_PERIOD_MS);
+                        int contentlen = 0;
+                        int total_length = 0;
+                        int hex_length = 0;
+                        char *s;
+                        char *hs;
+                        int64_t start_time = esp_timer_get_time();
+                        do
+                        {
+                            if (wait_string(data, "", 2) == ESP_OK)
+                            {
+                                ESP_LOGD(TAG, "PROCESS: \"%s\"", (char *)data);
+
+                                if (contentlen == 0)
+                                {
+                                    //+CHTTPNMIH: 2,200,233,Content-Length: 22620
+                                    s = strstr(data, "+CHTTPNMIH:");
+                                    if (s)
+                                    {
+                                        s = strstr(s, "Content-Length: ");
+                                        contentlen = atoi(s + 16);
+                                    }
+                                }
+
+                                if (contentlen > 0)
+                                {
+                                    //+CHTTPNMIC: 0,1,989328,500,637cd7040d476389e7040327090789461306d7ff63efc628a38fe43e85a00345090611e993...
+
+                                    s = strstr(data, "+CHTTPNMIC:");
+                                    if (s)
+                                    {
+                                        s = strchr(s + 1, ' ');
+                                        if (!s || atoi(s + 1) != httpclient_id)
+                                        {
+                                            ESP_LOGE(TAG, "ERROR data ");
+                                            break;
+                                        }
+
+                                        s = strchr(s + 1, ',');
+                                        int flag = atoi(s + 1);
+                                        if (!s)
+                                        {
+                                            ESP_LOGE(TAG, "ERROR data ");
+                                            break;
+                                        }
+
+                                        s = strchr(s + 1, ',');
+                                        if (!s || atoi(s + 1) != contentlen)
+                                        {
+                                            ESP_LOGE(TAG, "ERROR data ");
+                                            break;
+                                        }
+
+                                        s = strchr(s + 1, ',');
+                                        hex_length = atoi(s + 1);
+                                        s = strchr(s + 1, ',');
+                                        hs = s + 1;
+                                        /*
+                                                                                if (decode_fromHEX(s + 1, len, send_data) == ESP_OK)
+                                                                                {
+                                                                                    total_length += len;
+                                                                                    ESP_LOGI(TAG, "Receive %i from %i", total_length, contentlen);
+                                                                                    if (flag == 0)
+                                                                                    {
+                                                                                        ESP_LOGI(TAG, "Receive OK");
+                                                                                    }
+                                                                                    start_time = esp_timer_get_time();
+                                                                                }
+                                        */
+                                    }
+                                    else
+                                    {
+                                        hs = data;
+                                    }
+
+                                    if (hex_length > 0)
+                                    {
+                                        decode_fromHEX(hs, hex_length, send_data);
+                                    }
+                                }
+                            }
+
+                        } while ((esp_timer_get_time() - start_time) < (10000 * 1000LL));
+
+                        snprintf(send_data, sizeof(send_data), " AT+CHTTPDISCON=%i\r\n", httpclient_id);
+                        at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS);
+                        snprintf(send_data, sizeof(send_data), " AT+CHTTPDESTROY=%i\r\n", httpclient_id);
+                        at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS);
+                    }
+                }
+            }
+
+            // если запускаем терминал - стоп работа с модулем
+            if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
+            {
+                // Disable the use of PSM and discard all parameters for PSM or, if available reset to the manufacturer specific default values.
+                print_atcmd("AT+CPSMS=2\r\n", data);
+                break;
             }
             break;
         }; // end while

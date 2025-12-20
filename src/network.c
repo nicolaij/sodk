@@ -597,7 +597,7 @@ esp_err_t update_post_handler(httpd_req_t *req)
         if (xHandleWifi)
             xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
     }
-    else if (file_id == 0x50000)
+    else if (file_id == 0x50000) // spiffs.bin
     {
         const esp_partition_t *storage_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, "storage");
         ESP_ERROR_CHECK(esp_partition_erase_range(storage_partition, 0, 0x50000));

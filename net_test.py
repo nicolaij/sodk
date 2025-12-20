@@ -1,11 +1,15 @@
 # tcp-server.py
 
-from datetime import datetime
+import datetime
 import socket
 import json
 import csv
-import psycopg2
 import re
+import os
+import logging
+import base64
+import queue
+
 
 host = '10.179.40.11'
 port = 48886
@@ -13,6 +17,58 @@ port = 48886
 x = '{  "name": "John",  "age": 30,  "city": "New York"}'
 
 m = b'{"id":"sodk1.10","num":1,"dt":"2025-06-24 13:13:34","U":11544,"R":5999,"U0":8378,"Ubatt1":9375,"time":63,"NBbatt":3.373,"RSSI":-65,"Temp":44.7,"Flags":"0x0000"}'
+
+def check_firmware(id):
+    n = str(id).split('.')
+    fn = '.pio\\build\\c3-SIM7020-release\\firmware.bin'
+    try:
+        with open(fn, 'rb') as f:
+            chunk_size = 200  # Read bytes at a time
+            block = 0
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break  # Stop when an empty bytes object is returned
+                #print(chunk.hex())
+                standard_encoded = base64.b64encode(chunk)
+                print('{{"fw{0}":"{1}"}}'.format(block, standard_encoded.decode('ascii')))
+                block=block + 1
+
+            os.rename(fn, 'sent_{:%Y-%m-%d_%H.%M.%S}_firmware.bin'.format(datetime.datetime.now()))
+            return block
+        
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logging.exception(e)
+        pass
+    return 0
+
+
+def read_firmware(fn, client_address):
+    try:
+        with open(fn, 'rb') as f:
+            chunk_size = 200  # Read bytes at a time
+            block = 0
+            message_queue = queue.Queue()
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break  # Stop when an empty bytes object is returned
+                #print(chunk.hex())
+                standard_encoded = base64.b64encode(chunk)
+                msg = '{{"fw{0}":"{1}"}}'.format(block, standard_encoded.decode('ascii'))
+                message_queue.put(dict([("message", msg), ("client", client_address)]))
+                block=block + 1
+
+            #os.rename(fn, 'sent_{:%Y-%m-%d_%H.%M.%S}_firmware.bin'.format(datetime.datetime.now()))
+            return message_queue
+        
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logging.exception(e)
+    return 0
 
 
 def parse_msg1(msg):
@@ -69,22 +125,12 @@ def add_to_postgre(j):
 # for js in parse_msg(m.decode(encoding="latin-1", errors="ignore")):
 js = json.loads(m)
 print(js)
-add_to_postgre(js)
 
 # convert into JSON:
 j = json.loads(m)
-dt = datetime.strptime("2022-10-05 11:39:15", "%Y-%m-%d %H:%M:%S")
+dt = datetime.datetime.strptime("2022-10-05 11:39:15", "%Y-%m-%d %H:%M:%S")
 print(dt)
-exit()
-# Создать сокет сервера
 
-MAX_CONNECTIONS = 20
+fn = '.pio\\build\\c3-SIM7020-release\\firmware.bin'
+print(read_firmware(fn, 0))
 
-clients = [socket.socket(socket.AF_INET, socket.SOCK_STREAM) for i in range(MAX_CONNECTIONS)]
-udp_cli = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-for client in clients:
-    client.connect((host, port))
-
-for i in range(MAX_CONNECTIONS):
-    clients[i].send(m)
-    udp_cli.sendto(m, (host, port))
