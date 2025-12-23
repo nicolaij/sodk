@@ -15,7 +15,7 @@
 #include "esp_now.h"
 #include "esp_wifi.h"
 
-static const int RX_BUF_SIZE = 1024 + 256;
+static const int RX_BUF_SIZE = 1024 * 2;
 static const int TX_BUF_SIZE = 512;
 static const char *TAG = "NBIoT";
 
@@ -115,42 +115,51 @@ esp_err_t print_atcmd(const char *cmd, char *buffer)
     return ESP_OK;
 }
 
-esp_err_t wait_string(char *buffer, const char *wait, TickType_t ticks_to_wait)
+esp_err_t wait_string(char *buffer, const char *swait, TickType_t ticks_to_wait)
 {
-
     const char *err = "ERROR\r\n";
+
+    char *wait = swait;
 
     int64_t start_time = esp_timer_get_time();
     char *pb = buffer;
-    int compare_len = 0;
+    int total_len = 0;
     *pb = '\0';
+    int lw = strlen(wait);
+    int reqlen = (lw > 0) ? lw : 1;
     esp_err_t res = ESP_ERR_TIMEOUT;
     do
     {
-        int len = uart_read_bytes(UART_NUM_1, pb, (RX_BUF_SIZE - compare_len - 1), 1);
+        //BUG
+        reqlen = RX_BUF_SIZE - 1 - total_len;
+        int len = uart_read_bytes(UART_NUM_1, pb, reqlen, 1);
         // ESP_LOGD(TAG, "RX len: %d", len);
         if (len > 0)
         {
             pb += len;
-            compare_len += len;
+            total_len += len;
             *pb = '\0';
 
-            if (strlen(wait) == 0)
+            if (strnstr((const char *)buffer, wait, total_len) != NULL)
             {
-                res = ESP_OK;
-                break;
-            }
+                if (total_len > 2)
+                {
+                    ESP_LOGV("wait", "...%2x %2x %2x", buffer[total_len - 3], buffer[total_len - 2], buffer[total_len - 1]);
+                }
 
-            if (strnstr((const char *)buffer, wait, compare_len) != NULL)
-            {
-                res = ESP_OK;
-                break;
+                if (buffer[total_len - 1] == '\n')
+                {
+                    res = ESP_OK;
+                    break;
+                }
             }
-            else if (strnstr((const char *)buffer, err, compare_len) != NULL)
+            else if (strnstr((const char *)buffer, err, total_len) != NULL)
             {
                 res = ESP_ERR_INVALID_STATE;
                 break;
             }
+
+            reqlen = 1;
 
             start_time = esp_timer_get_time();
         }
@@ -158,7 +167,13 @@ esp_err_t wait_string(char *buffer, const char *wait, TickType_t ticks_to_wait)
         {
             return ESP_FAIL;
         }
-    } while ((esp_timer_get_time() - start_time) < ticks_to_wait * portTICK_PERIOD_MS * 1000);
+
+        if (len == 0)
+        {
+            vTaskDelay(1);
+        }
+
+    } while ((esp_timer_get_time() - start_time) < ticks_to_wait * portTICK_PERIOD_MS * 1000LL);
 
     return res;
 }
@@ -347,7 +362,7 @@ esp_err_t apply_command(const char *cmd, size_t len)
 }
 
 // data - hex символы, len - запрашиваемая длина результата (ESP_OK если совпало)
-esp_err_t decode_fromHEX(const char *data, int len, char *result_data)
+int decode_fromHEX(const char *data, int len, char *result_data)
 {
     char *s = data;
     int i = 0;
@@ -359,9 +374,24 @@ esp_err_t decode_fromHEX(const char *data, int len, char *result_data)
     }
     result_data[i] = '\0';
 
-    return (i == len) ? ESP_OK : ESP_FAIL;
+    return i;
 }
 
+// data - hex символы, len - запрашиваемая длина результата (ESP_OK если совпало)
+int encode_toHEX(const char *data, char *result_data)
+{
+    char *s = result_data;
+    int i = 0;
+    int len = strlen(data);
+    while (i < len)
+    {
+        snprintf(s, 3, "%02x", data[i]);
+        i++;
+        s = s + 2;
+    }
+
+    return i;
+}
 esp_err_t check_received_message(char *data, char *result_data)
 {
     //+CSONMI: 0,20,5468616E6B20796F7521
@@ -373,8 +403,7 @@ esp_err_t check_received_message(char *data, char *result_data)
         // len
         int len = atoi(s + 1);
         s = strchr(s + 1, ',');
-
-        if (decode_fromHEX(s + 1, len / 2, result_data) == ESP_OK)
+        if (decode_fromHEX(s + 1, len / 2, result_data) == len / 2)
         {
             apply_command((const char *)result_data, len / 2);
             return ESP_OK;
@@ -445,7 +474,7 @@ void modem_task(void *arg)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, 512, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, 2048 * 5, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
@@ -574,8 +603,9 @@ void modem_task(void *arg)
                     strcpy(net_status_current, "Check SIM...");
 
                 // Enter PIN
-                ee = at_reply_wait("AT+CPIN?\r\n", "CPIN: READY", (char *)data, 1000 / portTICK_PERIOD_MS);
-                if (ee != ESP_OK)
+                // ee = at_reply_wait("AT+CPIN?\r\n", "CPIN: READY", (char *)data, 1000 / portTICK_PERIOD_MS);
+                ee = at_reply_wait_OK("AT+CPIN?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                if (ee != ESP_OK || strstr(data, "CPIN: READY") == NULL)
                 {
                     strcpy(net_status_current, "SIM Error!");
                     try_counter++;
@@ -670,7 +700,7 @@ void modem_task(void *arg)
 
             // Signal Quality Report
             int csq[2] = {-1, -1};
-            ee = at_reply_get("AT+CSQ\r\n", "CSQ:", (char *)data, csq, 2, 1000 / portTICK_PERIOD_MS);
+            ee = at_reply_get("AT+CSQ\r\n", "+CSQ: ", (char *)data, csq, 2, 1000 / portTICK_PERIOD_MS);
             if (ee != ESP_OK)
             {
                 ESP_LOGW(TAG, "AT+CSQ");
@@ -912,7 +942,7 @@ void modem_task(void *arg)
                                     start_time = esp_timer_get_time(); // reset timer
                                 }
 
-                                if (wait_string(data, "\r", 1000 / portTICK_PERIOD_MS) == ESP_OK)
+                                if (wait_string(data, "\r\n", 1000 / portTICK_PERIOD_MS) == ESP_OK)
                                 {
                                     ESP_LOGI(TAG, "Modem: %s", data);
                                     check_received_message(data, send_data);
@@ -941,7 +971,8 @@ void modem_task(void *arg)
             }
 
             // качаем firmware
-            if (0)
+            /*
+            if (1)
             {
                 int httpclient_id = 0;
                 at_reply_wait_OK("AT+CHTTPCREATE=\"http://172.30.239.20:88/\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
@@ -955,8 +986,10 @@ void modem_task(void *arg)
                     ee = at_reply_wait_OK(send_data, (char *)data, 30000 / portTICK_PERIOD_MS);
                     if (ee == ESP_OK)
                     {
+                        // encode_toHEX("Range: bytes=0-600", data);
                         // snprintf(send_data, sizeof(send_data), "AT+CHTTPSEND=%i,0,\"/sodk/fw/firmware_sodk_v.1.30.bin\"\r\n", httpclient_id);
-                        snprintf(send_data, sizeof(send_data), "AT+CHTTPSEND=%i,0,\"/sodk/any_opcua_tcpudp.py\"\r\n", httpclient_id);
+                        // snprintf(send_data, sizeof(send_data), "AT+CHTTPSEND=%i,0,\"/sodk/fw/firmware_sodk_v.1.30.bin\",%s\r\n", httpclient_id, data);
+                        snprintf(send_data, sizeof(send_data), "AT+CHTTPSEND=%i,0,\"/sodk/fw/t.bin\"\r\n", httpclient_id);
                         at_reply_wait_OK(send_data, (char *)data, 500 / portTICK_PERIOD_MS);
                         // at_reply_wait(send_data, "+CHTTPNMIH:", (char *)data, 1000 / portTICK_PERIOD_MS);
                         int contentlen = 0;
@@ -967,9 +1000,9 @@ void modem_task(void *arg)
                         int64_t start_time = esp_timer_get_time();
                         do
                         {
-                            if (wait_string(data, "", 2) == ESP_OK)
+                            if ((ee = wait_string2(data, "\r\n", 1)) == ESP_OK)
                             {
-                                ESP_LOGD(TAG, "PROCESS: \"%s\"", (char *)data);
+                                ESP_LOGD(TAG, "%4i PROCESS: \"%s\"", ee, (char *)data);
 
                                 if (contentlen == 0)
                                 {
@@ -1015,41 +1048,48 @@ void modem_task(void *arg)
                                         hex_length = atoi(s + 1);
                                         s = strchr(s + 1, ',');
                                         hs = s + 1;
-                                        /*
-                                                                                if (decode_fromHEX(s + 1, len, send_data) == ESP_OK)
-                                                                                {
-                                                                                    total_length += len;
-                                                                                    ESP_LOGI(TAG, "Receive %i from %i", total_length, contentlen);
-                                                                                    if (flag == 0)
-                                                                                    {
-                                                                                        ESP_LOGI(TAG, "Receive OK");
-                                                                                    }
-                                                                                    start_time = esp_timer_get_time();
-                                                                                }
-                                        */
-                                    }
-                                    else
-                                    {
-                                        hs = data;
-                                    }
 
-                                    if (hex_length > 0)
-                                    {
-                                        decode_fromHEX(hs, hex_length, send_data);
+                                        int l = 0;
+                                        if (hex_length > 0)
+                                        {
+                                            l = decode_fromHEX(hs, hex_length, send_data);
+                                            if (hex_length != l)
+                                                ESP_LOGE(TAG, "Bad data %i of %i", l, hex_length);
+                                        }
+
+                                        total_length += l;
+
+                                        if (flag == 0)
+                                            break;
+
+                                        start_time = esp_timer_get_time();
                                     }
                                 }
+                            }
+                            else
+                            {
+                                vTaskDelay(1);
                             }
 
                         } while ((esp_timer_get_time() - start_time) < (10000 * 1000LL));
 
-                        snprintf(send_data, sizeof(send_data), " AT+CHTTPDISCON=%i\r\n", httpclient_id);
+                        if (total_length == contentlen)
+                        {
+                            ESP_LOGI(TAG, "Download OK! Bytes %i", total_length);
+                        }
+                        else
+                        {
+                            ESP_LOGW(TAG, "Download Fail! Bytes %i of %i", total_length, contentlen);
+                        }
+
+                        snprintf(send_data, sizeof(send_data), "AT+CHTTPDISCON=%i\r\n", httpclient_id);
                         at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS);
-                        snprintf(send_data, sizeof(send_data), " AT+CHTTPDESTROY=%i\r\n", httpclient_id);
+                        snprintf(send_data, sizeof(send_data), "AT+CHTTPDESTROY=%i\r\n", httpclient_id);
                         at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS);
                     }
                 }
             }
-
+*/
             // если запускаем терминал - стоп работа с модулем
             if (xEventGroupGetBits(status_event_group) & NB_TERMINAL)
             {

@@ -345,7 +345,7 @@ void console_task(void *arg)
                 esp_now_send(peerInfo.peer_addr, serialbuffer, ESP_NOW_MAX_DATA_LEN);
             }
 
-            vTaskDelay(50 / portTICK_PERIOD_MS);
+            vTaskDelay(1);
             continue;
         }
 
@@ -353,7 +353,7 @@ void console_task(void *arg)
 
         if (NB_terminal_mode)
         {
-            if (c == '\n')
+            if (c == '\n' || c == '\r')
             {
                 const char cl_return = '\r';
                 uart_write_bytes(UART_NUM_1, &cl_return, 1);
@@ -363,7 +363,7 @@ void console_task(void *arg)
                 uart_write_bytes(UART_NUM_1, &c, 1);
             }
 
-            while (uart_read_bytes(UART_NUM_1, data, 1, 50 / portTICK_PERIOD_MS) > 0)
+            while (uart_read_bytes(UART_NUM_1, data, 1, 1) > 0)
             {
                 putchar(*data);
             }
