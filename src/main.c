@@ -115,6 +115,14 @@ esp_err_t pcf8575_set(int channel_cmd)
         current_mask &= ~(0x60ff);      // очищаем каналы 0..7 bit + LV
         cmd_mask = current_mask;
         break;
+    case CHARGE_CMDOFF:
+        current_mask |= BIT(CHARGE_CONTROL_BIT);
+        cmd_mask = current_mask;
+        break;
+    case CHARGE_CMDON:
+        current_mask &= ~BIT(CHARGE_CONTROL_BIT);
+        cmd_mask = current_mask;
+        break;
     case 1:
         current_mask &= ~BIT(POWER_BIT); // On HV PWM and ADC amplifier
         current_mask &= ~(0x60ff);       // очищаем каналы 0..7 bit + LV
@@ -263,7 +271,7 @@ esp_err_t start_adc_calibrate()
     gpio_pulldown_en(2);
     gpio_pulldown_en(3);
     gpio_pulldown_en(4);
-    vTaskDelay(30000 / portTICK_PERIOD_MS);
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
     gpio_pulldown_dis(0);
     gpio_pulldown_dis(1);
     gpio_pulldown_dis(2);
@@ -342,7 +350,7 @@ esp_err_t start_adc_calibrate()
             ESP_LOGE("AUTOCALIBRATE 2", "Error R1!");
             return ESP_FAIL;
         }
-        if (adc_result.R2 > 200)
+        if (adc_result.R2 > 210)
         {
             ESP_LOGE("AUTOCALIBRATE 2", "Error R2!");
             return ESP_FAIL;
@@ -367,7 +375,7 @@ esp_err_t start_adc_calibrate()
     gpio_pulldown_en(2);
     gpio_pulldown_en(3);
     gpio_pulldown_en(4);
-    vTaskDelay(30000 / portTICK_PERIOD_MS);
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
     gpio_pulldown_dis(0);
     gpio_pulldown_dis(1);
     gpio_pulldown_dis(2);
@@ -418,8 +426,8 @@ esp_err_t start_adc_calibrate()
 
     if (
         //(ESP_OK == set_menu_val_by_id("offstADC0", adc_corr.Ubatt)) &&
-        (ESP_OK == set_menu_val_by_id("offstADC1", adc_corr.R1 * 85 / 100)) &&
-        (ESP_OK == set_menu_val_by_id("offstADC2", adc_corr.R2)) //&&
+        (ESP_OK == set_menu_val_by_id("offstADC1", adc_corr.R1 * 80 / 100)) &&
+        (ESP_OK == set_menu_val_by_id("offstADC2", adc_corr.R2 * 100 / 100)) //&&
         //(ESP_OK == set_menu_val_by_id("offstADC3", adc_corr.U0)) &&
         //(ESP_OK == set_menu_val_by_id("offstADC4", adc_corr.U))
     )
@@ -557,7 +565,7 @@ void app_main(void)
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
-    xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
+    xTaskCreate(modem_task, "modem_task", 1024 * 6, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
     xTaskCreate(adc_task, "adc_task", 1024 * 3, (void *)&wakeup_reason, configMAX_PRIORITIES - 5, &xHandleADC);
 
@@ -566,6 +574,8 @@ void app_main(void)
 
     if (start_adc_init) // АВТОКАЛИБРОВКА ADC
     {
+        ESP_LOGW("main", "Start calibration ofset ADC1, ADC2");
+
         vTaskPrioritySet(NULL, configMAX_PRIORITIES - 7);
 
         if (ESP_OK == start_adc_calibrate())

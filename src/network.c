@@ -9,7 +9,6 @@
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
-#include "nvs_flash.h"
 
 #include "lwip/err.h"
 #include "lwip/sys.h"
@@ -238,7 +237,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
             {
                 ESP_LOGW(TAGH, "Rebooting now!");
                 if (xHandleWifi)
-                    xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+                    xTaskNotify(xHandleWifi, REBOOT_NOW, eSetValueWithOverwrite);
 
                 httpd_resp_set_status(req, "303 See Other");
                 httpd_resp_set_hdr(req, "Location", "/");
@@ -507,8 +506,6 @@ static esp_err_t download_ADCdata_handler(httpd_req_t *req)
     return ESP_OK;
 };
 
-#define ESP_IMAGE_HEADER_MAGIC 0xE9 /*!< The magic word for the esp_image_header_t structure. */
-
 /*
  * Handle OTA file upload
  */
@@ -595,7 +592,7 @@ esp_err_t update_post_handler(httpd_req_t *req)
         httpd_resp_sendstr(req, "Firmware update complete, rebooting now!\n");
         ESP_LOGW(TAGH, "Firmware update complete, rebooting now!");
         if (xHandleWifi)
-            xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+            xTaskNotify(xHandleWifi, REBOOT_NOW, eSetValueWithOverwrite);
     }
     else if (file_id == 0x50000) // spiffs.bin
     {
@@ -620,7 +617,7 @@ esp_err_t update_post_handler(httpd_req_t *req)
         httpd_resp_sendstr(req, "SPIFFS update complete, rebooting now!\n");
         ESP_LOGW(TAGH, "SPIFFS update complete, rebooting now!");
         if (xHandleWifi)
-            xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+            xTaskNotify(xHandleWifi, REBOOT_NOW, eSetValueWithOverwrite);
     }
 
     return ESP_OK;
@@ -1005,7 +1002,7 @@ void wifi_task(void *arg)
                     esp_wifi_deinit();
                     break;
                 }
-                else if ((ulNotifiedValue & NOTYFY_WIFI_REBOOT) != 0)
+                else if ((ulNotifiedValue & REBOOT_NOW) != 0)
                 {
                     vTaskDelay(pdMS_TO_TICKS(1000));
                     esp_wifi_stop();

@@ -51,6 +51,8 @@
 
 #define IN1_BIT 15
 
+#define CHARGE_CONTROL_BIT 11
+
 #define NB_PWR_CMDON 200
 #define NB_PWR_CMDOFF 201
 #define POWER_CMDON 202
@@ -60,10 +62,14 @@
 #define LV_CMDOFF 303
 #define LV_MEASUREON 304
 #define LV_MEASUREOFF 305
+#define CHARGE_CMDON 306
+#define CHARGE_CMDOFF 307
 
 #define WS_BUF_SIZE 160
 
 #define StoUS(s) (s * 1000000LL)
+
+#define ESP_IMAGE_HEADER_MAGIC 0xE9 /*!< The magic word for the esp_image_header_t structure. */
 
 typedef struct
 {
@@ -95,7 +101,7 @@ typedef struct
 
             bool d_batt_low : 1;    // низкий уровень заряда батарей
             bool d_nbiot_error : 1; // ошибка модуля NBIoT
-            bool reserved5 : 1;
+            bool d_charge_off : 1;  // выключили зарядку
             bool reserved6 : 1;
 
             bool d_loop_ch1 : 1; // признак неисправности петли канала 1
@@ -162,11 +168,12 @@ extern TaskHandle_t xHandleWifi;
 #define SERIAL_TERMINAL_ACTIVE BIT8
 #define NB_TERMINAL BIT9
 #define WIFI_ACTIVE BIT10
+#define FIRMWARE_UPDATE_ACTIVE BIT11
 
 #define NOTYFY_WIFI BIT0
 #define NOTYFY_WIFI_STOP BIT1
 #define NOTYFY_WIFI_ESPNOW BIT2
-#define NOTYFY_WIFI_REBOOT BIT3
+#define REBOOT_NOW BIT3
 
 #define OUT_ADD_NBCOMMON ",\"NBbatt\":%.3f,\"RSSI\":%i,\"TAC\":%u,\"CI\":%u"
 #define OUT_ADD_COMMON ",\"Temp\":%.01f"

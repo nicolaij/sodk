@@ -55,18 +55,19 @@ menu_t menu[] = {
     /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3900, .min = 1, .max = 1000000},
     /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
     /*33*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
-    /*34*/ {.id = "UbatEnd", .name = "U bat отключения", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
+    /*34*/ {.id = "UbatEnd", .name = "Нижн. U bat отключения", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
+    /****/ {.id = "UbatMax", .name = "Верхн. U bat зарядки", .izm = "мВ", .val = 12400, .min = 0, .max = 13000},
     /*35*/ {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .izm = "", .val = 10, .min = 1, .max = 100},
     /*36*/ {.id = "WiFichan", .name = "WiFi channel", .izm = "", .val = 11, .min = 1, .max = 20},
     /*37*/ {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
     /*38*/ {.id = "avgcnt", .name = "Кол-во усред. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
     /*39*/ {.id = "percU0lv", .name = "\% U петли низ.", .izm = "\%", .val = 75, .min = 0, .max = 100}, /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
     /*40*/ {.id = "percRlv", .name = "\% R низ.", .izm = "\%", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
-    /*41*/ {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*42*/ {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*43*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*44*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 200},
-    /*45*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 200},
+    /*41*/ {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 300},
+    /*42*/ {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 300},
+    /*43*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 300},
+    /*44*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 300},
+    /*45*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 300},
     /*46*/ {.id = "calR1", .name = "Калибровка R1 кан. 1", .izm = "кОм", .val = 101000, .min = 0, .max = 300000},
     /*47*/ {.id = "calR2", .name = "Калибровка R2 кан. 2", .izm = "кОм", .val = 5160, .min = 0, .max = 300000},
     /*48*/ {.id = "calR3", .name = "Калибровка R3 кан. 3", .izm = "кОм", .val = 200, .min = 0, .max = 300000},
@@ -80,6 +81,7 @@ menu_t menu[] = {
     /*56*/ {.id = "startT6", .name = "Начальное время измер. кан. 6", .izm = "поз", .val = 0, .min = 0, .max = 10},
     /*57*/ {.id = "startT7", .name = "Начальное время измер. кан. 7", .izm = "поз", .val = 0, .min = 0, .max = 10},
     /*58*/ {.id = "startT8", .name = "Начальное время измер. кан. 8", .izm = "поз", .val = 0, .min = 0, .max = 10},
+    /*59*/ {.id = "adccali", .name = "USE ADC calibration driver", .izm = "", .val = 0, .min = 0, .max = 1},
 };
 
 esp_err_t init_nvs()
@@ -199,7 +201,12 @@ esp_err_t set_menu_val_by_id(const char *id, int value)
     esp_err_t err = ESP_FAIL;
     int pos = get_menu_pos_by_id(id);
 
-    if (pos >= 0 && menu[pos].val != value)
+    if (pos >= 0 && menu[pos].val == value)
+    {
+        return ESP_OK;
+    };
+
+    if (pos >= 0)
     {
         err = nvs_open("storage", NVS_READWRITE, &my_handle);
 
@@ -316,7 +323,9 @@ void console_task(void *arg)
         const int c = fgetc(stdin);
         if (c > 0) // EOF = -1
         {
-            if (c == '\n')
+            // printf("%02x",c);
+
+            if (c == '\n' || c == '\r')
             {
                 data[pos] = 0;
 
@@ -337,6 +346,8 @@ void console_task(void *arg)
             }
 
             ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
+
+            xEventGroupSetBits(status_event_group, SERIAL_TERMINAL_ACTIVE);
         }
         else
         {
@@ -344,26 +355,23 @@ void console_task(void *arg)
             {
                 esp_now_send(peerInfo.peer_addr, serialbuffer, ESP_NOW_MAX_DATA_LEN);
             }
-
-            vTaskDelay(1);
-            continue;
         }
-
-        xEventGroupSetBits(status_event_group, SERIAL_TERMINAL_ACTIVE);
 
         if (NB_terminal_mode)
         {
-            if (c == '\n' || c == '\r')
+            if (c == '\n')
             {
                 const char cl_return = '\r';
                 uart_write_bytes(UART_NUM_1, &cl_return, 1);
             }
-            else
+            else if (c > 0 && c != '\r')
             {
                 uart_write_bytes(UART_NUM_1, &c, 1);
             }
 
-            while (uart_read_bytes(UART_NUM_1, data, 1, 1) > 0)
+            vTaskDelay(1);
+
+            while (uart_read_bytes(UART_NUM_1, data, 1, 0) > 0)
             {
                 putchar(*data);
             }
@@ -375,12 +383,14 @@ void console_task(void *arg)
             // ESP_LOG_BUFFER_HEXDUMP(TAG, data, pos + 1, ESP_LOG_INFO);
             // ESP_LOGD(TAG, "Read bytes: '%s'", data);
             int n = atoi((const char *)data);
+            if (*data < '0')
+                n = -1;
             switch (selected_menu_id)
             {
             case 0:
                 switch (n)
                 {
-                case 0: // Выводим меню
+                case -1: // Выводим меню
                     ESP_LOGI("menu", "-------------------------------------------");
                     int i = 0;
                     for (i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
@@ -409,6 +419,8 @@ void console_task(void *arg)
                     ESP_LOGI("menu", "93. Start WiFi");
                     ESP_LOGI("menu", "94. FreeRTOS INFO");
                     ESP_LOGI("menu", "95. Reboot");
+                    ESP_LOGI("menu", "96. Выключить ЗАРЯДКУ");
+                    ESP_LOGI("menu", "97. Включить ЗАРЯДКУ");
                     ESP_LOGI("menu", "100. Сброс выходов");
                     ESP_LOGI("menu", "101 - 108. Включить канал");
                     ESP_LOGI("menu", "110. Включить LV_measure");
@@ -471,9 +483,15 @@ void console_task(void *arg)
                     break;
                 case 95: // Reboot
                     if (xHandleWifi)
-                        xTaskNotify(xHandleWifi, NOTYFY_WIFI_REBOOT, eSetValueWithOverwrite);
+                        xTaskNotify(xHandleWifi, REBOOT_NOW, eSetValueWithOverwrite);
                     vTaskDelay(500 / portTICK_PERIOD_MS);
                     esp_restart();
+                    break;
+                case 96: // Выкл. ЗАРЯДКУ
+                    pcf8575_set(CHARGE_CMDOFF);
+                    break;
+                case 97: // Вкл. ЗАРЯДКУ
+                    pcf8575_set(CHARGE_CMDON);
                     break;
                 case 100:
                     ESP_ERROR_CHECK(gpio_set_level(ENABLE_PIN, 1));
@@ -566,6 +584,8 @@ void console_task(void *arg)
                     start_measure(-1, 4);
                     break;
                 case 301: // Включить напряжение на 1 к
+                    esp_wifi_stop();
+                    esp_wifi_deinit();
                     pcf8575_set(5);
                     pcf8575_set(LV_CMDON);
                     vTaskDelay(4000 / portTICK_PERIOD_MS);
@@ -734,21 +754,21 @@ void console_task(void *arg)
 
                     int oldk = get_menu_val_by_id("kR2"); // по току
                     int newkhv1 = (unsigned int)oldk * (unsigned int)kOm2chan(adc_result[0].U - offsetADC4, adc_result[0].R2 - offsetADC2) / (unsigned int)get_menu_val_by_id("calR1");
-                    ESP_LOGD(TAG, "K 1 hv: %d - %d", oldk, newkhv1);
+                    ESP_LOGI(TAG, "K 1 hv: %d - %d", oldk, newkhv1);
                     int newkhv2 = oldk * kOm2chan(adc_result[1].U - offsetADC4, adc_result[1].R2 - offsetADC2) / get_menu_val_by_id("calR2");
-                    ESP_LOGD(TAG, "K 2 hv: %d - %d", oldk, newkhv2);
+                    ESP_LOGI(TAG, "K 2 hv: %d - %d", oldk, newkhv2);
                     int newk = oldk * kOm2chanlv(adc_result[6].U - offsetADC4, adc_result[6].R2 - offsetADC2) / get_menu_val_by_id("calR3");
-                    ESP_LOGD(TAG, "K 3 lv: %d - %d", oldk, newk);
+                    ESP_LOGI(TAG, "K 3 lv: %d - %d", oldk, newk);
 
                     set_menu_val_by_id("kR2", (newk + newkhv1 + newkhv2) / 3);
 
                     oldk = get_menu_val_by_id("kR1"); // по току
                     newkhv1 = oldk * kOm(adc_result[1].U - offsetADC4, adc_result[1].R1 - offsetADC1) / get_menu_val_by_id("calR2");
-                    ESP_LOGD(TAG, "K 1 hv: %d - %d", oldk, newkhv1);
+                    ESP_LOGI(TAG, "K 1 hv: %d - %d", oldk, newkhv1);
                     newkhv2 = oldk * kOm(adc_result[2].U - offsetADC4, adc_result[2].R1 - offsetADC1) / get_menu_val_by_id("calR3");
-                    ESP_LOGD(TAG, "K 2 hv: %d - %d", oldk, newkhv2);
+                    ESP_LOGI(TAG, "K 2 hv: %d - %d", oldk, newkhv2);
                     newk = oldk * kOmlv(adc_result[7].U - offsetADC4, adc_result[7].R1 - offsetADC1) * 1000 / get_menu_val_by_id("calR4");
-                    ESP_LOGD(TAG, "K 3 lv: %d - %d", oldk, newk);
+                    ESP_LOGI(TAG, "K 3 lv: %d - %d", oldk, newk);
 
                     set_menu_val_by_id("kR1", (newk + newkhv1 + newkhv2) / 3);
 
@@ -903,12 +923,12 @@ void console_task(void *arg)
                         break;
                     }
 
-                    int U = voltlv((adc_result[7].U + adc_result[6].U + adc_result[5].U) / 3);
+                    int U = voltlv((adc_result[6].U + adc_result[5].U) / 2);
                     int oldk = get_menu_val_by_id("kUlv");
                     int newk = oldk * calibratedata_u / U;
                     set_menu_val_by_id("kUlv", newk);
 
-                    int U0 = volt0lv((adc_result[7].U0 + adc_result[6].U0 + adc_result[5].U0) / 3);
+                    int U0 = volt0lv((adc_result[6].U0 + adc_result[5].U0) / 2);
                     oldk = get_menu_val_by_id("kU0lv");
                     newk = oldk * calibratedata_u / U0;
                     set_menu_val_by_id("kU0lv", newk);
@@ -1051,7 +1071,8 @@ void console_task(void *arg)
                 selected_menu_id = 0;
 
             pos = 0;
-        } // if (c == '\n')
+        }
+
         vTaskDelay(1);
     }
 }

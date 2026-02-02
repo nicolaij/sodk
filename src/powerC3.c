@@ -16,7 +16,11 @@
 
 #include <math.h>
 
+#include "esp_adc/adc_cali_scheme.h"
+
 static const char *TAG = "power";
+
+adc_cali_handle_t cali_handle;
 
 // Счетчик разряда батареи
 RTC_DATA_ATTR uint8_t BattLow = 0;
@@ -215,16 +219,16 @@ static void continuous_adc_init()
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &adc_handle));
 
     adc_digi_pattern_config_t adc_pattern[5] = {0};
-    for (int n = 0; n < 5; n++)
+    for (int i = 0; i < 5; i++)
     {
 #ifdef ADC12dB
-        adc_pattern[n].atten = ADC_ATTEN_DB_12;
+        adc_pattern[i].atten = ADC_ATTEN_DB_12;
 #else
-        adc_pattern[n].atten = ADC_ATTEN_DB_6; // ADC_ATTEN_DB_12;
+        adc_pattern[i].atten = ADC_ATTEN_DB_6; // ADC_ATTEN_DB_12;
 #endif
-        adc_pattern[n].channel = chan_r[n].channel;
-        adc_pattern[n].unit = ADC_UNIT_1;
-        adc_pattern[n].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
+        adc_pattern[i].channel = chan_r[i].channel;
+        adc_pattern[i].unit = ADC_UNIT_1;
+        adc_pattern[i].bit_width = SOC_ADC_DIGI_MAX_BITWIDTH;
     };
 
     adc_continuous_config_t dig_cfg = {
@@ -236,6 +240,14 @@ static void continuous_adc_init()
     };
 
     ESP_ERROR_CHECK(adc_continuous_config(adc_handle, &dig_cfg));
+
+    ESP_LOGI(TAG, "USE calibration scheme version is %s", "Curve Fitting");
+    adc_cali_curve_fitting_config_t cali_config = {
+        .unit_id = adc_pattern[0].unit,
+        .atten = adc_pattern[0].atten,
+        .bitwidth = adc_pattern[0].bit_width,
+    };
+    ESP_ERROR_CHECK(adc_cali_create_scheme_curve_fitting(&cali_config, &cali_handle));
 }
 
 static void IRAM_ATTR pcf_int_handler(void *arg)
@@ -385,6 +397,7 @@ void adc_task(void *wakeup_reason)
 
     const int UbatEnd = get_menu_val_by_id("UbatEnd");
     const int UbatLow = get_menu_val_by_id("UbatLow");
+    const int UbatMax = get_menu_val_by_id("UbatMax");
 
     const int percRlv = get_menu_val_by_id("percRlv");
     const int percU0lv = get_menu_val_by_id("percU0lv");
@@ -400,6 +413,8 @@ void adc_task(void *wakeup_reason)
 
     const int step_time_count = get_menu_val_by_id("cntTsw"); // Кол-во несовпад. для переключения времени измерения
     const int step_time_pos = get_menu_pos_by_id("cntTsw");   // позиция меню для вычисления начального времени
+
+    const int use_adc_cali_driver = get_menu_val_by_id("adccali"); // данные ADC проходят через adc_cali_raw_to_voltage
 
     update_allK();
 
@@ -684,26 +699,73 @@ void adc_task(void *wakeup_reason)
             }
 
             // Расчет по средним блокам 1 мс
-            int v = 0;
-            bufferR[buffer_head].Ubatt = voltBatt(sum_adc.Ubatt / n - offsetADC0);
-            if (cmd_power.cmd == 1 || cmd_power.cmd == 10)
+            if (use_adc_cali_driver == 1)
             {
-                bufferR[buffer_head].R1 = kOm(sum_adc.U / n - offsetADC4, sum_adc.R1 / n - offsetADC1);
-                bufferR[buffer_head].R2 = kOm2chan(sum_adc.U / n - offsetADC4, sum_adc.R2 / n - offsetADC2);
-                v = volt(sum_adc.U / n - offsetADC4);
-                bufferR[buffer_head].U = v;
-                bufferR[buffer_head].U0 = volt0(sum_adc.U0 / n - offsetADC3);
+                calcdata_t adc_in_volt;
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, sum_adc.Ubatt / n, &adc_in_volt.Ubatt));
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, sum_adc.U / n, &adc_in_volt.U));
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, sum_adc.R1 / n, &adc_in_volt.R1));
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, sum_adc.R2 / n, &adc_in_volt.R2));
+                ESP_ERROR_CHECK(adc_cali_raw_to_voltage(cali_handle, sum_adc.U0 / n, &adc_in_volt.U0));
+
+                bufferR[buffer_head].Ubatt = voltBatt(adc_in_volt.Ubatt);
+                if (cmd_power.cmd == 1 || cmd_power.cmd == 10)
+                {
+                    bufferR[buffer_head].R1 = kOm(adc_in_volt.U, adc_in_volt.R1);
+                    bufferR[buffer_head].R2 = kOm2chan(adc_in_volt.U, adc_in_volt.R2);
+                    bufferR[buffer_head].U = volt(adc_in_volt.U);
+                    bufferR[buffer_head].U0 = volt0(adc_in_volt.U0);
+                }
+                else
+                {
+                    bufferR[buffer_head].R1 = kOmlv(adc_in_volt.U, adc_in_volt.R1);
+                    bufferR[buffer_head].R2 = kOm2chanlv(adc_in_volt.U, adc_in_volt.R2);
+                    bufferR[buffer_head].U = voltlv(adc_in_volt.U);
+                    bufferR[buffer_head].U0 = volt0lv(adc_in_volt.U0);
+                }
+
+                // считаем среднее для калибровки
+                if (block > (ON_BLOCK + 100) && (block_result == 0 || block <= block_result))
+                {
+                    count_adc_full += 1; // сумма на всем интервале измерения для калибровки
+                    sum_adc_full.R1 += adc_in_volt.R1;
+                    sum_adc_full.U += adc_in_volt.U;
+                    sum_adc_full.R2 += adc_in_volt.R2;
+                    sum_adc_full.Ubatt += adc_in_volt.Ubatt;
+                    sum_adc_full.U0 += adc_in_volt.U0;
+                };
             }
             else
             {
-                bufferR[buffer_head].R1 = kOmlv(sum_adc.U / n - offsetADC4, sum_adc.R1 / n - offsetADC1);
-                bufferR[buffer_head].R2 = kOm2chanlv(sum_adc.U / n - offsetADC4, sum_adc.R2 / n - offsetADC2);
-                v = voltlv(sum_adc.U / n - offsetADC4);
-                bufferR[buffer_head].U = v;
-                bufferR[buffer_head].U0 = volt0lv(sum_adc.U0 / n - offsetADC3);
+                bufferR[buffer_head].Ubatt = voltBatt(sum_adc.Ubatt / n - offsetADC0);
+                if (cmd_power.cmd == 1 || cmd_power.cmd == 10)
+                {
+                    bufferR[buffer_head].R1 = kOm(sum_adc.U / n - offsetADC4, sum_adc.R1 / n - offsetADC1);
+                    bufferR[buffer_head].R2 = kOm2chan(sum_adc.U / n - offsetADC4, sum_adc.R2 / n - offsetADC2);
+                    bufferR[buffer_head].U = volt(sum_adc.U / n - offsetADC4);
+                    bufferR[buffer_head].U0 = volt0(sum_adc.U0 / n - offsetADC3);
+                }
+                else
+                {
+                    bufferR[buffer_head].R1 = kOmlv(sum_adc.U / n - offsetADC4, sum_adc.R1 / n - offsetADC1);
+                    bufferR[buffer_head].R2 = kOm2chanlv(sum_adc.U / n - offsetADC4, sum_adc.R2 / n - offsetADC2);
+                    bufferR[buffer_head].U = voltlv(sum_adc.U / n - offsetADC4);
+                    bufferR[buffer_head].U0 = volt0lv(sum_adc.U0 / n - offsetADC3);
+                }
+
+                // считаем среднее для калибровки
+                if (block > (ON_BLOCK + 100) && (block_result == 0 || block <= block_result))
+                {
+                    count_adc_full += n; // сумма на всем интервале измерения для калибровки
+                    sum_adc_full.R1 += sum_adc.R1;
+                    sum_adc_full.U += sum_adc.U;
+                    sum_adc_full.R2 += sum_adc.R2;
+                    sum_adc_full.Ubatt += sum_adc.Ubatt;
+                    sum_adc_full.U0 += sum_adc.U0;
+                };
             }
 
-            if (v > overvolt_value * 1000)
+            if (bufferR[buffer_head].U > overvolt_value * 1000)
             {
                 // ВЫРУБАЕМ
                 if (cmd_power.cmd == 1)
@@ -736,17 +798,6 @@ void adc_task(void *wakeup_reason)
                     block_result = 1000;
                 }
             }
-
-            // считаем среднее для калибровки
-            if (block > (ON_BLOCK + 100) && (block_result == 0 || block <= block_result))
-            {
-                count_adc_full += n; // сумма на всем интервале измерения для калибровки
-                sum_adc_full.R1 += sum_adc.R1;
-                sum_adc_full.U += sum_adc.U;
-                sum_adc_full.R2 += sum_adc.R2;
-                sum_adc_full.Ubatt += sum_adc.Ubatt;
-                sum_adc_full.U0 += sum_adc.U0;
-            };
 
             // запоминаем напряжение батареи
             if (block >= (ON_BLOCK - 5) && block < ON_BLOCK)
@@ -1031,6 +1082,14 @@ void adc_task(void *wakeup_reason)
         if (BattLow > 0)
             result.flags.d_batt_low = 1;
 
+        // выключаем зарядку
+        ESP_LOGD("Ubatt0", "chan %i: %i", result.channel, result.Ubatt0);
+        if (result.Ubatt0 > UbatMax)
+        {
+            pcf8575_set(CHARGE_CMDOFF);
+            result.flags.d_charge_off = 1;
+        }
+
         if (cmd_power.cmd <= 3) // не передаем данные тестов
             xQueueSend(send_queue, &result, (TickType_t)0);
 
@@ -1059,6 +1118,11 @@ void adc_task(void *wakeup_reason)
 
             // ВЫРУБАЕМ каналы
             pcf8575_set(POWER_CMDOFF);
+
+            if (result.flags.d_charge_off)
+            {
+                pcf8575_set(CHARGE_CMDOFF);
+            }
 
             // читаем pcf, для сброса бита INT
             pcf_int_handler(NULL);
