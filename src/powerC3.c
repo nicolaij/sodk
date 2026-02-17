@@ -379,6 +379,10 @@ void adc_task(void *wakeup_reason)
         result.flags.d_rst_deepsleep = true;
     }
 
+    // пробуждение от концевика двери
+    if (*(int *)wakeup_reason == ESP_SLEEP_WAKEUP_GPIO)
+        result.flags.d_wake = true;
+
     continuous_adc_init();
 
     // сбрасывем буфер
@@ -1041,15 +1045,18 @@ void adc_task(void *wakeup_reason)
         ESP_ERROR_CHECK(adc_continuous_stop(adc_handle));
 
         // сравниваем с предыдущими измерениями измерения
-        if (result.R > 0)
+        int Rdiff = 1;
+        if (percRlv > 0 && result.R > 10)
         {
-            if (abs(measure_chan[result.channel] - result.R) * 100 / abs(result.R) > percRlv)
-            {
-                ESP_LOGD(TAG, "Differences in measurements found.");
-                // запоминаем данные для сравнения
-                measure_chan[result.channel] = result.R;
-                result.flags.d_different = 1;
-            }
+            Rdiff = result.R * percRlv / 100;
+        }
+
+        if (abs(measure_chan[result.channel] - result.R) > Rdiff)
+        {
+            ESP_LOGD(TAG, "Differences in measurements found.");
+            // запоминаем данные для сравнения
+            measure_chan[result.channel] = result.R;
+            result.flags.d_different = 1;
         }
 
         // определяем процент напряжение на обратном проводе
@@ -1060,10 +1067,6 @@ void adc_task(void *wakeup_reason)
         {
             result.flags.value |= BIT(chan + 7);
         }
-
-        // пробуждение от концевика двери
-        if (*(int *)wakeup_reason == ESP_SLEEP_WAKEUP_GPIO)
-            result.flags.d_wake = 1;
 
         if (result.Ubatt1 < UbatLow)
         {
@@ -1105,7 +1108,7 @@ void adc_task(void *wakeup_reason)
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-            if ((hv_measure == 0) && (result.flags.value != (measure_flags & 0x8F01)))
+            if ((hv_measure == 0) && (result.flags.value != (measure_flags & 0x8F02)))
             {
                 start_measure(0, 1);
             }
@@ -1114,7 +1117,7 @@ void adc_task(void *wakeup_reason)
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
             // завершаем
-            measure_flags = result.flags.value;
+            measure_flags = result.flags.value & 0x8F02;
 
             // ВЫРУБАЕМ каналы
             pcf8575_set(POWER_CMDOFF);

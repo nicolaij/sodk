@@ -4,8 +4,6 @@ platformio-device-monitor*
 *.csv
 logs
 !partitions.csv
-test/*.*
-
-debug.log
-any_opcua_tcpudp_test copy.py
-any_opcua_tcpudp_test.py
+test
+*.log
+*.old

@@ -25,6 +25,8 @@ uint8_t mac[6];
 extern esp_ip4_addr_t pdp_ip;
 extern char net_status_current[32];
 
+extern int32_t timezone;
+
 #define CLIENT_WIFI_SSID "ap1"
 #define CLIENT_WIFI_PASS ""
 
@@ -39,8 +41,6 @@ static EventGroupHandle_t s_wifi_event_group;
  * - we failed to connect after the maximum amount of retries */
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
-
-int32_t timezone = 3;
 
 static const char *TAGW = "wifi";
 static const char *TAGH = "httpd";
@@ -910,8 +910,11 @@ void wifi_task(void *arg)
 
     uint32_t ulNotifiedValue;
 
+    esp_err_t ret;
+
     while (1)
     {
+
         /* Ожидание оповещения безконечно, для запуска WiFi. */
         xTaskNotifyWait(pdFALSE,          /* Не очищать биты на входе. */
                         ULONG_MAX,        // ULONG_MAX, /* Очистка всех бит на выходе. */
@@ -933,7 +936,7 @@ void wifi_task(void *arg)
 
             // Use settings defined above to initialize and mount SPIFFS filesystem.
             // Note: esp_vfs_spiffs_register is an all-in-one convenience function.
-            esp_err_t ret = esp_vfs_spiffs_register(&spiffsconf);
+            ret = esp_vfs_spiffs_register(&spiffsconf);
 
             if (ret != ESP_OK)
             {
