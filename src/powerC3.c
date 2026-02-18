@@ -443,6 +443,7 @@ void adc_task(void *wakeup_reason)
             ESP_LOGV("pcf8575", "read pcf8575");
 
             int d_input = pcf8575_read(IN1_BIT);
+            result.flags.d_in = d_input;
             if (d_input != d_in)
             {
                 char buf[10];
@@ -450,14 +451,6 @@ void adc_task(void *wakeup_reason)
                 int l = snprintf((char *)buf, sizeof(buf), "IN: %d", d_input);
                 ESP_LOGI("pcf8575", "%s", buf);
                 xRingbufferSend(wsbuf_handle, buf, l + 1, 0);
-                if (d_input == 1)
-                {
-                    result.flags.d_in = 1;
-                }
-                else if (d_input == 0)
-                {
-                    result.flags.d_in = 0;
-                }
             }
             continue;
         };
@@ -1108,8 +1101,9 @@ void adc_task(void *wakeup_reason)
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-            if ((hv_measure == 0) && (result.flags.value != (measure_flags & 0x8F02)))
+            if ((hv_measure == 0) && (result.flags.value != (measure_flags & 0x8F03)))
             {
+                ESP_LOGD("flag", "%04X != %04X", result.flags.value, measure_flags);
                 start_measure(0, 1);
             }
         }
@@ -1117,7 +1111,7 @@ void adc_task(void *wakeup_reason)
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
             // завершаем
-            measure_flags = result.flags.value & 0x8F02;
+            measure_flags = result.flags.value & 0x8F03;
 
             // ВЫРУБАЕМ каналы
             pcf8575_set(POWER_CMDOFF);
