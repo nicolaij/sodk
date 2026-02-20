@@ -336,9 +336,6 @@ void adc_task(void *wakeup_reason)
     cmd_t cmd_power = {};
     result_t result = {.flags.value = 0};
 
-    // признак высоковольтных измерений
-    int hv_measure = 0;
-
     int d_in = -1;
 
     // zero-initialize the config structure.
@@ -470,9 +467,6 @@ void adc_task(void *wakeup_reason)
             result.channel = cmd_power.channel; // 1..4, 5..8(LV)
         else
             result.channel = 0;
-
-        if (result.channel < 5)
-            hv_measure = 1;
 
         if (cmd_power.channel > 0)
             pcf8575_set(cmd_power.channel);
@@ -1038,6 +1032,8 @@ void adc_task(void *wakeup_reason)
         ESP_ERROR_CHECK(adc_continuous_stop(adc_handle));
 
         // сравниваем с предыдущими измерениями измерения
+
+        //сопротивление в кОм > которого есть изменения
         int Rdiff = 1;
         if (percRlv > 0 && result.R > 10)
         {
@@ -1050,6 +1046,12 @@ void adc_task(void *wakeup_reason)
             // запоминаем данные для сравнения
             measure_chan[result.channel] = result.R;
             result.flags.d_different = 1;
+        }
+
+        if (cmd_power.cmd == 1)
+        {
+            //обновляем значения для сравнений
+            measure_chan[result.channel] = result.R;
         }
 
         // определяем процент напряжение на обратном проводе
@@ -1101,7 +1103,7 @@ void adc_task(void *wakeup_reason)
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-            if ((hv_measure == 0) && (result.flags.value != (measure_flags & 0x8F03)))
+            if ((cmd_power.cmd == 2) && (result.flags.value != (measure_flags & 0x8F03)))
             {
                 ESP_LOGD("flag", "%04X != %04X", result.flags.value, measure_flags);
                 start_measure(0, 1);
