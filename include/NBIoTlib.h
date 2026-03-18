@@ -33,13 +33,13 @@ int encode_toHEX(const char *data, char *result_data);
 /*  Если найден "+CEREG: 2" - нет сети, то ждем "+CEREG: 1" - 5 сек.
 *   Если найден "+CSONMI:" - то обрабатываем через apply_command
 */
-esp_err_t check_received_message(char *message_data, char *result_data);
+esp_err_t check_received_message(char *message_data, char *result_data, int chip);
 
 esp_err_t download_firmware(char *rx_buffer, char *tx_buffer);
 
 esp_err_t send_by_espnow(uint8_t *mac_addr, char *send_data);
 esp_err_t init_espnow(uint8_t *peer_addr);
 
-esp_err_t check_cereg(const char *rx_buffer);
+esp_err_t check_cereg(const char *rx_buffer, const int chip, int *stat, int *tac, int *ci, int *AcT, int *ActiveTime, int *PeriodicTAU);
 
 #endif

@@ -5,6 +5,7 @@
 #include "esp_partition.h"
 #include <esp_ota_ops.h>
 
+#include "esp_mac.h"
 #include "esp_now.h"
 #include "esp_wifi.h"
 
@@ -14,7 +15,9 @@ cJSON *firmware = NULL;
 
 int32_t timezone = 3;
 
-int creg[10] = {-1, -1};
+int cereg[10] = {-1, -1};
+
+char cmdbuf[64];
 
 esp_err_t uart_init(uart_port_t uart_num)
 {
@@ -143,7 +146,7 @@ esp_err_t wait_string(char *buffer, const char *swait, TickType_t ticks_to_wait)
     {
         if (len == 0) // если предыдущее чтение == 0
         {
-            vTaskDelay(1);
+            vTaskDelay(10 / portTICK_PERIOD_MS);
         }
         /*
                 uart_get_buffered_data_len(UART_NUM_1, &ssize);
@@ -154,7 +157,7 @@ esp_err_t wait_string(char *buffer, const char *swait, TickType_t ticks_to_wait)
                 }
         */
         len = uart_read_bytes(UART_NUM_1, pb, reqlen, 0);
-        // ESP_LOGD(TAG, "RX len: %d (%d)", len, (int)ssize);
+        // ESP_LOGD(TAG, "RX len: %d (%d): %x %x %x", len, (int)reqlen, *pb, *(pb+1), *(pb+2));
         if (len > 0)
         {
             pb += len;
@@ -206,6 +209,9 @@ esp_err_t at_reply_wait(const char *cmd, const char *wait, char *buffer, TickTyp
     {
         return ESP_ERR_INVALID_SIZE;
     }
+
+    if (ticks_to_wait == 0)
+        return res;
 
     res = wait_string(buffer, wait, ticks_to_wait);
 
@@ -275,10 +281,9 @@ esp_err_t at_reply_get(const char *cmd, const char *wait, char *buffer, int *res
 esp_err_t at_csosend(int socket, char *data, char *buffer, int len_data)
 {
     esp_err_t res = ESP_FAIL;
-    char buf[20];
 
-    int l = snprintf(buf, sizeof(buf), "AT+CSOSEND=%d,%d,", socket, len_data * 2);
-    int txBytes = uart_write_bytes(UART_NUM_1, buf, l);
+    int l = snprintf(cmdbuf, sizeof(cmdbuf), "AT+CSOSEND=%d,%d,", socket, len_data * 2);
+    int txBytes = uart_write_bytes(UART_NUM_1, cmdbuf, l);
     if (txBytes < 4)
     {
         return ESP_ERR_INVALID_SIZE;
@@ -286,8 +291,8 @@ esp_err_t at_csosend(int socket, char *data, char *buffer, int len_data)
 
     for (int i = 0; i < len_data; i++)
     {
-        snprintf(buf, 3, "%02x", data[i]);
-        txBytes = uart_write_bytes(UART_NUM_1, buf, 2);
+        snprintf(cmdbuf, 3, "%02x", data[i]);
+        txBytes = uart_write_bytes(UART_NUM_1, cmdbuf, 2);
         if (txBytes < 2)
         {
             return ESP_ERR_INVALID_SIZE;
@@ -306,10 +311,8 @@ esp_err_t at_csosend_wait_SEND(int socket, char *data, char *buffer, int len_dat
 {
     esp_err_t res = ESP_FAIL;
 
-    char buf[20];
-
-    int l = snprintf(buf, sizeof(buf), "AT+CSOSEND=%d,%d,", socket, len_data * 2);
-    int txBytes = uart_write_bytes(UART_NUM_1, buf, l);
+    int l = snprintf(cmdbuf, sizeof(cmdbuf), "AT+CSOSEND=%d,%d,", socket, len_data * 2);
+    int txBytes = uart_write_bytes(UART_NUM_1, cmdbuf, l);
     if (txBytes < 4)
     {
         return ESP_ERR_INVALID_SIZE;
@@ -317,8 +320,8 @@ esp_err_t at_csosend_wait_SEND(int socket, char *data, char *buffer, int len_dat
 
     for (int i = 0; i < len_data; i++)
     {
-        snprintf(buf, 3, "%02x", data[i]);
-        txBytes = uart_write_bytes(UART_NUM_1, buf, 2);
+        snprintf(cmdbuf, 3, "%02x", data[i]);
+        txBytes = uart_write_bytes(UART_NUM_1, cmdbuf, 2);
         if (txBytes < 2)
         {
             return ESP_ERR_INVALID_SIZE;
@@ -427,54 +430,126 @@ int encode_toHEX(const char *data, char *result_data)
     return i;
 }
 
-esp_err_t check_received_message(char *message_data, char *result_data)
+esp_err_t check_received_message(char *message_data, char *result_data, int chip)
 {
+    esp_err_t ee = ESP_ERR_NOT_FOUND;
+
     // обрабатываем если нет сети
     if (strstr((const char *)message_data, "+CEREG: 2") != NULL)
     {
         // Ждем сообщения о наличии сети
         if (wait_string(message_data, "+CEREG: 1", 7000 / portTICK_PERIOD_MS) == ESP_OK)
         {
-            //ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)message_data);
+            // ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)message_data);
             vTaskDelay(1500 / portTICK_PERIOD_MS); // много пропущенных пакетов после выхода из PSM, так лучше
         };
         // желательно повторить передачу
         return ESP_ERR_NOT_FINISHED;
     }
 
-    //+CSONMI: 0,20,5468616E6B20796F7521
-    const char *rdata = strstr((const char *)message_data, "+CSONMI: ");
-    if (rdata)
+    char *rdata = NULL;
+    if (chip == 7028)
     {
-        char *s = strchr(rdata, ',');
-
-        // len
-        int len = atoi(s + 1);
-        s = strchr(s + 1, ',');
-        if (decode_fromHEX(s + 1, len / 2, result_data) == len / 2)
+        char *s = strstr((const char *)message_data, "+CIPRXGET: ");
+        if (s)
         {
-            apply_command((const char *)result_data, len / 2);
-            return ESP_OK;
+            char *ss = strchr(s, ',');
+            int link_num = atoi(ss + 1);
+            int l = snprintf(cmdbuf, sizeof(cmdbuf), "AT+CIPRXGET=2,%d\r\n", link_num);
+            ee = at_reply_wait_OK(cmdbuf, result_data, 1000 / portTICK_PERIOD_MS);
+            if (ee == ESP_OK)
+            {
+                //+CIPRXGET: 2,0,13,0
+                ss = strstr((const char *)result_data, "+CIPRXGET: ");
+                if (ss)
+                {
+                    ss = strchr(ss + 1, ',');
+                    if (ss)
+                    {
+                        link_num = atoi(ss + 1);
+                        ss = strchr(ss + 1, ',');
+                        if (ss)
+                        {
+                            l = atoi(ss + 1);
+
+                            ss = strchr(ss + 1, 0x0A);
+                            if (ss)
+                            {
+                                *(ss + 1 + l) = '\0';
+                                apply_command((const char *)(ss + 1), l);
+                                return ESP_OK;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        //+CSONMI: 0,20,5468616E6B20796F7521
+        rdata = strstr((const char *)message_data, "+CSONMI: ");
+
+        if (rdata)
+        {
+            char *s = strchr(rdata, ',');
+
+            // len
+            int len = atoi(s + 1);
+            s = strchr(s + 1, ',');
+            if (decode_fromHEX(s + 1, len / 2, result_data) == len / 2)
+            {
+                apply_command((const char *)result_data, len / 2);
+                return ESP_OK;
+            }
         }
     }
     return ESP_ERR_NOT_FOUND;
 }
 
-esp_err_t check_cereg(const char *rx_buffer)
+esp_err_t check_cereg(const char *rx_buffer, const int chip, int *stat, int *tac, int *ci, int *AcT, int *ActiveTime, int *PeriodicTAU)
 {
+    esp_err_t res = ESP_ERR_NOT_FOUND;
+
     if (strstr(rx_buffer, "+CEREG: 2") != NULL)
     {
         return ESP_ERR_NOT_ALLOWED;
     }
     else if (strstr(rx_buffer, "+CEREG: 1") != NULL)
     {
-        return at_result_get("+CEREG: 1,", rx_buffer, creg + 1, 9);
+        if (chip == 7028)
+            res = at_result_get("+CEREG: 1,", rx_buffer, cereg + 1, 8);
+        else
+            res = at_result_get("+CEREG: 1,", rx_buffer, cereg + 1, 9);
     }
     else if (strstr(rx_buffer, "+CEREG: 5") != NULL)
     {
-        return at_result_get("+CEREG: ", rx_buffer, creg, 10);
+        if (chip == 7028)
+            res = at_result_get("+CEREG: ", rx_buffer, cereg, 9);
+        else
+            res = at_result_get("+CEREG: ", rx_buffer, cereg, 10);
     }
-    return ESP_ERR_NOT_FOUND;
+
+    if (res == ESP_OK)
+    {
+        *stat = *(cereg + 1);
+        *tac = *(cereg + 2);
+        *ci = *(cereg + 3);
+        *AcT = *(cereg + 4);
+
+        if (chip == 7028)
+        {
+            *ActiveTime = *(cereg + 7);
+            *PeriodicTAU = *(cereg + 8);
+        }
+        else
+        {
+            *ActiveTime = *(cereg + 8);
+            *PeriodicTAU = *(cereg + 9);
+        }
+    }
+
+    return res;
 }
 
 esp_err_t download_firmware(char *rx_buffer, char *tx_buffer)
@@ -726,7 +801,7 @@ esp_err_t download_firmware(char *rx_buffer, char *tx_buffer)
                                         if (esp_partition_read(ota_partition, (contenttotal - remaining), (void *)rx_buffer, recv_len) == ESP_OK)
                                         {
                                             ESP_ERROR_CHECK(esp_partition_write(storage_partition, (contenttotal - remaining), (const void *)rx_buffer, recv_len));
-                                            vTaskDelay(1);
+                                            vTaskDelay(10 / portTICK_PERIOD_MS);
                                         }
                                         remaining -= recv_len;
                                     }

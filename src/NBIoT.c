@@ -60,6 +60,7 @@ void modem_task(void *arg)
     const int pulse = get_menu_val_by_id("pulse");
 
     xEventGroupSetBits(status_event_group, END_RADIO);
+    int chip = 0;
 
     while (1)
     {
@@ -70,6 +71,13 @@ void modem_task(void *arg)
 
         bool cpin = false;
         int d_nbiot_error_counter = 0;
+
+        int stat = -1;
+        int tac = -1;
+        int ci = -1;
+        int AcT = -1;
+        int ActiveTime = -1;
+        int PeriodicTAU = -1;
 
         while (protocol > 0) // повторы опроса модуля
         {
@@ -107,11 +115,6 @@ void modem_task(void *arg)
 
             ESP_LOGD(TAG, "Wait... %s", data);
 
-            if (check_cereg((const char *)data) == ESP_OK)
-            {
-                network_registration = true;
-            }
-
             if (strstr((const char *)data, "CPIN: READY") != NULL)
             {
                 cpin = true;
@@ -120,9 +123,14 @@ void modem_task(void *arg)
             else
             {
                 // check modem
-                ee = at_reply_wait_OK("AT\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                ee = at_reply_wait_OK("ATI\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
 
-                if (ee != ESP_OK)
+                if (ee == ESP_OK)
+                {
+                    if (strnstr((const char *)data, "SIM7028", 20) != NULL)
+                        chip = 7028;
+                }
+                else
                 {
                     ESP_LOGW(TAG, "Modem not reply");
                     strcpy(net_status_current, "Modem not reply");
@@ -138,6 +146,14 @@ void modem_task(void *arg)
                 */
             };
 
+            ee = at_reply_wait_OK("ATE1;+IPR=115200\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+            // ee = at_reply_wait_OK("ATI\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+
+            if (check_cereg(data, chip, &stat, &tac, &ci, &AcT, &ActiveTime, &PeriodicTAU) == ESP_OK)
+            {
+                network_registration = true;
+            };
+
             if ((xEventGroupGetBits(status_event_group) & END_WORK_NBIOT))
                 break;
 
@@ -145,7 +161,10 @@ void modem_task(void *arg)
 
             // Battery Charge
             int cbc[2] = {-1, -1};
-            ee = at_reply_get("AT+CBC\r\n", "CBC:", (char *)data, cbc, 2, 1000 / portTICK_PERIOD_MS);
+            if (chip == 7028)
+                ee = at_reply_get("AT+QCADC=Vbat\r\n", "VBAT, ", (char *)data, &cbc[1], 1, 1000 / portTICK_PERIOD_MS);
+            else
+                ee = at_reply_get("AT+CBC\r\n", "CBC:", (char *)data, cbc, 2, 1000 / portTICK_PERIOD_MS);
             if (ee != ESP_OK)
             {
                 ESP_LOGE(TAG, "AT+CBC");
@@ -181,9 +200,17 @@ void modem_task(void *arg)
                     vTaskDelay(1000 / portTICK_PERIOD_MS);
                     if (try_counter > 4)
                     {
-                        // power off
-                        if (print_atcmd("AT+CPOWD=1\r\n", data) == ESP_OK)
-                            ESP_LOGI(TAG, "Power DOWN");
+                        if (chip == 7028)
+                        {
+                            gpio_set_level(MODEM_POWER, 1);
+                            vTaskDelay(1000 / portTICK_PERIOD_MS);
+                        }
+                        else
+                        {
+                            // power off
+                            if (print_atcmd("AT+CPOWD=1\r\n", data) == ESP_OK)
+                                ESP_LOGI(TAG, "Power DOWN");
+                        }
                         break;
                     }
                     else
@@ -212,15 +239,10 @@ void modem_task(void *arg)
                     at_reply_wait_OK("AT+CEREG?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
 
                     // ee = at_reply_get("AT+CEREG?\r\n", "CEREG: 5", (char *)data, creg, 10, 1000 / portTICK_PERIOD_MS);
-                    if (check_cereg(data) == ESP_OK)
+                    if (check_cereg(data, chip, &stat, &tac, &ci, &AcT, &ActiveTime, &PeriodicTAU) == ESP_OK)
                     {
 
-                        if (creg[0] != 5) // Исправится следующий раз
-                        {
-                            first_run_completed = false;
-                        }
-
-                        if (creg[1] == 1) // 1 Registered, home network.
+                        if (stat == 1) // 1 Registered, home network.
                         {
                             network_registration = true;
                             break;
@@ -244,11 +266,11 @@ void modem_task(void *arg)
             if (network_registration)
             {
                 char bf[10];
-                snprintf(bf, 9, "%8X", creg[8]);
+                snprintf(bf, 9, "%8X", ActiveTime);
                 tAT = fromActiveTime(strtol(bf, NULL, 2));
-                snprintf(bf, 9, "%8X", creg[9]);
+                snprintf(bf, 9, "%8X", PeriodicTAU);
                 tRT = fromPeriodicTAU(strtol(bf, NULL, 2));
-                ESP_LOGI(TAG, "Registered. Home network. TAC=%u, CI=%u Active-Time=%02d:%02d:%02d Periodic-TAU=%02d:%02d:%02d", creg[2], creg[3], (tAT / (60 * 60)), (tAT / 60) % 60, (tAT % 60), (tRT / (60 * 60)), (tRT / 60) % 60, (tRT % 60));
+                ESP_LOGI(TAG, "Registered. Home network. TAC=%u, CI=%u Active-Time=%02d:%02d:%02d Periodic-TAU=%02d:%02d:%02d", tac, ci, (tAT / (60 * 60)), (tAT / 60) % 60, (tAT % 60), (tRT / (60 * 60)), (tRT / 60) % 60, (tRT % 60));
             }
 
             // Signal Quality Report
@@ -278,17 +300,21 @@ void modem_task(void *arg)
             {
                 // AT+CURTC? AT+CTZR?
                 // ee = at_reply_wait_OK("AT+CTZR=?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
-                at_reply_wait_OK("AT+CURTC=0\r\n", (char *)data, 1000 / portTICK_PERIOD_MS); // CCLK show UTC time after network time synchronization
-                at_reply_wait_OK("AT+CTZU=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);  // Automatic time update via NITZ
+                if (chip != 7028)
+                    at_reply_wait_OK("AT+CURTC=0\r\n", (char *)data, 1000 / portTICK_PERIOD_MS); // CCLK show UTC time after network time synchronization
 
-                at_reply_wait_OK("AT+CPSMSTATUS=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                at_reply_wait_OK("AT+CTZU=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS); // Automatic time update via NITZ
+
+                if (chip != 7028)
+                    at_reply_wait_OK("AT+CPSMSTATUS=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
                 // #TAU 30sec * 3 , ACC 8 sec
                 // at_reply_wait_OK("AT+CPSMS=1,,,\"10000011\",\"00000100\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
                 // TAU 25h 1*25, ACC 0 sec
                 at_reply_wait_OK("AT+CPSMS=1,,,\"00111001\",\"00000000\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
                 cpsms0 = false;
 
-                at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                if (chip != 7028)
+                    at_reply_wait_OK("AT+CSOSENDFLAG=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
 
                 first_run_completed = true;
             }
@@ -305,9 +331,15 @@ void modem_task(void *arg)
                 else
                 {
                     //+CCLK: 24/04/30,07:49:36+12
+                    //+CCLK: "2026/03/09,08:41:39+12" - SIM7028
                     int dt[6] = {0, 0, 0, 0, 0, 0};
-                    const char *pdata = strstr((const char *)data, "CCLK: ");
-                    int parsed = sscanf((const char *)(pdata + 6), "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
+                    char *pdata = strstr((const char *)data, "CCLK: ");
+                    char *ss = pdata + 6;
+
+                    if (chip == 7028)
+                        ss++;
+
+                    int parsed = sscanf((const char *)ss, "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
                     if (parsed == 6)
                     {
                         struct tm tm;
@@ -321,22 +353,30 @@ void modem_task(void *arg)
                         last_sync_time = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
                         struct timeval now = {.tv_sec = last_sync_time};
                         settimeofday(&now, NULL);
-                        ESP_LOGI(TAG, "Set date and time: %s", get_datetime(last_sync_time));
+                        ESP_LOGI(TAG, "Set date and time: %s", get_datetime(time(0)));
                     }
                 }
             }
 
-            // Show the Complete PDP Address
-            ee = at_reply_wait_OK("AT+IPCONFIG\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+            // test PDP context
+            ee = at_reply_wait_OK("AT+CGDCONT?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+
             if (ee != ESP_OK)
             {
-                ESP_LOGW(TAG, "AT+IPCONFIG");
+                ESP_LOGW(TAG, "AT+CGDCONT?");
                 vTaskDelay(1000 / portTICK_PERIOD_MS);
             }
             else
             {
-                const char *s = strstr((const char *)data, "IPCONFIG: ");
-                int parsed = sscanf((const char *)(s + 10), "%hhu.%hhu.%hhu.%hhu", &((uint8_t *)(&pdp_ip.addr))[0], &((uint8_t *)(&pdp_ip.addr))[1], &((uint8_t *)(&pdp_ip.addr))[2], &((uint8_t *)(&pdp_ip.addr))[3]);
+                char *s = strstr((const char *)data, "+CGDCONT: ");
+                if (s)
+                {
+                    for (int i = 0; i < 3; i++)
+                    {
+                        s = strstr((const char *)++s, ",");
+                    }
+                }
+                int parsed = sscanf((const char *)++s, "\"%hhu.%hhu.%hhu.%hhu\"", &((uint8_t *)(&pdp_ip.addr))[0], &((uint8_t *)(&pdp_ip.addr))[1], &((uint8_t *)(&pdp_ip.addr))[2], &((uint8_t *)(&pdp_ip.addr))[3]);
                 if (parsed == 4)
                 {
                     // если нет нормального IP - рестарт модуля
@@ -354,7 +394,6 @@ void modem_task(void *arg)
                     }
                 }
             };
-
             esp_ip4_addr_t ip;
             ip.addr = (unsigned int)get_menu_val_by_id("ip");
 
@@ -403,102 +442,197 @@ void modem_task(void *arg)
                 break;
             }
 
-            snprintf(send_data, sizeof(send_data), "AT+CSOC=1,%i,1\r\n", protocol);
-            ee = at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS); // Create socket
+            char send_cmd[64];
 
-            if (ee != ESP_OK)
+            // результат измерений
+            result_t result;
+
+            if (chip == 7028)
             {
-                ESP_LOGW(TAG, "AT+CSOC");
+                at_reply_wait_OK("AT+NETOPEN\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+
+                int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
+
+                if (common_data_transmit == false)
+                {
+                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, tac, ci);
+                    l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
+                }
+
+                l += snprintf(send_data + l, sizeof(send_data) - l, "}");
+
+                at_reply_wait_OK("AT+CIPRXGET=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+
+                try_counter = 3;
+                while (try_counter--)
+                {
+                    if (protocol == 2) // UDP
+                    {
+                        snprintf(send_cmd, sizeof(send_cmd), "AT+CIPOPEN=%i,\"UDP\",,,%i\r\n", socket, port);
+                        ee = at_reply_wait_OK(send_cmd, (char *)data, 1000 / portTICK_PERIOD_MS);
+                    }
+                    if (protocol == 1) // TCP
+                    {
+                        snprintf(send_cmd, sizeof(send_cmd), "AT+CIPOPEN=%i,\"TCP\",\"" IPSTR "\",%i\r\n", socket, IP2STR(&ip), port);
+                        // ee = at_reply_wait(send_cmd, "+CIPOPEN: ", (char *)data, 60000 / portTICK_PERIOD_MS);
+                        ee = at_reply_wait_OK(send_cmd, (char *)data, 1000 / portTICK_PERIOD_MS);
+
+                        const char *s1 = strstr((const char *)data, "+CIPOPEN: ");
+                        if (s1 == NULL)
+                        {
+                            ee = wait_string(data, "+CIPOPEN: ", 90000 / portTICK_PERIOD_MS);
+                        };
+                    }
+
+                    ee = at_reply_wait_OK("AT+CIPOPEN?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                    if (ee == ESP_OK)
+                    {
+                        // AT+CIPOPEN?
+                        //+CIPOPEN:0,"UDP","172.30.239.20",48885,-1
+                        snprintf(send_cmd, sizeof(send_cmd), "+CIPOPEN:%i,\"%s\"", socket, (protocol == 2) ? "UDP" : "TCP");
+                        if (strstr(data, send_cmd) == NULL)
+                            ee = ESP_FAIL;
+                    }
+
+                    if (ee == ESP_OK)
+                    {
+                        if (protocol == 2) // UDP
+                        {
+                            // AT+CIPSEND=<link_num>,<length>,<serverIP>,<serverPort>
+                            snprintf(send_cmd, sizeof(send_cmd), "AT+CIPSEND=%i,%i,\"" IPSTR "\",%i\r\n", socket, l, IP2STR(&ip), port);
+                        }
+                        if (protocol == 1) // TCP
+                        {
+                            snprintf(send_cmd, sizeof(send_cmd), "AT+CIPSEND=%i,%i\r\n", socket, l);
+                        }
+
+                        ee = at_reply_wait(send_cmd, ">", (char *)data, 1000 / portTICK_PERIOD_MS);
+                    }
+
+                    esp_err_t send_ee = ESP_FAIL;
+                    if (ee == ESP_OK)
+                        send_ee = at_reply_wait(send_data, "+CIPSEND: ", (char *)data, 60000 / portTICK_PERIOD_MS);
+
+                    // vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+                    // wait 10s for reply from server
+                    while (wait_string(data, "\r\n", 10000 / portTICK_PERIOD_MS) == ESP_OK)
+                    {
+                        ESP_LOGI(TAG, "Modem: %s", data);
+                        ee = check_received_message(data, send_data, chip);
+                        if (ee == ESP_OK)
+                            break;
+                    }
+
+                    snprintf(send_cmd, sizeof(send_cmd), "AT+CIPCLOSE=%i\r\n", socket);
+                    at_reply_wait_OK(send_cmd, (char *)data, 1000 / portTICK_PERIOD_MS);
+
+                    if (send_ee == ESP_OK)
+                        break;
+                }
+
+                at_reply_wait_OK("AT+NETCLOSE\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+
+                gpio_set_level(MODEM_POWER, 1);
             }
             else
             {
-                const char *pdata = strstr((const char *)data, "CSOC: ");
-                if (pdata)
+                snprintf(send_data, sizeof(send_data), "AT+CSOC=1,%i,1\r\n", protocol);
+                ee = at_reply_wait_OK(send_data, (char *)data, 1000 / portTICK_PERIOD_MS); // Create socket
+
+                if (ee != ESP_OK)
                 {
-                    socket = atoi(pdata + 6);
-
-                    try_counter = 3;
-                    while (try_counter--)
-                    {
-                        snprintf(send_data, sizeof(send_data), "AT+CSOCON=%i,%i,\"" IPSTR "\"\r\n", socket, port, IP2STR(&ip));
-                        ESP_LOGI(TAG, "%i Socket %i connect...", 3 - try_counter, socket);
-                        ee = at_reply_wait_OK(send_data, (char *)data, 60000 / portTICK_PERIOD_MS);
-
-                        if (ee != ESP_OK)
-                        {
-                            ESP_LOGW(TAG, "AT+CSOCON:%s", data);
-                        }
-                        else
-                        {
-                            // результат измерений
-                            result_t result;
-                            if (realtime < 1754900000LL)
-                                realtime = time(0);
-
-                            int64_t start_time = esp_timer_get_time();
-                            do
-                            {
-                                while (pdTRUE == xQueueReceive(send_queue, &result, 0))
-                                {
-                                    // ESP_LOGD(TAG, "time: %lli", result.ttime);
-                                    if (result.ttime < 1754900000LL) // 2025-08-11
-                                    {
-                                        result.ttime = realtime;
-                                    }
-
-                                    int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
-
-                                    if (common_data_transmit == false)
-                                    {
-                                        l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, creg[2], creg[3]);
-                                        l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
-                                    }
-
-                                    l += snprintf(send_data + l, sizeof(send_data) - l, "}");
-
-                                    do
-                                    {
-                                        ESP_LOGD(TAG, "Send... %s", send_data);
-
-                                        if (protocol == 1) // TCP
-                                            ee = at_csosend_wait_SEND(socket, send_data, (char *)data, l);
-                                        if (protocol == 2) // UDP
-                                            ee = at_csosend(socket, send_data, (char *)data, l);
-
-                                        if (ee == ESP_OK)
-                                        {
-                                            common_data_transmit = true;
-                                            strcpy(net_status_current, "Send OK");
-                                            ESP_LOGI(TAG, "Send OK");
-
-                                            // обрабатываем если нет сети или приход команды
-                                            ee = check_received_message(data, send_data);
-                                        }
-
-                                    } while (ee == ESP_ERR_NOT_FINISHED);
-
-                                    start_time = esp_timer_get_time(); // reset timer
-                                }
-                                vTaskDelay(1000 / portTICK_PERIOD_MS);
-                                check_received_message(data, send_data);
-                            } while ((esp_timer_get_time() - start_time) < (pulse * 1000LL));
-                            break;
-                        }
-                        vTaskDelay(1000 / portTICK_PERIOD_MS);
-                    }
+                    ESP_LOGW(TAG, "AT+CSOC");
                 }
                 else
                 {
-                    // Скорее всего сокеты закончились...
-                    socket = 4;
-                }
-            };
+                    const char *pdata = strstr((const char *)data, "CSOC: ");
+                    if (pdata)
+                    {
+                        socket = atoi(pdata + 6);
+
+                        try_counter = 3;
+                        while (try_counter--)
+                        {
+                            snprintf(send_data, sizeof(send_data), "AT+CSOCON=%i,%i,\"" IPSTR "\"\r\n", socket, port, IP2STR(&ip));
+                            ESP_LOGI(TAG, "%i Socket %i connect...", 3 - try_counter, socket);
+                            ee = at_reply_wait_OK(send_data, (char *)data, 60000 / portTICK_PERIOD_MS);
+
+                            if (ee != ESP_OK)
+                            {
+                                ESP_LOGW(TAG, "AT+CSOCON:%s", data);
+                            }
+                            else
+                            {
+                                // результат измерений
+                                if (realtime < 1754900000LL)
+                                    realtime = time(0);
+
+                                int64_t start_time = esp_timer_get_time();
+                                do
+                                {
+                                    while (pdTRUE == xQueueReceive(send_queue, &result, 0))
+                                    {
+                                        // ESP_LOGD(TAG, "time: %lli", result.ttime);
+                                        if (result.ttime < 1754900000LL) // 2025-08-11
+                                        {
+                                            result.ttime = realtime;
+                                        }
+
+                                        int l = snprintf(send_data, sizeof(send_data), "{" OUT_CHANNEL, get_menu_val_by_id("idn"), result.channel, bootCount, get_datetime(result.ttime), OUT_DATA_CHANNEL(result));
+
+                                        if (common_data_transmit == false)
+                                        {
+                                            l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_NBCOMMON, cbc[1] / 1000.0, csq[0] * 2 + -113, tac, ci);
+                                            l += snprintf(send_data + l, sizeof(send_data) - l, OUT_ADD_COMMON, tsens_out);
+                                        }
+
+                                        l += snprintf(send_data + l, sizeof(send_data) - l, "}");
+
+                                        do
+                                        {
+                                            ESP_LOGD(TAG, "Send... %s", send_data);
+
+                                            if (protocol == 1) // TCP
+                                                ee = at_csosend_wait_SEND(socket, send_data, (char *)data, l);
+                                            if (protocol == 2) // UDP
+                                                ee = at_csosend(socket, send_data, (char *)data, l);
+
+                                            if (ee == ESP_OK)
+                                            {
+                                                common_data_transmit = true;
+                                                strcpy(net_status_current, "Send OK");
+                                                ESP_LOGI(TAG, "Send OK");
+
+                                                // обрабатываем если нет сети или приход команды
+                                                ee = check_received_message(data, send_data, chip);
+                                            }
+
+                                        } while (ee == ESP_ERR_NOT_FINISHED);
+
+                                        start_time = esp_timer_get_time(); // reset timer
+                                    }
+                                    vTaskDelay(1000 / portTICK_PERIOD_MS);
+                                    ee = check_received_message(data, send_data, chip);
+                                } while ((esp_timer_get_time() - start_time) < (pulse * 1000LL));
+                                break;
+                            }
+                            vTaskDelay(1000 / portTICK_PERIOD_MS);
+                        }
+                    }
+                    else
+                    {
+                        // Скорее всего сокеты закончились...
+                        socket = 4;
+                    }
+                };
+            }
 
             // wait 5s for reply from server
             while (wait_string(data, "\r\n", 10000 / portTICK_PERIOD_MS) == ESP_OK)
             {
                 ESP_LOGI(TAG, "Modem: %s", data);
-                check_received_message(data, send_data);
+                ee = check_received_message(data, send_data, chip);
             }
 
             while (socket >= 0)
