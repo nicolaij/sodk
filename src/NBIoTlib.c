@@ -438,10 +438,10 @@ esp_err_t check_received_message(char *message_data, char *result_data, int chip
     if (strstr((const char *)message_data, "+CEREG: 2") != NULL)
     {
         // Ждем сообщения о наличии сети
-        if (wait_string(message_data, "+CEREG: 1", 7000 / portTICK_PERIOD_MS) == ESP_OK)
+        if (wait_string(message_data, "+CEREG: 1", 8000 / portTICK_PERIOD_MS) == ESP_OK)
         {
             // ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)message_data);
-            vTaskDelay(1500 / portTICK_PERIOD_MS); // много пропущенных пакетов после выхода из PSM, так лучше
+            vTaskDelay(2000 / portTICK_PERIOD_MS); // много пропущенных пакетов после выхода из PSM, так лучше
         };
         // желательно повторить передачу
         return ESP_ERR_NOT_FINISHED;

@@ -1,71 +1,71 @@
 ﻿<!DOCTYPE html>
 <html>
-  <head>
-    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <link rel="shortcut icon" href="/favicon.ico" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <title>Настройки</title>
-  </head>
-  <body>
-    <form name="settings" action="" method="post">
-      <div id="settingscontent"></div>
-      <input type="submit" value="Submit" />
-    </form>
-    <br />
-    <p>
-      <a href="/d?mode=2">Буфер данных</a>&nbsp;&nbsp;<a href="/d3?mode=3">График АЦП</a>&nbsp;&nbsp;<a
-        href="/d3?mode=1"
-        >График АЦП(фильтр)</a
-      >&nbsp;&nbsp;<a href="/d3?mode=4">График АЦП (U0,U,Ubatt)</a>&nbsp;&nbsp;<a href="/d3?mode=2">График R</a>
-    </p>
-    <p>
-      <button onclick="measure(1)">Измерить 1</button>&nbsp;<button onclick="measure(2)">Измерить 2</button
-      >&nbsp;<button onclick="measure(3)">Измерить 3</button>&nbsp;<button onclick="measure(4)">Измерить 4</button
-      >&nbsp;&nbsp; <button onclick="measure(5)">Измерить 5</button>&nbsp;<button onclick="measure(6)">
-        Измерить 6</button
-      >&nbsp;<button onclick="measure(7)">Измерить 7</button>&nbsp;<button onclick="measure(8)">Измерить 8</button>
-    </p>
-    <p><textarea id="text" style="width: 98%; height: 400px"></textarea></p>
-    <div id="filecontent"></div>
-    <a href="?restart=true">Restart</a>&nbsp;&nbsp;&nbsp;<a href="/update">Firmware update</a>
 
-    <script>
-      var socket = new WebSocket("ws://" + location.host + "/ws");
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <meta name="viewport" content="width=device-width" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <title>Настройки</title>
+</head>
 
-      socket.onopen = function () {
-        socket.send("openws:" + String(Date.now() / 1000));
-      };
+<body>
+  <form name="settings" action="" method="post">
+    <div id="settingscontent"></div>
+    <input type="submit" value="Submit" />
+  </form>
+  <br />
+  <p>
+    <a href="/d?mode=2">Буфер данных</a>&nbsp;&nbsp;<a href="/d3?mode=3">График АЦП</a>&nbsp;&nbsp;<a
+      href="/d3?mode=1">График АЦП(фильтр)</a>&nbsp;&nbsp;<a href="/d3?mode=4">График АЦП (U0,U,Ubatt)</a>&nbsp;&nbsp;<a
+      href="/d3?mode=2">График R</a>
+  </p>
+  <p>
+    <button onclick="measure(1)">Измерить 1</button>&nbsp;<button onclick="measure(2)">Измерить 2</button>&nbsp;<button
+      onclick="measure(3)">Измерить 3</button>&nbsp;<button onclick="measure(4)">Измерить 4</button>&nbsp;&nbsp; <button
+      onclick="measure(5)">Измерить 5</button>&nbsp;<button onclick="measure(6)">
+      Измерить 6</button>&nbsp;<button onclick="measure(7)">Измерить 7</button>&nbsp;<button
+      onclick="measure(8)">Измерить 8</button>
+  </p>
+  <p><textarea id="text" style="width: 98%; height: 400px"></textarea></p>
+  <a href="?restart=true">Restart</a>&nbsp;&nbsp;&nbsp;<a href="/update">Firmware update</a>
+  <p><button onclick="document.getElementById('filecontent').style.display = 'block'">История измерений</button>
+  <div id="filecontent" style="display: none;"></div></p>
+  <script>
+    var socket = new WebSocket("ws://" + location.host + "/ws");
 
-      socket.onmessage = function (e) {
-        //console.log(e);
-        document.getElementById("text").value += e.data + "\n";
-      };
+    socket.onopen = function () {
+      socket.send("openws:" + String(Date.now() / 1000));
+    };
 
-      document.addEventListener("DOMContentLoaded", function () {
-        fetch("/menu")
-          .then((response) => {
-            return response.text();
-          })
-          .then((data) => {
-            document.getElementById("settingscontent").innerHTML = data;
-          });
+    socket.onmessage = function (e) {
+      //console.log(e);
+      document.getElementById("text").value += e.data + "\n";
+    };
 
-        fetch("/history")
-          .then((response) => {
-            return response.text();
-          })
-          .then((data) => {
-            data = "<table><tr><td>" + data.replace(/,/g, "</td><td>");
-            data = data.replace(/(?:\r\n|\r|\n)/g, "</td></tr><tr><td>") + "</td></tr></table>";
-            document.getElementById("filecontent").innerHTML = data;
-          });
-      });
+    document.addEventListener("DOMContentLoaded", function () {
+      fetch("/menu")
+        .then((response) => {
+          return response.text();
+        })
+        .then((data) => {
+          document.getElementById("settingscontent").innerHTML = data;
+        });
 
-      function measure(chan) {
-        socket.send("start:" + String(chan));
-      }
-    </script>
-  </body>
+      fetch("/history")
+        .then((response) => {
+          return response.text();
+        })
+        .then((data) => {
+          document.getElementById("filecontent").innerHTML = "<pre>" + data + "</pre>";
+        });
+    });
+
+    function measure(chan) {
+      socket.send("start:" + String(chan));
+    }
+  </script>
+</body>
+
 </html>

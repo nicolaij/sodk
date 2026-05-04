@@ -5,7 +5,7 @@
 
 static const char *TAG = "NBIoT";
 esp_ip4_addr_t pdp_ip;
-char net_status_current[32];
+char net_status_current[40];
 
 RTC_DATA_ATTR bool first_run_completed = false;
 
@@ -36,7 +36,7 @@ void modem_task(void *arg)
 
     int try_counter = 0;
 
-    strcpy(net_status_current, "OFF");
+    strcpy(net_status_current, "Выключен");
     bool common_data_transmit = false;
 
     int protocol = 1; // ESPNOW = 0, TCP = 1, UDP =2
@@ -133,7 +133,7 @@ void modem_task(void *arg)
                 else
                 {
                     ESP_LOGW(TAG, "Modem not reply");
-                    strcpy(net_status_current, "Modem not reply");
+                    strcpy(net_status_current, "Модем не отвечает");
 
                     if (d_nbiot_error_counter > 8)
                         break;
@@ -157,7 +157,7 @@ void modem_task(void *arg)
             if ((xEventGroupGetBits(status_event_group) & END_WORK_NBIOT))
                 break;
 
-            strcpy(net_status_current, "ready");
+            strcpy(net_status_current, "Модем готов");
 
             // Battery Charge
             int cbc[2] = {-1, -1};
@@ -174,7 +174,7 @@ void modem_task(void *arg)
             if (cpin == false)
             {
                 if (strnstr(net_status_current, "Error", sizeof(net_status_current)) == NULL) // Если ошибка SIM - то не перезаписываем ее
-                    strcpy(net_status_current, "Check SIM...");
+                    strcpy(net_status_current, "Проверка SIM...");
 
                 // Enter PIN
                 ee = at_reply_wait_OK("AT+CPIN?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
@@ -222,7 +222,7 @@ void modem_task(void *arg)
                 }
             }
 
-            strcpy(net_status_current, "Network search...");
+            strcpy(net_status_current, "Ожидание сети...");
 
             if (first_run_completed == false)
             {
@@ -241,7 +241,6 @@ void modem_task(void *arg)
                     // ee = at_reply_get("AT+CEREG?\r\n", "CEREG: 5", (char *)data, creg, 10, 1000 / portTICK_PERIOD_MS);
                     if (check_cereg(data, chip, &stat, &tac, &ci, &AcT, &ActiveTime, &PeriodicTAU) == ESP_OK)
                     {
-
                         if (stat == 1) // 1 Registered, home network.
                         {
                             network_registration = true;
@@ -301,7 +300,10 @@ void modem_task(void *arg)
                 // AT+CURTC? AT+CTZR?
                 // ee = at_reply_wait_OK("AT+CTZR=?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
                 if (chip != 7028)
+                {
                     at_reply_wait_OK("AT+CURTC=0\r\n", (char *)data, 1000 / portTICK_PERIOD_MS); // CCLK show UTC time after network time synchronization
+                    at_reply_wait_OK("AT+CLTS=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);  //
+                }
 
                 at_reply_wait_OK("AT+CTZU=1\r\n", (char *)data, 1000 / portTICK_PERIOD_MS); // Automatic time update via NITZ
 
@@ -334,26 +336,36 @@ void modem_task(void *arg)
                     //+CCLK: "2026/03/09,08:41:39+12" - SIM7028
                     int dt[6] = {0, 0, 0, 0, 0, 0};
                     char *pdata = strstr((const char *)data, "CCLK: ");
-                    char *ss = pdata + 6;
-
-                    if (chip == 7028)
-                        ss++;
-
-                    int parsed = sscanf((const char *)ss, "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
-                    if (parsed == 6)
+                    if (pdata)
                     {
-                        struct tm tm;
-                        tm.tm_year = (dt[0] > 1900) ? dt[0] - 1900 : dt[0] + 100;
-                        tm.tm_mon = dt[1] - 1;
-                        tm.tm_mday = dt[2];
-                        tm.tm_hour = dt[3];
-                        tm.tm_min = dt[4];
-                        tm.tm_sec = dt[5];
+                        char *ss = pdata + 6;
 
-                        last_sync_time = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
-                        struct timeval now = {.tv_sec = last_sync_time};
-                        settimeofday(&now, NULL);
-                        ESP_LOGI(TAG, "Set date and time: %s", get_datetime(time(0)));
+                        if (chip == 7028)
+                            ss++;
+
+                        int parsed = sscanf((const char *)ss, "%d/%d/%d,%d:%d:%d", &dt[0], &dt[1], &dt[2], &dt[3], &dt[4], &dt[5]);
+                        if (parsed == 6)
+                        {
+                            struct tm tm;
+                            tm.tm_year = (dt[0] > 1900) ? dt[0] - 1900 : dt[0] + 100;
+                            tm.tm_mon = dt[1] - 1;
+                            tm.tm_mday = dt[2];
+                            tm.tm_hour = dt[3];
+                            tm.tm_min = dt[4];
+                            tm.tm_sec = dt[5];
+
+                            if (tm.tm_year + 1900 > 2025)
+                            {
+                                last_sync_time = mktime(&tm) + timezone * 3600; // UNIX time + timezone offset
+                                struct timeval now = {.tv_sec = last_sync_time};
+                                settimeofday(&now, NULL);
+                                ESP_LOGI(TAG, "Set date and time: %s", get_datetime(time(0)));
+                            }
+                            else
+                            {
+                                ESP_LOGW(TAG, "Bad date and time: %4d/%02d/%02d %2d:%02d:%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+                            }
+                        }
                     }
                 }
             }
@@ -375,33 +387,34 @@ void modem_task(void *arg)
                     {
                         s = strstr((const char *)++s, ",");
                     }
-                }
-                int parsed = sscanf((const char *)++s, "\"%hhu.%hhu.%hhu.%hhu\"", &((uint8_t *)(&pdp_ip.addr))[0], &((uint8_t *)(&pdp_ip.addr))[1], &((uint8_t *)(&pdp_ip.addr))[2], &((uint8_t *)(&pdp_ip.addr))[3]);
-                if (parsed == 4)
-                {
-                    // если нет нормального IP - рестарт модуля
-                    if (esp_ip4_addr1(&pdp_ip) == 127)
+
+                    int parsed = sscanf((const char *)++s, "\"%hhu.%hhu.%hhu.%hhu\"", &((uint8_t *)(&pdp_ip.addr))[0], &((uint8_t *)(&pdp_ip.addr))[1], &((uint8_t *)(&pdp_ip.addr))[2], &((uint8_t *)(&pdp_ip.addr))[3]);
+                    if (parsed == 4)
                     {
-                        ESP_LOGE(TAG, "IP: " IPSTR, IP2STR(&pdp_ip));
-                        print_atcmd("AT+CPOWD=1\r\n", data);
-                        first_run_completed = false;
-                        vTaskDelay(2000 / portTICK_PERIOD_MS);
-                        continue;
-                    }
-                    else
-                    {
-                        ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&pdp_ip));
+                        // если нет нормального IP - рестарт модуля
+                        if (esp_ip4_addr1(&pdp_ip) == 127)
+                        {
+                            ESP_LOGE(TAG, "IP: " IPSTR, IP2STR(&pdp_ip));
+                            print_atcmd("AT+CPOWD=1\r\n", data);
+                            first_run_completed = false;
+                            vTaskDelay(2000 / portTICK_PERIOD_MS);
+                            continue;
+                        }
+                        else
+                        {
+                            ESP_LOGI(TAG, "IP: " IPSTR, IP2STR(&pdp_ip));
+                        }
                     }
                 }
             };
-            esp_ip4_addr_t ip;
-            ip.addr = (unsigned int)get_menu_val_by_id("ip");
+            esp_ip4_addr_t ipaddr;
+            ipaddr.addr = (unsigned int)get_menu_val_by_id("ipaddr");
 
             /*
                                     // ping
                                     // AT+CIPPING
 
-                                    snprintf(send_data, sizeof(send_data), "AT+CIPPING=\"%i.%i.%i.%i\"\r\n", (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, (ip) & 0xff);
+                                    snprintf(send_data, sizeof(send_data), "AT+CIPPING=\"%i.%i.%i.%i\"\r\n", (ipaddr >> 24) & 0xff, (ipaddr >> 16) & 0xff, (ipaddr >> 8) & 0xff, (ipaddr) & 0xff);
                                     ee = at_reply_wait_OK(send_data, (char *)data, 60000 / portTICK_PERIOD_MS);
                                     if (ee != ESP_OK)
                                     {
@@ -418,7 +431,7 @@ void modem_task(void *arg)
                                         vTaskDelay(1000 / portTICK_PERIOD_MS);
                                     }
             */
-            strcpy(net_status_current, "Send data...");
+            strcpy(net_status_current, "Отправка даных...");
 
             int socket = 0;
             const int tcpport = get_menu_val_by_id("tcpport");
@@ -473,7 +486,7 @@ void modem_task(void *arg)
                     }
                     if (protocol == 1) // TCP
                     {
-                        snprintf(send_cmd, sizeof(send_cmd), "AT+CIPOPEN=%i,\"TCP\",\"" IPSTR "\",%i\r\n", socket, IP2STR(&ip), port);
+                        snprintf(send_cmd, sizeof(send_cmd), "AT+CIPOPEN=%i,\"TCP\",\"" IPSTR "\",%i\r\n", socket, IP2STR(&ipaddr), port);
                         // ee = at_reply_wait(send_cmd, "+CIPOPEN: ", (char *)data, 60000 / portTICK_PERIOD_MS);
                         ee = at_reply_wait_OK(send_cmd, (char *)data, 1000 / portTICK_PERIOD_MS);
 
@@ -499,7 +512,7 @@ void modem_task(void *arg)
                         if (protocol == 2) // UDP
                         {
                             // AT+CIPSEND=<link_num>,<length>,<serverIP>,<serverPort>
-                            snprintf(send_cmd, sizeof(send_cmd), "AT+CIPSEND=%i,%i,\"" IPSTR "\",%i\r\n", socket, l, IP2STR(&ip), port);
+                            snprintf(send_cmd, sizeof(send_cmd), "AT+CIPSEND=%i,%i,\"" IPSTR "\",%i\r\n", socket, l, IP2STR(&ipaddr), port);
                         }
                         if (protocol == 1) // TCP
                         {
@@ -554,7 +567,7 @@ void modem_task(void *arg)
                         try_counter = 3;
                         while (try_counter--)
                         {
-                            snprintf(send_data, sizeof(send_data), "AT+CSOCON=%i,%i,\"" IPSTR "\"\r\n", socket, port, IP2STR(&ip));
+                            snprintf(send_data, sizeof(send_data), "AT+CSOCON=%i,%i,\"" IPSTR "\"\r\n", socket, port, IP2STR(&ipaddr));
                             ESP_LOGI(TAG, "%i Socket %i connect...", 3 - try_counter, socket);
                             ee = at_reply_wait_OK(send_data, (char *)data, 60000 / portTICK_PERIOD_MS);
 
@@ -601,13 +614,12 @@ void modem_task(void *arg)
                                             if (ee == ESP_OK)
                                             {
                                                 common_data_transmit = true;
-                                                strcpy(net_status_current, "Send OK");
+                                                strcpy(net_status_current, "Отправлено.");
                                                 ESP_LOGI(TAG, "Send OK");
 
                                                 // обрабатываем если нет сети или приход команды
                                                 ee = check_received_message(data, send_data, chip);
                                             }
-
                                         } while (ee == ESP_ERR_NOT_FINISHED);
 
                                         start_time = esp_timer_get_time(); // reset timer

@@ -147,6 +147,22 @@ typedef struct
     int val;
     const int min;
     const int max;
+    union
+    {
+        int value;
+        struct
+        {
+            bool reserved0 : 1;
+            bool reserved1 : 1;
+            bool reserved2 : 1;
+            bool reserved3 : 1;
+
+            bool reserved4 : 1;
+            bool reserved5 : 1;
+            bool reserved6 : 1;
+            bool hide_from_web : 1; //не выводить в web (настройки доступны только в консоли)
+        };
+    } flags;    
 } menu_t;
 
 extern QueueHandle_t uicmd_queue;

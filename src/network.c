@@ -23,7 +23,7 @@
 
 uint8_t mac[6];
 extern esp_ip4_addr_t pdp_ip;
-extern char net_status_current[32];
+extern char net_status_current[40];
 
 extern int32_t timezone;
 
@@ -241,7 +241,7 @@ static esp_err_t download_get_handler(httpd_req_t *req)
 
                 httpd_resp_set_status(req, "303 See Other");
                 httpd_resp_set_hdr(req, "Location", "/");
-                return httpd_resp_sendstr(req, "Send reboot command");
+                return httpd_resp_sendstr(req, "Отправлена команда на перезагрузку");
             }
         }
     }
@@ -314,7 +314,7 @@ static esp_err_t menu_get_handler(httpd_req_t *req)
     const esp_app_desc_t *app_ver = esp_app_get_description();
 
     l += snprintf(&network_buf[l], TRANSFER_SIZE - l, "Firmware: %s (%s) MAC:" MACSTR, app_ver->version, app_ver->date, MAC2STR(mac));
-    l += snprintf(&network_buf[l], TRANSFER_SIZE - l, ", STATUS: ");
+    l += snprintf(&network_buf[l], TRANSFER_SIZE - l, ", Статус: ");
     l += snprintf(&network_buf[l], TRANSFER_SIZE - l, ", NB-IoT: <b>%s</b> ", net_status_current);
 
     if (pdp_ip.addr > 0)
@@ -375,7 +375,7 @@ static esp_err_t menu_post_handler(httpd_req_t *req)
         *e = '\0';
         strncpy(name, s, sizeof(name));
         int v = 0;
-        if (strncmp(name, "ip", 2) == 0)
+        if (strncmp(name, "ipaddr", 2) == 0)
         {
             int parsed = sscanf((const char *)e + 1, "%hhu.%hhu.%hhu.%hhu", &addr[0], &addr[1], &addr[2], &addr[3]);
             if (parsed == 4)

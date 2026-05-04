@@ -396,7 +396,7 @@ void adc_task(void *wakeup_reason)
     const int compare_counter_val = get_menu_val_by_id("avgcomp");
     // const int exp_filter_k = get_menu_val_by_id("Kfilter");
 
-    const int UbatEnd = get_menu_val_by_id("UbatEnd");
+    //const int UbatEnd = get_menu_val_by_id("UbatEnd");
     const int UbatLow = get_menu_val_by_id("UbatLow");
     const int UbatMax = get_menu_val_by_id("UbatMax");
 
@@ -1071,10 +1071,10 @@ void adc_task(void *wakeup_reason)
             ESP_LOGD(TAG, "Ubatt low: %d", result.Ubatt1);
 
             // отключаем если при lv измерении напряжение упало ниже минимума
-            if (result.Ubatt1 < UbatEnd)
-            {
-                BattLow = 100;
-            }
+            // if (result.Ubatt1 < UbatEnd)
+            // {
+            //     BattLow = 100;
+            // }
         }
 
         if (BattLow > 0)

@@ -25,54 +25,54 @@ menu_t menu[] = {
     /*1*/ {.id = "waitwifi", .name = "Ожидание WiFi", .izm = "мин", .val = 3, .min = 1, .max = 1000000},
     /*2*/ {.id = "Trepeatlv", .name = "Интервал измер. низ.", .izm = "мин", .val = 60, .min = 1, .max = 1000000},
     /*3*/ {.id = "Trepeathv", .name = "Интервал измер. выс.", .izm = "мин", .val = 720, .min = 1, .max = 1000000},
-    /*4*/ {.id = "ip", .name = "IP сервера", .izm = "", .val = ((172 << 0) | (30 << 8) | (239 << 16) | (20 << 24)), .min = INT32_MIN, .max = INT32_MAX}, // 172.30.239.20
+    /*4*/ {.id = "ipaddr", .name = "IP сервера", .izm = "", .val = ((172 << 0) | (30 << 8) | (239 << 16) | (20 << 24)), .min = INT32_MIN, .max = INT32_MAX}, // 172.30.239.20
     /*5*/ {.id = "tcpport", .name = "TCP порт сервера (0: не исп.)", .izm = "", .val = 48884, .min = 0, .max = UINT16_MAX},
     /*6*/ {.id = "udpport", .name = "UDP порт сервера (0: не исп.)", .izm = "", .val = 48884, .min = 0, .max = UINT16_MAX},
-    /*7*/ {.id = "MAC1", .name = "ESPNOW! Target MAC", .izm = "", .val = 0, .min = 0, .max = INT32_MAX},
-    /*8*/ {.id = "MAC2", .name = "", .izm = "", .val = 0, .min = 0, .max = INT32_MAX},
+    /*7*/ {.id = "MAC1", .name = "ESPNOW! Target MAC", .izm = "", .val = 0, .min = 0, .max = INT32_MAX, .flags.hide_from_web = 1},
+    /*8*/ {.id = "MAC2", .name = "", .izm = "", .val = 0, .min = 0, .max = INT32_MAX, .flags.hide_from_web = 1},
     /*9*/ {.id = "pulse", .name = "Макс. время импульса", .izm = "мс", .val = 5000, .min = -1, .max = 10000},
     /*10*/ {.id = "chanord", .name = "Порядок опроса каналов", .izm = "", .val = 1234, .min = 0, .max = 999999999},
     /*11*/ {.id = "Overvolt", .name = "Ограничение U", .izm = "В", .val = 600, .min = 0, .max = 1000},
-    /*12*/ {.id = "k2U", .name = "коэф. 2 U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*13*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1450, .min = 1, .max = 1000000},
-    /*14*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*15*/ {.id = "k2Ulv", .name = "коэф. 2 U низ.", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*16*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3900, .min = 1, .max = 1000000},
-    /*17*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*18*/ {.id = "k2R1", .name = "коэф. 2 R (ch 1)", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*19*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8200, .min = 1, .max = 1000000},
-    /*20*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*21*/ {.id = "k2R2", .name = "коэф. 2 R (ch 2)", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*22*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30000, .min = 1, .max = 100000},
-    /*23*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*24*/ {.id = "k2U0", .name = "коэф. 2 U петли", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*25*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1450, .min = 1, .max = 1000000},
-    /*26*/ {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*27*/ {.id = "k2U0lv", .name = "коэф. 2 U петли низ.", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*28*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 133333, .min = 1, .max = 1000000},
-    /*29*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
-    /*30*/ {.id = "k2Ubat", .name = "коэф. 2 U bat", .izm = "", .val = 0, .min = -100, .max = 100},
-    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3900, .min = 1, .max = 1000000},
-    /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 0, .min = -1000000, .max = 1000000},
+    /*12*/ {.id = "k2U", .name = "коэф. 2 U", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
+    /*13*/ {.id = "kU", .name = "коэф. U", .izm = "", .val = 1450, .min = 1, .max = 1000000, .flags.hide_from_web = 1},
+    /*14*/ {.id = "offsU", .name = "смещ. U", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
+    /*15*/ {.id = "k2Ulv", .name = "коэф. 2 U низ.", .izm = "", .val = 0, .min = -100, .max = 100, .flags.hide_from_web = 1},
+    /*16*/ {.id = "kUlv", .name = "коэф. U низ.", .izm = "", .val = 3900, .min = 1, .max = 1000000, .flags.hide_from_web = 1},
+    /*17*/ {.id = "offsUlv", .name = "смещ. U низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
+    /*18*/ {.id = "k2R1", .name = "коэф. 2 R (ch 1)", .izm = "", .val = 0, .min = -100, .max = 100, .flags.hide_from_web = 1},
+    /*19*/ {.id = "kR1", .name = "коэф. R (ch 1)", .izm = "", .val = 8200, .min = 1, .max = 1000000, .flags.hide_from_web = 1},
+    /*20*/ {.id = "offsR1", .name = "смещ. R (ch 1)", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
+    /*21*/ {.id = "k2R2", .name = "коэф. 2 R (ch 2)", .izm = "", .val = 0, .min = -100, .max = 100, .flags.hide_from_web = 1},
+    /*22*/ {.id = "kR2", .name = "коэф. R (ch 2)", .izm = "", .val = 30000, .min = 1, .max = 100000, .flags.hide_from_web = 1},
+    /*23*/ {.id = "offsR2", .name = "смещ. R (ch 2)", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
+    /*24*/ {.id = "k2U0", .name = "коэф. 2 U петли", .izm = "", .val = 0, .min = -100, .max = 100, .flags.hide_from_web = 1},
+    /*25*/ {.id = "kU0", .name = "коэф. U петли", .izm = "", .val = 1450, .min = 1, .max = 1000000, .flags.hide_from_web = 1},
+    /*26*/ {.id = "offsU0", .name = "смещ. U петли", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
+    /*27*/ {.id = "k2U0lv", .name = "коэф. 2 U петли низ.", .izm = "", .val = 0, .min = -100, .max = 100, .flags.hide_from_web = 1},
+    /*28*/ {.id = "kU0lv", .name = "коэф. U петли низ.", .izm = "", .val = 133333, .min = 1, .max = 1000000, .flags.hide_from_web = 1},
+    /*29*/ {.id = "offsU0lv", .name = "смещ. U петли низ.", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
+    /*30*/ {.id = "k2Ubat", .name = "коэф. 2 U bat", .izm = "", .val = 0, .min = -100, .max = 100, .flags.hide_from_web = 1},
+    /*31*/ {.id = "kUbat", .name = "коэф. U bat", .izm = "", .val = 3900, .min = 1, .max = 1000000, .flags.hide_from_web = 1},
+    /*32*/ {.id = "offsUbat", .name = "смещ. U bat", .izm = "", .val = 0, .min = -1000000, .max = 1000000, .flags.hide_from_web = 1},
     /*33*/ {.id = "UbatLow", .name = "Нижн. U bat под нагр", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
-    /*34*/ {.id = "UbatEnd", .name = "Нижн. U bat отключения", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
-    /****/ {.id = "UbatMax", .name = "Верхн. U bat зарядки", .izm = "мВ", .val = 12400, .min = 0, .max = 13000},
+    /*** */ //{.id = "UbatEnd", .name = "Нижн. U bat отключения", .izm = "мВ", .val = 0, .min = 0, .max = 12000},
+    /*34*/ {.id = "UbatMax", .name = "Верхн. U bat зарядки", .izm = "мВ", .val = 12400, .min = 0, .max = 13000},
     /*35*/ {.id = "Kfilter", .name = "Коэф. фильтрации АЦП", .izm = "", .val = 10, .min = 1, .max = 100},
     /*36*/ {.id = "WiFichan", .name = "WiFi channel", .izm = "", .val = 11, .min = 1, .max = 20},
     /*37*/ {.id = "avgcomp", .name = "Кол-во совпад. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
     /*38*/ {.id = "avgcnt", .name = "Кол-во усред. сравн.", .izm = "", .val = 25, .min = 1, .max = 10000},
     /*39*/ {.id = "percU0lv", .name = "\% U петли низ.", .izm = "\%", .val = 75, .min = 0, .max = 100}, /*Процент от Ubatt, ниже которого - обрыв 0 провода, > - цел. 100% - не проводим высоковольные измерения от изменения*/
     /*40*/ {.id = "percRlv", .name = "\% R низ.", .izm = "\%", .val = 10, .min = 0, .max = 100},        /*Процент изменения от предыдущего значения сопротивления, ниже которого не передаем изменения*/
-    /*41*/ {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 300},
-    /*42*/ {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 300},
-    /*43*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 300},
-    /*44*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 300},
-    /*45*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 300},
-    /*46*/ {.id = "calR1", .name = "Калибровка R1 кан. 1", .izm = "кОм", .val = 101000, .min = 0, .max = 300000},
-    /*47*/ {.id = "calR2", .name = "Калибровка R2 кан. 2", .izm = "кОм", .val = 5160, .min = 0, .max = 300000},
-    /*48*/ {.id = "calR3", .name = "Калибровка R3 кан. 3", .izm = "кОм", .val = 200, .min = 0, .max = 300000},
-    /*49*/ {.id = "calR4", .name = "Калибровка R4 кан. 4", .izm = "Ом", .val = 4030, .min = 0, .max = 300000},
-    /*50*/ {.id = "cntTsw", .name = "Кол-во несовпад. врем. изм.", .izm = "", .val = 5, .min = 1, .max = 1000},
+    /*41*/ {.id = "offstADC0", .name = "Смещение 0 ADC0", .izm = "", .val = 0, .min = 0, .max = 300, .flags.hide_from_web = 1},
+    /*42*/ {.id = "offstADC1", .name = "Смещение 0 ADC1", .izm = "", .val = 0, .min = 0, .max = 300, .flags.hide_from_web = 1},
+    /*43*/ {.id = "offstADC2", .name = "Смещение 0 ADC2", .izm = "", .val = 0, .min = 0, .max = 300, .flags.hide_from_web = 1},
+    /*44*/ {.id = "offstADC3", .name = "Смещение 0 ADC3", .izm = "", .val = 0, .min = 0, .max = 300, .flags.hide_from_web = 1},
+    /*45*/ {.id = "offstADC4", .name = "Смещение 0 ADC4", .izm = "", .val = 0, .min = 0, .max = 300, .flags.hide_from_web = 1},
+    /*46*/ {.id = "calR1", .name = "Калибровка R1 кан. 1", .izm = "кОм", .val = 101000, .min = 0, .max = 300000, .flags.hide_from_web = 1},
+    /*47*/ {.id = "calR2", .name = "Калибровка R2 кан. 2", .izm = "кОм", .val = 5160, .min = 0, .max = 300000, .flags.hide_from_web = 1},
+    /*48*/ {.id = "calR3", .name = "Калибровка R3 кан. 3", .izm = "кОм", .val = 200, .min = 0, .max = 300000, .flags.hide_from_web = 1},
+    /*49*/ {.id = "calR4", .name = "Калибровка R4 кан. 4", .izm = "Ом", .val = 4030, .min = 0, .max = 300000, .flags.hide_from_web = 1},
+    /*50*/ {.id = "cntTsw", .name = "Кол-во несовпад. времени изм.", .izm = "", .val = 5, .min = 1, .max = 1000},
     /*51*/ {.id = "startT1", .name = "Начальное время измер. кан. 1", .izm = "поз", .val = 0, .min = 0, .max = 10},
     /*52*/ {.id = "startT2", .name = "Начальное время измер. кан. 2", .izm = "поз", .val = 0, .min = 0, .max = 10},
     /*53*/ {.id = "startT3", .name = "Начальное время измер. кан. 3", .izm = "поз", .val = 0, .min = 0, .max = 10},
@@ -81,7 +81,7 @@ menu_t menu[] = {
     /*56*/ {.id = "startT6", .name = "Начальное время измер. кан. 6", .izm = "поз", .val = 0, .min = 0, .max = 10},
     /*57*/ {.id = "startT7", .name = "Начальное время измер. кан. 7", .izm = "поз", .val = 0, .min = 0, .max = 10},
     /*58*/ {.id = "startT8", .name = "Начальное время измер. кан. 8", .izm = "поз", .val = 0, .min = 0, .max = 10},
-    /*59*/ {.id = "adccali", .name = "USE ADC calibration driver", .izm = "", .val = 0, .min = 0, .max = 1},
+    /*59*/ {.id = "adccali", .name = "USE ADC calibration driver", .izm = "", .val = 0, .min = 0, .max = 1, .flags.hide_from_web = 1},
 };
 
 esp_err_t init_nvs()
@@ -225,23 +225,6 @@ esp_err_t set_menu_val_by_id(const char *id, int value)
     return err;
 }
 
-int get_menu_json(char *buf)
-{
-    int pos = 0;
-    buf[pos++] = '{';
-    for (int i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
-    {
-        pos += sprintf(&buf[pos], "\"%s\":[\"%s\",%i,\"%s\"]", menu[i].id, menu[i].name, menu[i].val, menu[i].izm);
-        if (i < sizeof(menu) / sizeof(menu_t) - 1)
-            buf[pos++] = ',';
-        else
-            buf[pos++] = '}';
-
-        buf[pos] = '\0';
-    }
-    return pos;
-}
-
 int get_menu_html(char *buf)
 {
     int pos = 0;
@@ -257,30 +240,35 @@ int get_menu_html(char *buf)
             return pos;
         }
 
-        if (index == 4) // IP
+        if (menu[index].flags.hide_from_web == 0)
         {
-            esp_ip4_addr_t ip_addr;
-            ip_addr.addr = (unsigned int)menu[index].val;
-            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" IPSTR "\"/></td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, IP2STR(&ip_addr));
-        }
-        else if (index == 7) // MAC
-        {
-            uint8_t mac_addr[6];
-            mac_addr[0] = (menu[index].val >> 16) & 0xFF;
-            mac_addr[1] = (menu[index].val >> 8) & 0xFF;
-            mac_addr[2] = (menu[index].val >> 0) & 0xFF;
-            mac_addr[3] = (menu[index + 1].val >> 16) & 0xFF;
-            mac_addr[4] = (menu[index + 1].val >> 8) & 0xFF;
-            mac_addr[5] = (menu[index + 1].val >> 0) & 0xFF;
-            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"" MACSTR "\"/></td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, MAC2STR(mac_addr));
-        }
-        else if (strlen(menu[index].name) > 0)
-        {
-            pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" id=\"%s\" name=\"%s\" value=\"%d\"/>%s</td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, menu[index].val, menu[index].izm);
-        }
-        else // hidden
-        {
-            pos += sprintf(&buf[pos], "<input type=\"hidden\" id=\"%s\" name=\"%s\" value=\"%d\">", menu[index].id, menu[index].id, menu[index].val);
+            //if (index == 4) // IP
+            if (strcmp("ipaddr", menu[index].id) == 0)
+            {
+                esp_ip4_addr_t ip_addr;
+                ip_addr.addr = (unsigned int)menu[index].val;
+                pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" size=\"14\" id=\"%s\" name=\"%s\" value=\"" IPSTR "\"/></td><td></td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, IP2STR(&ip_addr));
+            }
+            //else if (index == 7) // MAC
+            else if (strcmp("MAC1", menu[index].id) == 0)
+            {
+                uint8_t mac_addr[6];
+                mac_addr[0] = (menu[index].val >> 16) & 0xFF;
+                mac_addr[1] = (menu[index].val >> 8) & 0xFF;
+                mac_addr[2] = (menu[index].val >> 0) & 0xFF;
+                mac_addr[3] = (menu[index + 1].val >> 16) & 0xFF;
+                mac_addr[4] = (menu[index + 1].val >> 8) & 0xFF;
+                mac_addr[5] = (menu[index + 1].val >> 0) & 0xFF;
+                pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" size=\"14\" id=\"%s\" name=\"%s\" value=\"" MACSTR "\"/></td><td></td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, MAC2STR(mac_addr));
+            }
+            else if (strlen(menu[index].name) > 0)
+            {
+                pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" size=\"14\" id=\"%s\" name=\"%s\" value=\"%d\"/></td><td>%s</td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, menu[index].val, menu[index].izm);
+            }
+            else // hidden
+            {
+                pos += sprintf(&buf[pos], "<input type=\"hidden\" id=\"%s\" name=\"%s\" value=\"%d\">", menu[index].id, menu[index].id, menu[index].val);
+            }
         }
 
         index++;
@@ -395,12 +383,14 @@ void console_task(void *arg)
                     int i = 0;
                     for (i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
                     {
-                        if (i == 4) // IP сервера
+                        //if (i == 4) // IP сервера
+                        if (strcmp("ipaddr", menu[i].id) == 0)
                         {
                             ip_addr.addr = (unsigned int)menu[i].val;
                             ESP_LOGI("menu", "%2i. %s: " IPSTR, i + 1, menu[i].name, IP2STR(&ip_addr));
                         }
-                        else if (i == 7) // MAC
+                        //else if (i == 7) // MAC
+                        else if (strcmp("MAC1", menu[i].id) == 0)
                         {
                             mac_addr[0] = (menu[7].val >> 16) & 0xFF;
                             mac_addr[1] = (menu[7].val >> 8) & 0xFF;
