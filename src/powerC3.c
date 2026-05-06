@@ -469,7 +469,9 @@ void adc_task(void *wakeup_reason)
             result.channel = 0;
 
         if (cmd_power.channel > 0)
+        {
             pcf8575_set(cmd_power.channel);
+        }
         else if (cmd_power.cmd != 4)
         {
             pcf8575_set(POWER_CMDON);
@@ -1103,7 +1105,7 @@ void adc_task(void *wakeup_reason)
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-            if ((cmd_power.cmd == 2) && (result.flags.value != (measure_flags & 0x8F03)))
+            if ((cmd_power.channel == 0) && (cmd_power.cmd == 2) && (result.flags.value != (measure_flags & 0x8F03)))
             {
                 ESP_LOGD("flag", "%04X != %04X", result.flags.value, measure_flags);
                 start_measure(0, 1);

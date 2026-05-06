@@ -29,6 +29,7 @@ TaskHandle_t xHandleConsole = NULL;
 TaskHandle_t xHandleWifi = NULL;
 TaskHandle_t xHandleADC = NULL;
 TaskHandle_t xHandleBtn = NULL;
+TaskHandle_t xHandleMain = NULL;
 
 int i2c_err = 0;
 
@@ -436,6 +437,16 @@ esp_err_t start_adc_calibrate()
     return ESP_FAIL;
 }
 
+void printOSinfo()
+{
+    ESP_LOGI("Heap", "Free: %lu bytes, Minimum: %lu bytes", esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
+    ESP_LOGI("main_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleMain));
+    ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
+    ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
+    ESP_LOGI("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
+    ESP_LOGI("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
+}
+
 void app_main(void)
 {
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -565,9 +576,11 @@ void app_main(void)
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
-    xTaskCreate(modem_task, "modem_task", 1024 * 6, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
+    xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
     xTaskCreate(adc_task, "adc_task", 1024 * 3, (void *)&wakeup_reason, configMAX_PRIORITIES - 5, &xHandleADC);
+
+    xHandleMain = xTaskGetCurrentTaskHandle();
 
     int Trepeatlv = get_menu_val_by_id("Trepeatlv");
     int Trepeathv = get_menu_val_by_id("Trepeathv");
@@ -602,8 +615,6 @@ void app_main(void)
         pdFALSE,
         60000 / portTICK_PERIOD_MS);
 
-    ESP_LOGD("info", "Free memory: %lu bytes", esp_get_free_heap_size());
-
     // время ожидания
     const int wait = get_menu_val_by_id("waitwifi");
 
@@ -623,13 +634,6 @@ void app_main(void)
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         };
     }
-
-    ESP_LOGD("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
-    ESP_LOGD("main_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(NULL));
-    ESP_LOGD("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
-    ESP_LOGD("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
-    ESP_LOGD("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
-    ESP_LOGD("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
 
     EventBits_t uxBits;
 
@@ -660,7 +664,7 @@ void app_main(void)
     xTaskNotify(xHandleWifi, NOTYFY_WIFI_STOP, eSetValueWithOverwrite);
     vTaskDelay(1);
 
-    ESP_LOGD("info", "Free memory: %lu bytes", esp_get_free_heap_size());
+    printOSinfo();
 
     // засыпаем...
     if (BattLow < 100)

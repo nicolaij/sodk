@@ -278,4 +278,6 @@ int current2chan(int adc);
 
 void update_allK();
 
+void printOSinfo();
+
 #endif

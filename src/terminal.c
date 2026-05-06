@@ -242,14 +242,14 @@ int get_menu_html(char *buf)
 
         if (menu[index].flags.hide_from_web == 0)
         {
-            //if (index == 4) // IP
+            // if (index == 4) // IP
             if (strcmp("ipaddr", menu[index].id) == 0)
             {
                 esp_ip4_addr_t ip_addr;
                 ip_addr.addr = (unsigned int)menu[index].val;
                 pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" size=\"14\" id=\"%s\" name=\"%s\" value=\"" IPSTR "\"/></td><td></td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, IP2STR(&ip_addr));
             }
-            //else if (index == 7) // MAC
+            // else if (index == 7) // MAC
             else if (strcmp("MAC1", menu[index].id) == 0)
             {
                 uint8_t mac_addr[6];
@@ -383,13 +383,13 @@ void console_task(void *arg)
                     int i = 0;
                     for (i = 0; i < sizeof(menu) / sizeof(menu_t); i++)
                     {
-                        //if (i == 4) // IP сервера
+                        // if (i == 4) // IP сервера
                         if (strcmp("ipaddr", menu[i].id) == 0)
                         {
                             ip_addr.addr = (unsigned int)menu[i].val;
                             ESP_LOGI("menu", "%2i. %s: " IPSTR, i + 1, menu[i].name, IP2STR(&ip_addr));
                         }
-                        //else if (i == 7) // MAC
+                        // else if (i == 7) // MAC
                         else if (strcmp("MAC1", menu[i].id) == 0)
                         {
                             mac_addr[0] = (menu[7].val >> 16) & 0xFF;
@@ -448,7 +448,19 @@ void console_task(void *arg)
                     ESP_LOGI("menu", "-------------------------------------------");
                     break;
                 case 91: // выводим историю
-                    break;
+                {
+                    int pos = 0;
+                    result_t *presult = NULL;
+                    do
+                    {
+                        presult = get_history_data(pos++);
+                        if(presult)
+                        {
+                            ESP_LOGI("", "%2i: " OUT_CHANNEL, pos, get_menu_val_by_id("idn"), presult->channel, bootCount, get_datetime(presult->ttime), OUT_DATA_CHANNEL((*presult)));
+                        }
+                    } while (presult != NULL);
+                }
+                break;
                 case 92: // AT терминал NBIoT
                     NB_terminal_mode = 1;
                     xEventGroupSetBits(status_event_group, NB_TERMINAL);
@@ -460,11 +472,8 @@ void console_task(void *arg)
                         xTaskNotifyGive(xHandleWifi); // включаем WiFi
                     break;
                 case 94: // FreeRTOS INFO
-                    ESP_LOGI("info", "Minimum free memory: %lu bytes", esp_get_minimum_free_heap_size());
-                    ESP_LOGI("wifi_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleWifi));
-                    ESP_LOGI("adc_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleADC));
-                    ESP_LOGI("modem_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleNB));
-                    ESP_LOGI("console_task", "Task watermark: %d bytes", uxTaskGetStackHighWaterMark(xHandleConsole));
+                    printOSinfo();
+
                     /*
                                         char statsbuf[600];
                                         vTaskGetRunTimeStats(statsbuf);
@@ -1066,3 +1075,4 @@ void console_task(void *arg)
         vTaskDelay(1);
     }
 }
+
