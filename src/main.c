@@ -449,57 +449,24 @@ void printOSinfo()
 
 void app_main(void)
 {
-    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
-    switch (wakeup_reason)
+    uint32_t causes = esp_sleep_get_wakeup_causes();
+
+    ESP_LOGD("Wake up", "causes: 0x%x", causes);
+
+    if (causes & BIT(ESP_SLEEP_WAKEUP_TIMER))
     {
-    case ESP_SLEEP_WAKEUP_EXT0:
-        ESP_LOGI("main", "Wakeup caused by external signal using RTC_IO");
-        break;
-#if SOC_PM_SUPPORT_EXT_WAKEUP
-    case ESP_SLEEP_WAKEUP_EXT1:
-    {
-        uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-        if (wakeup_pin_mask != 0)
-        {
-            int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-            ESP_LOGI("main", "Wake up from GPIO %d", pin);
-        }
-        else
-        {
-            ESP_LOGI("main", "Wake up from GPIO");
-        }
-        break;
+        ESP_LOGI("Wake up", "timer");
     }
-#endif
-#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
-    case ESP_SLEEP_WAKEUP_GPIO:
+
+    if (causes & BIT(ESP_SLEEP_WAKEUP_GPIO))
     {
         uint64_t wakeup_pin_mask = esp_sleep_get_gpio_wakeup_status();
         if (wakeup_pin_mask != 0)
         {
             int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-            ESP_LOGI("main", "Wake up from GPIO %d", pin);
+            ESP_LOGI("Wake up", "GPIO %d", pin);
         }
-        else
-        {
-            ESP_LOGI("main", "Wake up from GPIO");
-        }
-        break;
-    }
-#endif // SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
-    case ESP_SLEEP_WAKEUP_TIMER:
-        ESP_LOGI("main", "Wakeup caused by timer");
-        break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD:
-        ESP_LOGI("main", "Wakeup caused by touchpad");
-        break;
-    case ESP_SLEEP_WAKEUP_ULP:
-        ESP_LOGI("main", "Wakeup caused by ULP program");
-        break;
-    default:
-        ESP_LOGI("main", "Wakeup was not caused by deep sleep: %d", wakeup_reason);
-        break;
     }
 
     bootCount++;
@@ -578,7 +545,7 @@ void app_main(void)
 
     xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
 
-    xTaskCreate(adc_task, "adc_task", 1024 * 3, (void *)&wakeup_reason, configMAX_PRIORITIES - 5, &xHandleADC);
+    xTaskCreate(adc_task, "adc_task", 1024 * 3, (void *)&causes, configMAX_PRIORITIES - 5, &xHandleADC);
 
     xHandleMain = xTaskGetCurrentTaskHandle();
 
@@ -598,7 +565,7 @@ void app_main(void)
         }
     }
 
-    if ((bootCount % (Trepeathv / Trepeatlv) == 1 || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) && BattLow < 100)
+    if ((bootCount % (Trepeathv / Trepeatlv) == 1 || (causes & BIT(ESP_SLEEP_WAKEUP_GPIO))) && BattLow < 100)
     {
         start_measure(0, 0);
     }
@@ -619,7 +586,7 @@ void app_main(void)
     const int wait = get_menu_val_by_id("waitwifi");
 
     // запускаем WiFi если подали питание или сработал концевик
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED || wakeup_reason == ESP_SLEEP_WAKEUP_GPIO) // reset
+    if (causes & (BIT(ESP_SLEEP_WAKEUP_UNDEFINED) || BIT(ESP_SLEEP_WAKEUP_GPIO)))
     {
         // для отладки схемы pulse != -1
         if (get_menu_val_by_id("pulse") != -1)
@@ -671,7 +638,7 @@ void app_main(void)
     {
         // pcf8575_read(0); // reset INT_PIN
         //  if (gpio_get_level(PCF_INT_PIN) == 1)
-        ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
+        ESP_ERROR_CHECK(esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(BIT64(PCF_INT_PIN), ESP_GPIO_WAKEUP_GPIO_LOW));
     }
 
     // коррекция на время работы

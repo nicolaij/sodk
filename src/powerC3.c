@@ -331,7 +331,7 @@ void update_allK()
     koeff[6][2] = get_menu_val_by_id("k2Ubat");
 }
 
-void adc_task(void *wakeup_reason)
+void adc_task(void *causes_wakeup_reason)
 {
     cmd_t cmd_power = {};
     result_t result = {.flags.value = 0};
@@ -377,7 +377,7 @@ void adc_task(void *wakeup_reason)
     }
 
     // пробуждение от концевика двери
-    if (*(int *)wakeup_reason == ESP_SLEEP_WAKEUP_GPIO)
+    if (*(uint32_t *)causes_wakeup_reason == BIT(ESP_SLEEP_WAKEUP_GPIO))
         result.flags.d_wake = true;
 
     continuous_adc_init();

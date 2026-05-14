@@ -8,4 +8,5 @@ test
 *.log
 *.old
 build
+managed_components
 

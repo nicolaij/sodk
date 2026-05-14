@@ -874,7 +874,7 @@ esp_err_t init_espnow(uint8_t *peer_addr)
     esp_now_peer_info_t peer_info = {
         .peer_addr = {MAC2STR(peer_addr)}, //
         .channel = 0,                      // Должен совпадать с каналом WiFi
-        .ifidx = ESP_IF_WIFI_AP,
+        .ifidx = WIFI_IF_AP,
         .encrypt = false};
     ESP_ERROR_CHECK(esp_now_add_peer(&peer_info));
     return err_rc;

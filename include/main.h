@@ -19,6 +19,8 @@
 #include "freertos/ringbuf.h"
 
 #include <sys/time.h>
+#include <time.h>
+
 
 // размер кольцевого буфера (только степень 2)
 #define RINGBUFLEN (1 << 11)
@@ -205,7 +207,7 @@ extern unsigned int bootCount;
 extern uint8_t BattLow;
 extern float tsens_out;
 
-void adc_task(void *wakeup_reason);
+void adc_task(void *causes_wakeup_reason);
 void btn_task(void *arg);
 void wifi_task(void *arg);
 void modem_task(void *arg);
