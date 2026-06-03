@@ -30,7 +30,7 @@ esp_err_t uart_init(uart_port_t uart_num)
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    esp_err_t res = uart_driver_install(uart_num, RX_BUF_SIZE, 0, 0, NULL, 0);
+    esp_err_t res = uart_driver_install(uart_num, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
     ESP_ERROR_CHECK(uart_param_config(uart_num, &uart_config));
     ESP_ERROR_CHECK(uart_set_pin(uart_num, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
     return res;
@@ -127,44 +127,36 @@ esp_err_t wait_string(char *buffer, const char *swait, TickType_t ticks_to_wait)
 {
     const char *err = "ERROR\r";
 
-    const char *wait = (char *)swait;
-
     int64_t start_time = esp_timer_get_time();
     char *pb = buffer;
     int total_len = 0;
     *pb = '\0';
-    int lw = strlen(wait);
+    int lw = strlen(swait);
     int reqlen = (lw > 0) ? lw : 1;
     // BUG
     // reqlen = RX_BUF_SIZE - 1 - total_len;
 
     esp_err_t res = ESP_ERR_TIMEOUT;
     int len = -1;
-    // size_t ssize;
+    size_t ssize;
     // static size_t ssizemax = 0;
     do
     {
         if (len == 0) // если предыдущее чтение == 0
-        {
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-        }
-        /*
-                uart_get_buffered_data_len(UART_NUM_1, &ssize);
-                if (ssize >= ssizemax)
-                {
-                    ssizemax = ssize;
-                    ESP_LOGD(TAG, "In UART buffer: %d", (int)ssize);
-                }
-        */
-        len = uart_read_bytes(UART_NUM_1, pb, reqlen, 0);
-        // ESP_LOGD(TAG, "RX len: %d (%d): %x %x %x", len, (int)reqlen, *pb, *(pb+1), *(pb+2));
+            len = uart_read_bytes(UART_NUM_1, pb, reqlen, 10 / portTICK_PERIOD_MS);
+        else
+            len = uart_read_bytes(UART_NUM_1, pb, reqlen, 0);
+
+        // uart_get_buffered_data_len(UART_NUM_1, &ssize);
+        // if (ssize > 1000) ESP_LOGD("wait_string", "RX len: %d (%d): %02x %02x %02x", len, (int)ssize, *pb, *(pb + 1), *(pb + 2));
+
         if (len > 0)
         {
             pb += len;
             total_len += len;
             *pb = '\0';
 
-            if (strnstr((const char *)buffer, wait, total_len) != NULL)
+            if (strstr((const char *)buffer, swait) != NULL)
             {
                 if (total_len > 2)
                 {
@@ -177,7 +169,7 @@ esp_err_t wait_string(char *buffer, const char *swait, TickType_t ticks_to_wait)
                     break;
                 }
             }
-            else if (strnstr((const char *)buffer, err, total_len) != NULL)
+            else if (strstr((const char *)buffer, err) != NULL)
             {
                 res = ESP_ERR_INVALID_STATE;
                 break;
@@ -430,22 +422,34 @@ int encode_toHEX(const char *data, char *result_data)
     return i;
 }
 
-esp_err_t check_received_message(char *message_data, char *result_data, int chip)
+esp_err_t check_for_wait_cereg(char *message_data, char *result_data, int chip, TickType_t timewait)
 {
     esp_err_t ee = ESP_ERR_NOT_FOUND;
 
+    check_received_message(message_data, result_data, chip);
+
     // обрабатываем если нет сети
-    if (strstr((const char *)message_data, "+CEREG: 2") != NULL)
+    char *s = strstr((const char *)message_data, "+CEREG: 2");
+    if (s != NULL)
     {
+        ESP_LOGV("check_received_message", "Found: %s", s);
         // Ждем сообщения о наличии сети
-        if (wait_string(message_data, "+CEREG: 1", 8000 / portTICK_PERIOD_MS) == ESP_OK)
+        if (wait_string(message_data, "+CEREG: 1", timewait) == ESP_OK)
         {
+            ESP_LOGD("check_received_message", "Found +CEREG: 1");
             // ESP_LOGD(TAG, "Wait CEREG:\"%s\"", (char *)message_data);
             vTaskDelay(2000 / portTICK_PERIOD_MS); // много пропущенных пакетов после выхода из PSM, так лучше
         };
+        check_received_message(message_data, result_data, chip);
         // желательно повторить передачу
         return ESP_ERR_NOT_FINISHED;
     }
+    return ee;
+};
+
+esp_err_t check_received_message(char *message_data, char *result_data, int chip)
+{
+    esp_err_t ee = ESP_ERR_NOT_FOUND;
 
     char *rdata = NULL;
     if (chip == 7028)
@@ -564,7 +568,7 @@ esp_err_t download_firmware(char *rx_buffer, char *tx_buffer)
         const esp_partition_t *ota_partition = esp_ota_get_next_update_partition(NULL);
         esp_ota_handle_t ota_handle;
 
-        int block = ota_partition->erase_size; // 4096 Erase Must be aligned to partition->erase_size.
+        int block = ota_partition->erase_size * 5; // 4096 Erase Must be aligned to partition->erase_size.
         int contentstart = 0;
         int contenttotal = 0;
         int session_retry = 2;
@@ -578,6 +582,8 @@ esp_err_t download_firmware(char *rx_buffer, char *tx_buffer)
             return ESP_ERR_INVALID_ARG;
 
         at_reply_wait_OK("AT+CPSMS=0\r\n", rx_buffer, 1000 / portTICK_PERIOD_MS);
+
+        vTaskSuspend(xHandleADC);
 
         do
         {
@@ -785,8 +791,10 @@ esp_err_t download_firmware(char *rx_buffer, char *tx_buffer)
                                         break;
                                     }
                                     ESP_LOGW(TAG, "Firmware update complete, rebooting now!");
-                                    xEventGroupSetBits(status_event_group, REBOOT_NOW);
+                                    if (xHandleWifi)
+                                        xTaskNotify(xHandleWifi, REBOOT_NOW, eSetValueWithOverwrite);
 
+                                    session_retry = 0;
                                     http_error_retry = 0; // All OK
                                 }
                                 else if (file_id == 0x50000) // spiffs.bin
@@ -806,8 +814,10 @@ esp_err_t download_firmware(char *rx_buffer, char *tx_buffer)
                                         remaining -= recv_len;
                                     }
                                     ESP_LOGW(TAG, "SPIFFS update complete, rebooting now!");
-                                    xEventGroupSetBits(status_event_group, REBOOT_NOW);
+                                    if (xHandleWifi)
+                                        xTaskNotify(xHandleWifi, REBOOT_NOW, eSetValueWithOverwrite);
 
+                                    session_retry = 0;
                                     http_error_retry = 0; // All OK
                                 }
                                 break;
@@ -817,9 +827,12 @@ esp_err_t download_firmware(char *rx_buffer, char *tx_buffer)
                     else
                     {
                         ESP_LOGW(TAG, "Download Fail! Bytes %i of %i", sum_getpart_length, contentlen);
-                        uart_flush(UART_NUM_1);
 
                         ESP_ERROR_CHECK(esp_partition_erase_range(ota_partition, contentstart, block));
+
+                        vTaskDelay(10000 / portTICK_PERIOD_MS);
+
+                        uart_flush(UART_NUM_1);
 
                         http_error_retry--;
                     }

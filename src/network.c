@@ -376,42 +376,45 @@ static esp_err_t menu_post_handler(httpd_req_t *req)
         *e = '\0';
         strncpy(name, s, sizeof(name));
         int v = 0;
-        if (strncmp(name, "ipaddr", 2) == 0)
+        if (strcmp(name, "idn") != 0) // ignore ID change
         {
-            int parsed = sscanf((const char *)e + 1, "%hhu.%hhu.%hhu.%hhu", &addr[0], &addr[1], &addr[2], &addr[3]);
-            if (parsed == 4)
+            if (strcmp(name, "ipaddr") == 0)
             {
-                v = (addr[0] << 0) | (addr[1] << 8) | (addr[2] << 16) | (addr[3] << 24);
+                int parsed = sscanf((const char *)e + 1, "%hhu.%hhu.%hhu.%hhu", &addr[0], &addr[1], &addr[2], &addr[3]);
+                if (parsed == 4)
+                {
+                    v = (addr[0] << 0) | (addr[1] << 8) | (addr[2] << 16) | (addr[3] << 24);
+                }
             }
-        }
-        else if (strncmp(name, "MAC1", 4) == 0)
-        {
-            //&MAC1=00%3A00%3A00%3A00%3A00%3A51&MAC2=81
-            int parsed = sscanf((const char *)e + 1,
-                                "%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx",
-                                &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
-
-            if (parsed == 6)
+            else if (strcmp(name, "MAC1") == 0)
             {
-                v = (addr[0] << 16) | (addr[1] << 8) | addr[2];
-                mac2 = (addr[3] << 16) | (addr[4] << 8) | addr[5];
+                //&MAC1=00%3A00%3A00%3A00%3A00%3A51&MAC2=81
+                int parsed = sscanf((const char *)e + 1,
+                                    "%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx%%3A%hhx",
+                                    &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
+
+                if (parsed == 6)
+                {
+                    v = (addr[0] << 16) | (addr[1] << 8) | addr[2];
+                    mac2 = (addr[3] << 16) | (addr[4] << 8) | addr[5];
+                }
+                else
+                {
+                    mac2 = 0;
+                }
+            }
+            else if (strcmp(name, "MAC2") == 0)
+            {
+                v = mac2;
             }
             else
             {
-                mac2 = 0;
+                v = atoi(e + 1);
             }
-        }
-        else if (strncmp(name, "MAC2", 4) == 0)
-        {
-            v = mac2;
-        }
-        else
-        {
-            v = atoi(e + 1);
-        }
 
-        // ESP_LOGD("menu_post_handler", "Name  \"%s\" : \"%i\"", name, v);
-        set_menu_val_by_id(name, v);
+            // ESP_LOGD("menu_post_handler", "Name  \"%s\" : \"%i\"", name, v);
+            set_menu_val_by_id(name, v);
+        }
 
         s = strchr(e + 1, '&');
         if (s)
@@ -641,7 +644,7 @@ esp_err_t get_history(httpd_req_t *req)
         if (!presult)
             break;
 
-        l += snprintf(network_buf + l, (TRANSFER_SIZE - l), OUT_CHANNEL "\n", get_menu_val_by_id("idn"), presult->channel, bootCount, get_datetime(presult->ttime), OUT_DATA_CHANNEL((*presult)));
+        l += snprintf(network_buf + l, (TRANSFER_SIZE - l), "%2i: " OUT_CHANNEL "\n", pos, get_menu_val_by_id("idn"), presult->channel, bootCount, get_datetime(presult->ttime), OUT_DATA_CHANNEL((*presult)));
 
         if ((TRANSFER_SIZE - l) < sizeof(OUT_CHANNEL) * 2)
         {
@@ -899,6 +902,23 @@ static httpd_handle_t start_webserver(void)
     return NULL;
 }
 
+void check_ota()
+{
+    /* Mark current app as valid */
+    const esp_partition_t *partition = esp_ota_get_running_partition();
+    // printf("Currently running partition: %s\r\n", partition->label);
+    ESP_LOGI("OTA", "Currently running partition: %s", partition->label);
+
+    esp_ota_img_states_t ota_state;
+    if (esp_ota_get_state_partition(partition, &ota_state) == ESP_OK)
+    {
+        if (ota_state == ESP_OTA_IMG_PENDING_VERIFY)
+        {
+            esp_ota_mark_app_valid_cancel_rollback();
+        }
+    }
+}
+
 void wifi_task(void *arg)
 {
     s_wifi_event_group = xEventGroupCreate();
@@ -923,6 +943,11 @@ void wifi_task(void *arg)
                         portMAX_DELAY);
 
         // ESP_LOGD("WIFI ulNotifiedValue", "0x%lX", ulNotifiedValue);
+        if ((ulNotifiedValue & REBOOT_NOW) != 0)
+        {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+        }
 
         if ((ulNotifiedValue & NOTYFY_WIFI) != 0)
         {
@@ -968,20 +993,6 @@ void wifi_task(void *arg)
 
             /* Start the server for the first time */
             start_webserver();
-
-            /* Mark current app as valid */
-            const esp_partition_t *partition = esp_ota_get_running_partition();
-            // printf("Currently running partition: %s\r\n", partition->label);
-            ESP_LOGI(TAGW, "Currently running partition: %s", partition->label);
-
-            esp_ota_img_states_t ota_state;
-            if (esp_ota_get_state_partition(partition, &ota_state) == ESP_OK)
-            {
-                if (ota_state == ESP_OTA_IMG_PENDING_VERIFY)
-                {
-                    esp_ota_mark_app_valid_cancel_rollback();
-                }
-            }
 
             reset_sleep_timeout();
         }

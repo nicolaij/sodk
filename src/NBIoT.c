@@ -107,20 +107,26 @@ void modem_task(void *arg)
                 // sleep exit
                 ESP_LOGD(TAG, "Try %d. Wakeup", d_nbiot_error_counter);
                 nbiot_power_pin(100 / portTICK_PERIOD_MS);
-                vTaskDelay(2000 / portTICK_PERIOD_MS);
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
                 break;
             }
 
-            ee = wait_string(data, "\"EXIT PSM\"", 1000 / portTICK_PERIOD_MS);
+            ee = wait_string(data, "\"EXIT PSM\"", 2000 / portTICK_PERIOD_MS);
 
             ESP_LOGD(TAG, "Wait... %s", data);
+
+            if (check_cereg(data, chip, &stat, &tac, &ci, &AcT, &ActiveTime, &PeriodicTAU) == ESP_OK)
+            {
+                network_registration = true;
+            };
 
             if (strstr((const char *)data, "CPIN: READY") != NULL)
             {
                 cpin = true;
                 ESP_LOGI(TAG, "CPIN: READY");
-            }
-            else
+            };
+
+            if (ee != ESP_OK) // Если EXIT PSM - то 7020
             {
                 // check modem
                 ee = at_reply_wait_OK("ATI\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
@@ -140,19 +146,10 @@ void modem_task(void *arg)
 
                     continue;
                 }
-
-                /*                if (first_run_completed == false)
-                                    at_reply_wait_OK("ATE1;+IPR=115200\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
-                */
-            };
+            }
 
             ee = at_reply_wait_OK("ATE1;+IPR=115200\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
             // ee = at_reply_wait_OK("ATI\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
-
-            if (check_cereg(data, chip, &stat, &tac, &ci, &AcT, &ActiveTime, &PeriodicTAU) == ESP_OK)
-            {
-                network_registration = true;
-            };
 
             if ((xEventGroupGetBits(status_event_group) & END_WORK_NBIOT))
                 break;
@@ -312,7 +309,9 @@ void modem_task(void *arg)
                 // #TAU 30sec * 3 , ACC 8 sec
                 // at_reply_wait_OK("AT+CPSMS=1,,,\"10000011\",\"00000100\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
                 // TAU 25h 1*25, ACC 0 sec
-                at_reply_wait_OK("AT+CPSMS=1,,,\"00111001\",\"00000000\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                // at_reply_wait_OK("AT+CPSMS=1,,,\"00111001\",\"00000000\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+                // TAU 25h 1*25, ACC 30 sec 00001111
+                at_reply_wait_OK("AT+CPSMS=1,,,\"00111001\",\"00000100\"\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
                 cpsms0 = false;
 
                 if (chip != 7028)
@@ -460,6 +459,22 @@ void modem_task(void *arg)
             // результат измерений
             result_t result;
 
+            try_counter = 3;
+            while (try_counter--)
+            {
+                at_reply_wait_OK("AT+CEREG?\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
+
+                if (check_cereg(data, chip, &stat, &tac, &ci, &AcT, &ActiveTime, &PeriodicTAU) == ESP_OK)
+                {
+                    if (stat == 1) // 1 Registered, home network.
+                    {
+                        network_registration = true;
+                        break;
+                    }
+                    check_for_wait_cereg(data, send_data, chip, 5000 / portTICK_PERIOD_MS);
+                }
+            }
+
             if (chip == 7028)
             {
                 at_reply_wait_OK("AT+NETOPEN\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
@@ -532,7 +547,7 @@ void modem_task(void *arg)
                     while (wait_string(data, "\r\n", 10000 / portTICK_PERIOD_MS) == ESP_OK)
                     {
                         ESP_LOGI(TAG, "Modem: %s", data);
-                        ee = check_received_message(data, send_data, chip);
+                        ee = check_for_wait_cereg(data, send_data, chip, 20000 / portTICK_PERIOD_MS);
                         if (ee == ESP_OK)
                             break;
                     }
@@ -613,19 +628,21 @@ void modem_task(void *arg)
 
                                             if (ee == ESP_OK)
                                             {
-                                                common_data_transmit = true;
-                                                strcpy(net_status_current, "Отправлено.");
-                                                ESP_LOGI(TAG, "Send OK");
-
                                                 // обрабатываем если нет сети или приход команды
-                                                ee = check_received_message(data, send_data, chip);
+                                                ee = check_for_wait_cereg(data, send_data, chip, 20000 / portTICK_PERIOD_MS);
+                                                if (ee != ESP_ERR_NOT_FINISHED)
+                                                {
+                                                    common_data_transmit = true;
+                                                    strcpy(net_status_current, "Отправлено.");
+                                                    ESP_LOGI(TAG, "Send OK");
+                                                }
                                             }
                                         } while (ee == ESP_ERR_NOT_FINISHED);
 
                                         start_time = esp_timer_get_time(); // reset timer
                                     }
                                     vTaskDelay(1000 / portTICK_PERIOD_MS);
-                                    ee = check_received_message(data, send_data, chip);
+                                    ee = check_for_wait_cereg(data, send_data, chip, 10000 / portTICK_PERIOD_MS);
                                 } while ((esp_timer_get_time() - start_time) < (pulse * 1000LL));
                                 break;
                             }
@@ -643,7 +660,7 @@ void modem_task(void *arg)
             // wait 5s for reply from server
             while (wait_string(data, "\r\n", 10000 / portTICK_PERIOD_MS) == ESP_OK)
             {
-                ESP_LOGI(TAG, "Modem: %s", data);
+                ESP_LOGD(TAG, "Modem: %s", data);
                 ee = check_received_message(data, send_data, chip);
             }
 

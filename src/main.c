@@ -537,13 +537,13 @@ void app_main(void)
 
     status_event_group = xEventGroupCreate();
 
-    xTaskCreate(wifi_task, "wifi_task", 1024 * 3, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
+    xTaskCreate(wifi_task, "wifi_task", 1024 * 2, NULL, configMAX_PRIORITIES - 10, &xHandleWifi);
 
-    xTaskCreate(console_task, "console_task", 1024 * 3, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
+    xTaskCreate(console_task, "console_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleConsole);
 
     // xTaskCreate(btn_task, "btn_task", 1024 * 2, NULL, configMAX_PRIORITIES - 20, &xHandleBtn);
 
-    xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB);
+    xTaskCreate(modem_task, "modem_task", 1024 * 5, NULL, configMAX_PRIORITIES - 15, &xHandleNB); // 1024 * 4 - мало для esp_ota_end
 
     xTaskCreate(adc_task, "adc_task", 1024 * 3, (void *)&causes, configMAX_PRIORITIES - 5, &xHandleADC);
 
@@ -582,11 +582,13 @@ void app_main(void)
         pdFALSE,
         60000 / portTICK_PERIOD_MS);
 
+    check_ota();
+
     // время ожидания
     const int wait = get_menu_val_by_id("waitwifi");
 
     // запускаем WiFi если подали питание или сработал концевик
-    if (causes & (BIT(ESP_SLEEP_WAKEUP_UNDEFINED) || BIT(ESP_SLEEP_WAKEUP_GPIO)))
+    if (causes & (BIT(ESP_SLEEP_WAKEUP_UNDEFINED) | BIT(ESP_SLEEP_WAKEUP_GPIO)))
     {
         // для отладки схемы pulse != -1
         if (get_menu_val_by_id("pulse") != -1)

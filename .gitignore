@@ -9,4 +9,6 @@ test
 *.old
 build
 managed_components
+dependencies.lock
+
 

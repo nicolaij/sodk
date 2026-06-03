@@ -30,9 +30,11 @@ esp_err_t apply_command(const char *cmd, size_t len);
 int decode_fromHEX(const char *data, int len, char *result_data);
 int encode_toHEX(const char *data, char *result_data);
 
-/*  Если найден "+CEREG: 2" - нет сети, то ждем "+CEREG: 1" - 5 сек.
+
+/*  Если найден "+CEREG: 2" - нет сети, то ждем "+CEREG: 1" время timewait.
 *   Если найден "+CSONMI:" - то обрабатываем через apply_command
 */
+esp_err_t check_for_wait_cereg(char *message_data, char *result_data, int chip, TickType_t timewait);
 esp_err_t check_received_message(char *message_data, char *result_data, int chip);
 
 esp_err_t download_firmware(char *rx_buffer, char *tx_buffer);

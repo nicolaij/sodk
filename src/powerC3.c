@@ -377,7 +377,7 @@ void adc_task(void *causes_wakeup_reason)
     }
 
     // пробуждение от концевика двери
-    if (*(uint32_t *)causes_wakeup_reason == BIT(ESP_SLEEP_WAKEUP_GPIO))
+    if (*(uint32_t *)causes_wakeup_reason & BIT(ESP_SLEEP_WAKEUP_GPIO))
         result.flags.d_wake = true;
 
     continuous_adc_init();

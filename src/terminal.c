@@ -242,8 +242,11 @@ int get_menu_html(char *buf)
 
         if (menu[index].flags.hide_from_web == 0)
         {
-            // if (index == 4) // IP
-            if (strcmp("ipaddr", menu[index].id) == 0)
+            if (index == 0) // ID disable
+            {
+                pos += sprintf(&buf[pos], "<tr><td><label for=\"%s\">%s:</label></td><td><input type=\"text\" size=\"14\" id=\"%s\" name=\"%s\" value=\"%d\" disabled/></td><td>%s</td></tr>\n", menu[index].id, menu[index].name, menu[index].id, menu[index].id, menu[index].val, menu[index].izm);
+            }
+            else if (strcmp("ipaddr", menu[index].id) == 0)
             {
                 esp_ip4_addr_t ip_addr;
                 ip_addr.addr = (unsigned int)menu[index].val;
@@ -454,7 +457,7 @@ void console_task(void *arg)
                     do
                     {
                         presult = get_history_data(pos++);
-                        if(presult)
+                        if (presult)
                         {
                             ESP_LOGI("", "%2i: " OUT_CHANNEL, pos, get_menu_val_by_id("idn"), presult->channel, bootCount, get_datetime(presult->ttime), OUT_DATA_CHANNEL((*presult)));
                         }
@@ -1075,4 +1078,3 @@ void console_task(void *arg)
         vTaskDelay(1);
     }
 }
-
