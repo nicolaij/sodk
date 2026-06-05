@@ -475,6 +475,9 @@ void modem_task(void *arg)
                 }
             }
 
+            if (tac == 0)
+                first_run_completed = true; // реинициализация модема следующий раз
+
             if (chip == 7028)
             {
                 at_reply_wait_OK("AT+NETOPEN\r\n", (char *)data, 1000 / portTICK_PERIOD_MS);
