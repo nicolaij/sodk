@@ -80,8 +80,9 @@
 
 typedef struct
 {
-    short int channel; // канал измерения 1-4, 5-8, -1 - без выбора канала
-    short int cmd;     // причина измерения 1 - высоковольные, 2 - низковольные, 3- прерывание от PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON; 10 - HV калибровка
+    int16_t channel; // канал измерения 1-4, 5-8, -1 - без выбора канала
+    int8_t cmd;     // причина измерения 1 - высоковольные, 2 - низковольные, 3- прерывание от PCF; 4 - ADC zero read; 5 - ADC zero read POWER_ON; 10 - HV калибровка
+    int8_t mode;     // 1 - автоматические измерения HV, 2 - LV
 } cmd_t;
 
 typedef struct

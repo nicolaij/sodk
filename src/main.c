@@ -205,6 +205,7 @@ void start_measure(int channel, int flag)
 
     cmd.channel = channel;
     cmd.cmd = flag;
+    cmd.mode = 0;
 
     if (channel == 0)
     {
@@ -217,6 +218,7 @@ void start_measure(int channel, int flag)
             {
                 cmd.channel = (channels % (pos * 10)) / pos;
                 cmd.cmd = 2;
+                cmd.mode = 2;
                 if (cmd.channel > 0)
                 {
                     if (cmd.channel <= 4)
@@ -236,6 +238,7 @@ void start_measure(int channel, int flag)
             {
                 cmd.channel = (channels % (pos * 10)) / pos;
                 cmd.cmd = 1;
+                cmd.mode = 1;
                 if (cmd.channel > 0 && cmd.channel <= 4)
                 {
                     xQueueSend(uicmd_queue, &cmd, (TickType_t)0);

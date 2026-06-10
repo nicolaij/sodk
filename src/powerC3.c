@@ -396,7 +396,7 @@ void adc_task(void *causes_wakeup_reason)
     const int compare_counter_val = get_menu_val_by_id("avgcomp");
     // const int exp_filter_k = get_menu_val_by_id("Kfilter");
 
-    //const int UbatEnd = get_menu_val_by_id("UbatEnd");
+    // const int UbatEnd = get_menu_val_by_id("UbatEnd");
     const int UbatLow = get_menu_val_by_id("UbatLow");
     const int UbatMax = get_menu_val_by_id("UbatMax");
 
@@ -1035,7 +1035,7 @@ void adc_task(void *causes_wakeup_reason)
 
         // сравниваем с предыдущими измерениями измерения
 
-        //сопротивление в кОм > которого есть изменения
+        // сопротивление в кОм > которого есть изменения
         int Rdiff = 1;
         if (percRlv > 0 && result.R > 10)
         {
@@ -1052,7 +1052,7 @@ void adc_task(void *causes_wakeup_reason)
 
         if (cmd_power.cmd == 1)
         {
-            //обновляем значения для сравнений
+            // обновляем значения для сравнений
             measure_chan[result.channel] = result.R;
         }
 
@@ -1105,7 +1105,8 @@ void adc_task(void *causes_wakeup_reason)
         // выключаем питание, если больше нет каналов в очереди
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
-            if ((cmd_power.channel == 0) && (cmd_power.cmd == 2) && (result.flags.value != (measure_flags & 0x8F03)))
+            ESP_LOGV("flag", "%04X != %04X, ch:%d, cmd:%d", result.flags.value, measure_flags, cmd_power.channel, cmd_power.cmd);
+            if ((cmd_power.mode == 2) && (result.flags.value != (measure_flags & 0x8F03)))
             {
                 ESP_LOGD("flag", "%04X != %04X", result.flags.value, measure_flags);
                 start_measure(0, 1);
@@ -1115,7 +1116,7 @@ void adc_task(void *causes_wakeup_reason)
         if (uxQueueMessagesWaiting(uicmd_queue) == 0)
         {
             // завершаем
-            measure_flags = result.flags.value & 0x8F03;
+            measure_flags = result.flags.value;
 
             // ВЫРУБАЕМ каналы
             pcf8575_set(POWER_CMDOFF);

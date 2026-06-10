@@ -244,6 +244,10 @@ void modem_task(void *arg)
                             break;
                         }
                     }
+                    else
+                    {
+                        first_run_completed = false; // реинициализация модема следующий раз
+                    }
 
                     vTaskDelay(1000 / portTICK_PERIOD_MS);
                     try_network--;
@@ -473,10 +477,11 @@ void modem_task(void *arg)
                     }
                     check_for_wait_cereg(data, send_data, chip, 5000 / portTICK_PERIOD_MS);
                 }
+                else
+                {
+                    first_run_completed = false; // реинициализация модема следующий раз
+                }
             }
-
-            if (tac == 0)
-                first_run_completed = true; // реинициализация модема следующий раз
 
             if (chip == 7028)
             {
